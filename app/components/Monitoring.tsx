@@ -2,22 +2,50 @@
 import { useEffect, useRef, useState, FC, ReactNode } from "react";
 import { Nft } from "../page"; // Impor tipe Nft dari page.tsx
 
-// --- Helper & Sub-Components ---
+// --- Custom Hook untuk Transisi Angka yang Halus ---
+const useSmoothNumber = (targetValue: number, duration: number = 3000) => {
+    const [currentValue, setCurrentValue] = useState(targetValue);
+    const frameRef = useRef<number>();
 
+    useEffect(() => {
+        const startTime = Date.now();
+        const startValue = currentValue;
+
+        const animate = () => {
+            const elapsedTime = Date.now() - startTime;
+            const progress = Math.min(elapsedTime / duration, 1);
+            const easedProgress = 1 - Math.pow(1 - progress, 3); // easeOutCubic
+            const nextValue = startValue + (targetValue - startValue) * easedProgress;
+            setCurrentValue(nextValue);
+
+            if (progress < 1) {
+                frameRef.current = requestAnimationFrame(animate);
+            }
+        };
+
+        cancelAnimationFrame(frameRef.current!);
+        frameRef.current = requestAnimationFrame(animate);
+
+        return () => cancelAnimationFrame(frameRef.current!);
+    }, [targetValue]);
+
+    return currentValue;
+};
+
+
+// --- Types ---
+type NftTier = "Basic" | "Pro" | "Legend";
+type LogLine = {
+  time: string;
+  message: string;
+  type: 'info' | 'ok' | 'warn' | 'error';
+};
+
+// --- Helper & Sub-Components ---
 const Icon = ({ path, className = "w-4 h-4" }: { path: string; className?: string }) => (
   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
     <path strokeLinecap="round" strokeLinejoin="round" d={path} />
   </svg>
-);
-
-const StatCard = ({ title, value, iconPath }: { title: string; value: string | ReactNode; iconPath: string }) => (
-  <div className="min-w-[120px] flex-1 rounded-lg border border-[#122a3a] bg-gradient-to-b from-[#07121a] to-[#061018] p-3">
-    <div className="flex items-center gap-2 text-sm text-[#9aacc6]">
-      <Icon path={iconPath} />
-      <span>{title}</span>
-    </div>
-    <div className="mt-1 text-lg font-extrabold text-white">{value}</div>
-  </div>
 );
 
 const DataTile = ({ title, value, color = "text-white" }: { title: string; value: string | ReactNode; color?: string }) => (
@@ -27,107 +55,118 @@ const DataTile = ({ title, value, color = "text-white" }: { title: string; value
     </div>
 );
 
-const Sparkline = ({ mining }: { mining: boolean }) => {
-  const ref = useRef<SVGPathElement>(null);
-  useEffect(() => {
-    const pts = Array.from({ length: 60 }, (_, i) => 70 + Math.sin(i / 6) * 10);
-    let alive = true;
-    const tick = () => {
-      if (!alive) return;
-      const last = pts[pts.length - 1];
-      const next = last + (Math.random() - 0.5) * 2.2 + (mining ? 0.7 : -0.5);
-      pts.push(Math.max(20, Math.min(100, next)));
-      if (pts.length > 60) pts.shift();
-      if (ref.current) {
-        const d = pts.map((y, i) => `${i ? "L" : "M"} ${i * 5} ${y}`).join(" ");
-        ref.current.setAttribute("d", d);
-      }
-      setTimeout(tick, 250);
+const Terminal: FC<{ lines: LogLine[] }> = ({ lines }) => {
+    const terminalRef = useRef<HTMLDivElement>(null);
+    useEffect(() => {
+        if (terminalRef.current) terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
+    }, [lines]);
+
+    const typeToColorClass: Record<LogLine['type'], string> = {
+        info: 'term-info', ok: 'term-ok', warn: 'term-warn', error: 'term-err'
     };
-    tick();
-    return () => { alive = false; };
-  }, [mining]);
-  return (
-    <svg viewBox="0 0 300 120" className="w-full h-full">
-      <defs>
-        <linearGradient id="g" x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0" stopColor="#5ad6ff" stopOpacity="0.35" />
-          <stop offset="1" stopColor="#5ad6ff" stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <path ref={ref} d="M 0 70" className="stroke-[#5ad6ff]" strokeWidth="2" fill="url(#g)" />
-    </svg>
-  );
+    return (
+        <div ref={terminalRef} className="terminal">
+            {lines.map((line, index) => (
+                <div key={index} className={`term-line ${typeToColorClass[line.type]}`}>
+                    <span className="opacity-50 mr-2">{line.time}</span>
+                    <span>{line.message}</span>
+                </div>
+            ))}
+        </div>
+    );
 };
 
-// --- Tipe Props untuk Komponen Monitoring ---
+// --- Tipe Props ---
 interface MonitoringProps {
   inventory: Nft[];
   mining: boolean;
   setMining: (mining: boolean | ((m: boolean) => boolean)) => void;
 }
 
-// --- Komponen Utama Monitoring ---
-
+// --- Komponen Utama ---
 export default function Monitoring({ inventory, mining, setMining }: MonitoringProps) {
-  const [sec, setSec] = useState(0);
-  const [bal, setBal] = useState(12345);
-  const [ping, setPing] = useState(0);
-  const [lastShare, setLastShare] = useState("—");
+  const [logLines, setLogLines] = useState<LogLine[]>([]);
+  
+  // --- PERUBAHAN DI SINI: State Uptime dipisah ---
+  const [uptimeSec, setUptimeSec] = useState(0);
 
-  // State untuk data GPU yang disimulasikan, sekarang berasal dari inventory
-  const [gpuStats, setGpuStats] = useState<Array<{ id: number; temp: string; fan: string; hash: string }>>([]);
+  // State untuk nilai target (tanpa uptime)
+  const [targetState, setTargetState] = useState({
+      ping: 0,
+      totalHashrate: 0,
+      totalPower: 0,
+      gpuStats: inventory.map(nft => ({ id: nft.id, temp: 40, fan: 40, hash: 0 }))
+  });
 
-  const uptime = new Date(sec * 1000).toISOString().substr(11, 8);
+  // Gunakan custom hook untuk menganimasikan nilai
+  const smoothHashrate = useSmoothNumber(targetState.totalHashrate);
+  const smoothPower = useSmoothNumber(targetState.totalPower);
+  const smoothPing = useSmoothNumber(targetState.ping);
+  
+  // Uptime sekarang realtime, tidak pakai smooth hook
+  const uptimeStr = new Date(uptimeSec * 1000).toISOString().substr(11, 8);
 
-  // --- Logika Realistis Berdasarkan Inventaris ---
-  const totalHashrate = gpuStats.reduce((acc, gpu) => acc + parseFloat(gpu.hash), 0).toFixed(2);
-  const totalPower = gpuStats.reduce((acc, gpu) => acc + (150 + parseInt(gpu.fan) * 1.1 + parseFloat(gpu.hash) * 40), 0).toFixed(0);
-
-  // Fungsi untuk mendapatkan hashrate dasar berdasarkan tier
-  const getBaseHashrate = (tier: NftTier) => {
-    switch (tier) {
-      case 'Basic': return 1.5;
-      case 'Pro': return 5.0;
-      case 'Legend': return 25.0;
-      default: return 0;
-    }
+  const addLog = (message: string, type: LogLine['type'] = 'info') => {
+      const time = new Date().toLocaleTimeString('en-US', { hour12: false });
+      setLogLines(prev => [...prev.slice(-50), { time, message, type }]);
   };
+  
+  useEffect(() => { addLog('Console initialized. Welcome!', 'info') }, []);
 
+  const getBaseHashrate = (tier: NftTier) => ({ Basic: 1.5, Pro: 5.0, Legend: 25.0 }[tier] || 0);
+
+  // --- PERUBAHAN DI SINI: useEffect khusus untuk Uptime ---
   useEffect(() => {
-    let alive = true;
-    const rand = (a: number, b: number) => a + Math.random() * (b - a);
-    
-    const step = () => {
-      if (!alive) return;
-      setSec((s) => s + 1);
-      setPing(Math.round(rand(18, 120)));
+    const uptimeInterval = setInterval(() => {
+      // Hanya menambah jika sedang mining
+      if (mining) {
+        setUptimeSec(prevSec => prevSec + 1);
+      }
+    }, 1000); // Berjalan setiap 1 detik
 
-      // Update statistik GPU berdasarkan inventory yang diterima
-      const newGpuStats = inventory.map((nft, i) => {
-        const baseTemp = 40 + Math.sin((sec + i * 5) / (12 + i)) * (2 + i);
-        const fan = Math.max(18, Math.min(100, Math.round(38 + (baseTemp - 40) * 3 + rand(-3, 3))));
-        const baseHash = getBaseHashrate(nft.tier);
-        const hash = (baseHash + (fan / 100) * (baseHash * 0.1) + rand(-0.05, 0.05)).toFixed(2);
+    return () => clearInterval(uptimeInterval);
+  }, [mining]); // Bergantung pada status mining
+
+  // useEffect untuk data lainnya, tetap berjalan lambat
+  useEffect(() => {
+    const rand = (a: number, b: number) => a + Math.random() * (b - a);
+
+    const dataInterval = setInterval(() => {
+      setTargetState(prevState => {
+        const newPing = Math.round(rand(18, 120));
+
+        const newGpuStats = inventory.map((nft, i) => {
+          const baseTemp = 40 + Math.sin((Date.now() / 1000 + i * 5) / (12 + i)) * (2 + i);
+          const fan = Math.max(18, Math.min(100, Math.round(38 + (baseTemp - 40) * 3 + rand(-3, 3))));
+          const baseHash = getBaseHashrate(nft.tier);
+          const hash = mining ? (baseHash + (fan / 100) * (baseHash * 0.1) + rand(-0.05, 0.05)) : 0;
+          return { id: nft.id, temp: baseTemp + (mining ? 4 : 0), fan, hash };
+        });
+
+        const newTotalHashrate = newGpuStats.reduce((acc, gpu) => acc + gpu.hash, 0);
+        const newTotalPower = newGpuStats.reduce((acc, gpu) => acc + (150 + gpu.fan * 1.1 + gpu.hash * 40), 0);
         
+        if (mining && Math.random() < 0.2) {
+            addLog(`Share accepted! (0x${Math.random().toString(16).slice(2, 8)})`, 'ok');
+        }
+
         return {
-          id: nft.id,
-          temp: `${(baseTemp + (mining ? 4 : 0)).toFixed(1)} °C`,
-          fan: `${fan}%`,
-          hash: mining ? `${hash} H/s` : '0.00 H/s',
+          ping: newPing,
+          totalHashrate: newTotalHashrate,
+          totalPower: newTotalPower,
+          gpuStats: newGpuStats
         };
       });
-      setGpuStats(newGpuStats);
+    }, 3500); // Interval pembaruan nilai target tetap 3.5 detik
 
-      if (mining && Math.random() < 0.6) {
-        const wid = Math.random().toString(16).slice(2, 10);
-        setLastShare(`${Math.round(rand(0, 3))}s ago • 0x${wid}`);
-      }
-      setTimeout(step, 900);
-    };
-    step();
-    return () => { alive = false; };
-  }, [mining, sec, inventory]);
+    return () => clearInterval(dataInterval);
+  }, [mining, inventory]);
+
+  const handleToggleMining = () => {
+    const nextState = !mining;
+    setMining(nextState);
+    addLog(nextState ? 'Mining process started.' : 'Mining process stopped.', 'info');
+  };
 
   return (
     <div className="mx-auto max-w-[430px] px-3 pb-4 pt-3 flex-grow space-y-3">
@@ -139,75 +178,58 @@ export default function Monitoring({ inventory, mining, setMining }: MonitoringP
                     <div className="text-xs text-[#9aacc6]">professional • dark-fun</div>
                 </div>
             </div>
-            <div className="flex items-center gap-1 rounded-full border border-[#233045] bg-gradient-to-b from-[#0f1622] to-[#0a1119] p-1 text-xs text-[#9aacc6]">
-                <span className="pl-2 opacity-80">Bal:</span>
-                <strong className="text-white font-bold">{bal.toLocaleString()}</strong>
-                <button className="rounded-full bg-[#0f2432] border border-[#30435e] px-3 py-1 text-xs font-semibold text-white">
-                    Claim
-                </button>
-            </div>
+            {/* ... header lainnya ... */}
         </header>
 
-        {/* Monitor Card */}
-        <section className="rounded-xl border border-[#202838] bg-gradient-to-b from-[#0f1622] to-[#0c1119] p-2 shadow-lg">
-            <div className="rounded-lg border border-[#122333] bg-[#041018] p-2 space-y-2">
-                <div className="flex gap-2 overflow-x-auto no-scrollbar">
-                    <StatCard title="Pool" value={<span className="text-sm">stratum+tcp://base:3333</span>} iconPath="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
-                    <StatCard title="Total Hashrate" value={`${totalHashrate} H/s`} iconPath="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
-                    <StatCard title="Uptime" value={uptime} iconPath="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                    <div className="md:col-span-2 rounded-md border border-[#11273a] bg-gradient-to-b from-[#061221] to-[#041018] h-32">
-                        <Sparkline mining={mining} />
+        <section className="rounded-xl border border-[#182737] bg-gradient-to-b from-[#0f1622] to-[#0b1118] p-3 shadow-lg space-y-3">
+            <div className="flex justify-between items-center gap-2">
+                <div className="text-xs flex items-center gap-2">
+                    <div className="flex items-center gap-1.5 py-1 px-2 rounded-md bg-gray-900/50 border border-gray-700">
+                        <div className={`w-2 h-2 rounded-full ${mining ? 'bg-green-400' : 'bg-gray-500'}`}></div>
+                        <span>{mining ? 'Connected' : 'Idle'}</span>
                     </div>
-                    <div className="grid grid-cols-2 md:grid-cols-1 gap-2">
-                       <DataTile title="Last Share" value={<span className="text-xs truncate">{lastShare}</span>} />
-                       <DataTile title="Power" value={`${totalPower} W`} color="text-yellow-400" />
-                       <DataTile title="Pool Status" value={<div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-green-400"></div><span>Connected</span></div>} color="text-green-400" />
+                    <div className="py-1 px-2 rounded-md bg-gray-900/50 border border-gray-700">
+                        <span>Ping: {smoothPing.toFixed(0)} ms</span>
                     </div>
                 </div>
-            </div>
-        </section>
-
-        {/* Rig Panel */}
-        <section className="rounded-xl border border-[#182737] bg-gradient-to-b from-[#0f1622] to-[#0b1118] p-3 shadow-lg">
-            <div className="mb-2 flex items-center justify-between">
-                <div>
-                    <div className="text-sm font-semibold">Mining Farm Status</div>
-                    <div className="text-xs text-[#9aacc6]">{inventory.length} × GPUs Online</div>
-                </div>
-                {/* --- Tombol Start/Stop Pindah ke Sini --- */}
-                 <button onClick={() => setMining(m => !m)} className={`rounded-lg border  px-4 py-2 text-sm font-semibold transition-all ${mining ? 'border-red-500/50 bg-red-500/10 text-red-400' : 'border-[#263346] bg-gradient-to-b from-[#111827] to-[#0e1620]'}`}>
-                    {mining ? "Stop Mining" : "Start Mining"}
+                 <button onClick={handleToggleMining} className={`rounded-lg border px-4 py-2 text-sm font-semibold transition-all ${mining ? 'border-red-500/50 bg-red-500/10 text-red-400' : 'border-green-500/50 bg-green-500/10 text-green-400'}`}>
+                    {mining ? "Stop" : "Start"}
                 </button>
             </div>
 
+            <div className="grid grid-cols-3 gap-2 text-center">
+                 <DataTile title="Total Hashrate" value={`${smoothHashrate.toFixed(2)} H/s`} />
+                 <DataTile title="Power" value={`${smoothPower.toFixed(0)} W`} color="text-yellow-400" />
+                 <DataTile title="Uptime" value={uptimeStr} />
+            </div>
+            
             <div className="overflow-hidden rounded-lg border border-[#223146] bg-[#06101a]">
                 <img src="/img/pro.png" alt="Rig room" className="w-full" />
             </div>
+            
+            <Terminal lines={logLines} />
 
-            <table className="mt-2 w-full border-collapse text-sm">
+            <table className="w-full border-collapse text-sm">
                 <thead>
                     <tr className="text-left text-xs font-semibold text-[#9aacc6]">
-                        <th className="p-2">Unit</th>
-                        <th className="p-2 text-center">Temp.</th>
-                        <th className="p-2 text-center">Fan Speed</th>
-                        <th className="p-2 text-right">Hashrate</th>
+                        <th className="p-2">Unit</th><th className="p-2 text-center">Temp.</th><th className="p-2 text-center">Fan Speed</th><th className="p-2 text-right">Hashrate</th>
                     </tr>
                 </thead>
                 <tbody className="[&>tr>td]:border-t [&>tr>td]:border-white/5">
-                    {gpuStats.map(gpu => (
-                        <tr key={gpu.id}>
-                            <td className="p-2 font-mono text-[#9aacc6]">GPU_{gpu.id}</td>
-                            <td className="p-2 text-center font-mono text-green-400">{gpu.temp}</td>
-                            <td className="p-2 text-center font-mono text-blue-400">{gpu.fan}</td>
-                            <td className="p-2 text-right font-mono text-white">{gpu.hash}</td>
-                        </tr>
-                    ))}
+                    {inventory.map((nft, index) => {
+                        const stats = targetState.gpuStats[index] || { temp: 0, fan: 0, hash: 0 };
+                        const smoothGpuHash = useSmoothNumber(stats.hash); 
+                        return (
+                            <tr key={nft.id}>
+                                <td className="p-2 font-mono text-[#9aacc6]">GPU_{nft.id}</td>
+                                <td className="p-2 text-center font-mono text-green-400">{stats.temp.toFixed(1)} °C</td>
+                                <td className="p-2 text-center font-mono text-blue-400">{stats.fan.toFixed(0)}%</td>
+                                <td className="p-2 text-right font-mono text-white">{smoothGpuHash.toFixed(2)} H/s</td>
+                            </tr>
+                        );
+                    })}
                 </tbody>
             </table>
-
-            {/* --- Tombol Fan Dihapus Dari Sini --- */}
         </section>
     </div>
   );

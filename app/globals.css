@@ -1,5 +1,6 @@
 @import "tailwindcss";
 
+/* === Base & Dark Mode Setup === */
 :root {
   --background: #ffffff;
   --foreground: #171717;
@@ -23,4 +24,77 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+/* === Custom Terminal Component Styles === */
+.terminal {
+  background: #01060a;
+  border-radius: 8px;
+  border: 1px solid #0f2130;
+  padding: 8px;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 11px;
+  color: #9fd7ff; /* default color (info) */
+  height: 140px;
+  overflow-y: auto;
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.6);
+}
+
+.term-line {
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
+
+.term-ok {
+  color: #9fe7c1; /* Green for success */
+}
+
+.term-warn {
+  color: #ffd37a; /* Yellow for warnings */
+}
+
+.term-err {
+  color: #ff8e8e; /* Red for errors */
+}
+
+.term-info {
+  color: #9fd7ff; /* Blue for general info */
+}
+
+/* === Keyframe Animations for Modals/Toasts === */
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fade-in-down {
+  from { opacity: 0; transform: translate(-50%, -20px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+@keyframes slide-up {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.3s ease-out forwards;
+}
+
+.animate-fade-in-down {
+  animation: fade-in-down 0.3s ease-out forwards;
+}
+
+.animate-slide-up {
+  animation: slide-up 0.3s ease-out forwards;
+}
+
+/* === Utility Classes === */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none; /* Firefox */
 }
