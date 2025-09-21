@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { ethers } from 'ethers';
-import { useAccount, useConnect } from 'wagmi'; // <-- Tambahkan useConnect
+import { useAccount, useConnect } from 'wagmi';
 import { ConnectWallet } from '@coinbase/onchainkit/wallet';
 import { sdk } from '@farcaster/miniapp-sdk';
 import { useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
@@ -18,6 +18,14 @@ import Profil from './components/Profil';
 // Impor konfigurasi dan ABI
 import { gameCoreAddress, gameCoreABI, rigNftAddress, rigNftABI, baseTcAddress, baseTcABI } from './lib/web3Config';
 
+// Tipe untuk data pengguna Farcaster
+type FarcasterUser = {
+  fid: number;
+  username?: string;
+  displayName?: string;
+  pfpUrl?: string;
+};
+
 export type TabName = 'monitoring' | 'rakit' | 'market' | 'profil';
 export interface Nft {
   id: number;
@@ -30,26 +38,28 @@ export interface Nft {
 export default function Home() {
   const [activeTab, setActiveTab] = useState<TabName>('monitoring');
   const { address, isConnected } = useAccount();
-  const { connectors, connect } = useConnect(); // <-- Dapatkan fungsi connect dan daftar konektor dari Wagmi
+  const { connectors, connect } = useConnect();
+  const [farcasterUser, setFarcasterUser] = useState<FarcasterUser | null>(null);
 
-  // Memberi tahu Farcaster client bahwa mini-app sudah siap
+  // Inisialisasi Farcaster SDK dan auto-connect
   useEffect(() => {
+    // 1. Beri tahu Farcaster bahwa aplikasi siap
     sdk.actions.ready();
-  }, []);
 
-  // --> BLOK KODE BARU UNTUK AUTO-CONNECT <--
-  useEffect(() => {
-    // Cari konektor Farcaster dari daftar yang tersedia
-    const farcasterConnector = connectors.find(
-      (connector) => connector.id === 'farcaster',
-    );
-    // Jika belum terkoneksi dan konektor Farcaster ditemukan, coba sambungkan
+    // 2. Ambil data pengguna Farcaster untuk verifikasi & personalisasi
+    sdk.getFarcasterUser().then(user => {
+      if (user) {
+        setFarcasterUser(user);
+        console.log('Farcaster user:', user);
+      }
+    }).catch(console.error);
+    
+    // 3. Coba auto-connect wallet
+    const farcasterConnector = connectors.find(c => c.id === 'farcaster');
     if (!isConnected && farcasterConnector) {
       connect({ connector: farcasterConnector });
     }
   }, [isConnected, connectors, connect]);
-  // --> AKHIR BLOK KODE BARU <--
-
 
   const [inventory, setInventory] = useState<Nft[]>([]);
   const [unclaimedRewards, setUnclaimedRewards] = useState("0");
@@ -99,13 +109,14 @@ export default function Home() {
 
   if (!isConnected) {
     return (
-      <div className="flex flex-col min-h-screen bg-gray-900 text-white items-center justify-center space-y-4">
+      <div className="flex flex-col min-h-screen bg-gray-900 text-white items-center justify-center space-y-4 p-4 text-center">
         <Image src="/img/logo.png" alt="BaseTC Logo" width={96} height={96} />
         <h1 className="text-3xl font-bold">Welcome to BaseTC Mining</h1>
         <p className="text-gray-400">Connecting to Farcaster wallet...</p>
         <div className="mt-4 opacity-50">
           <ConnectWallet />
         </div>
+        <p className="text-xs text-gray-600 mt-4">If connection doesn't happen automatically, please ensure you are in a Farcaster client and try connecting manually.</p>
       </div>
     );
   }
@@ -133,7 +144,10 @@ export default function Home() {
       <header className="sticky top-0 left-0 right-0 bg-gray-800 p-4 flex items-center justify-between border-b border-gray-700 z-10">
         <div className="flex items-center space-x-2">
           <Image src="/img/logo.png" alt="BaseTC Logo" width={32} height={32} />
-          <h1 className="text-xl font-bold">BaseTC Mining</h1>
+          <div>
+            <h1 className="text-lg font-bold leading-tight">BaseTC Mining</h1>
+            {farcasterUser && <p className="text-xs text-purple-400">@{farcasterUser.username || `FID: ${farcasterUser.fid}`}</p>}
+          </div>
         </div>
         <div className="text-sm font-semibold">
            {address && `${address.substring(0, 6)}...${address.substring(address.length - 4)}`}
