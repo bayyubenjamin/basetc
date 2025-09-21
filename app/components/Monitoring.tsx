@@ -1,16 +1,15 @@
 "use client";
 import { useEffect, useRef, useState, FC, ReactNode } from "react";
+import { Nft } from "../page"; // Impor tipe Nft dari page.tsx
 
-// --- Helper & Sub-Components (dibuat agar kode utama lebih bersih) ---
+// --- Helper & Sub-Components ---
 
-// Komponen Ikon sederhana untuk mempercantik UI
 const Icon = ({ path, className = "w-4 h-4" }: { path: string; className?: string }) => (
   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
     <path strokeLinecap="round" strokeLinejoin="round" d={path} />
   </svg>
 );
 
-// Komponen untuk kartu stat utama (Pool, Total Hash, Uptime)
 const StatCard = ({ title, value, iconPath }: { title: string; value: string | ReactNode; iconPath: string }) => (
   <div className="min-w-[120px] flex-1 rounded-lg border border-[#122a3a] bg-gradient-to-b from-[#07121a] to-[#061018] p-3">
     <div className="flex items-center gap-2 text-sm text-[#9aacc6]">
@@ -21,7 +20,6 @@ const StatCard = ({ title, value, iconPath }: { title: string; value: string | R
   </div>
 );
 
-// Komponen untuk tile data yang lebih kecil
 const DataTile = ({ title, value, color = "text-white" }: { title: string; value: string | ReactNode; color?: string }) => (
     <div className="rounded-md border border-[#122b3c] bg-gradient-to-b from-[#08141b] to-[#061018] p-2 h-full flex flex-col justify-center">
         <div className="text-xs font-semibold text-[#9aacc6]">{title}</div>
@@ -29,8 +27,6 @@ const DataTile = ({ title, value, color = "text-white" }: { title: string; value
     </div>
 );
 
-
-// Komponen Sparkline Chart (tidak berubah, hanya dipindahkan)
 const Sparkline = ({ mining }: { mining: boolean }) => {
   const ref = useRef<SVGPathElement>(null);
   useEffect(() => {
@@ -64,55 +60,64 @@ const Sparkline = ({ mining }: { mining: boolean }) => {
   );
 };
 
+// --- Tipe Props untuk Komponen Monitoring ---
+interface MonitoringProps {
+  inventory: Nft[];
+  mining: boolean;
+  setMining: (mining: boolean | ((m: boolean) => boolean)) => void;
+}
 
 // --- Komponen Utama Monitoring ---
 
-export default function Monitoring() {
-  // State management tetap sama
-  const [mining, setMining] = useState(true);
+export default function Monitoring({ inventory, mining, setMining }: MonitoringProps) {
   const [sec, setSec] = useState(0);
   const [bal, setBal] = useState(12345);
-  const [fanBias, setFanBias] = useState(0);
-  const [hash, setHash] = useState("0.00 H/s");
-  const [power, setPower] = useState("0 W");
   const [ping, setPing] = useState(0);
   const [lastShare, setLastShare] = useState("—");
-  const [gpus, setGpus] = useState([
-    { id: 0, temp: "45 °C", fan: "45%", hash: "1.10 H/s" },
-    { id: 1, temp: "46 °C", fan: "48%", hash: "1.05 H/s" },
-  ]);
+
+  // State untuk data GPU yang disimulasikan, sekarang berasal dari inventory
+  const [gpuStats, setGpuStats] = useState<Array<{ id: number; temp: string; fan: string; hash: string }>>([]);
 
   const uptime = new Date(sec * 1000).toISOString().substr(11, 8);
 
-  // Simulasi data (logika tidak diubah, hanya state `gpus` yang di-refactor)
+  // --- Logika Realistis Berdasarkan Inventaris ---
+  const totalHashrate = gpuStats.reduce((acc, gpu) => acc + parseFloat(gpu.hash), 0).toFixed(2);
+  const totalPower = gpuStats.reduce((acc, gpu) => acc + (150 + parseInt(gpu.fan) * 1.1 + parseFloat(gpu.hash) * 40), 0).toFixed(0);
+
+  // Fungsi untuk mendapatkan hashrate dasar berdasarkan tier
+  const getBaseHashrate = (tier: NftTier) => {
+    switch (tier) {
+      case 'Basic': return 1.5;
+      case 'Pro': return 5.0;
+      case 'Legend': return 25.0;
+      default: return 0;
+    }
+  };
+
   useEffect(() => {
     let alive = true;
     const rand = (a: number, b: number) => a + Math.random() * (b - a);
+    
     const step = () => {
       if (!alive) return;
       setSec((s) => s + 1);
       setPing(Math.round(rand(18, 120)));
 
-      const newGpus = gpus.map((gpu, i) => {
+      // Update statistik GPU berdasarkan inventory yang diterima
+      const newGpuStats = inventory.map((nft, i) => {
         const baseTemp = 40 + Math.sin((sec + i * 5) / (12 + i)) * (2 + i);
-        const fan = Math.max(18, Math.min(100, Math.round(38 + (baseTemp - 40) * 3 + fanBias + rand(-3, 3))));
-        const hash = (1.0 + i * 0.05 + (fan / 100) * 0.55 + rand(-0.05, 0.05)).toFixed(2);
+        const fan = Math.max(18, Math.min(100, Math.round(38 + (baseTemp - 40) * 3 + rand(-3, 3))));
+        const baseHash = getBaseHashrate(nft.tier);
+        const hash = (baseHash + (fan / 100) * (baseHash * 0.1) + rand(-0.05, 0.05)).toFixed(2);
+        
         return {
-          id: i,
+          id: nft.id,
           temp: `${(baseTemp + (mining ? 4 : 0)).toFixed(1)} °C`,
           fan: `${fan}%`,
-          hash: `${hash} H/s`,
+          hash: mining ? `${hash} H/s` : '0.00 H/s',
         };
       });
-      setGpus(newGpus);
-
-      const totalHash = newGpus.reduce((acc, gpu) => acc + parseFloat(gpu.hash), 0).toFixed(2);
-      setHash(`${totalHash} H/s`);
-      
-      const totalFan = newGpus.reduce((acc, gpu) => acc + parseInt(gpu.fan), 0);
-      const avgFan = totalFan / newGpus.length;
-      const pw = Math.round(150 + avgFan * 1.1 + parseFloat(totalHash) * 40);
-      setPower(`${pw} W`);
+      setGpuStats(newGpuStats);
 
       if (mining && Math.random() < 0.6) {
         const wid = Math.random().toString(16).slice(2, 10);
@@ -122,11 +127,10 @@ export default function Monitoring() {
     };
     step();
     return () => { alive = false; };
-  }, [mining, fanBias, sec]);
+  }, [mining, sec, inventory]);
 
   return (
     <div className="mx-auto max-w-[430px] px-3 pb-4 pt-3 flex-grow space-y-3">
-        {/* Header di-refactor sedikit */}
         <header className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-3">
                 <div className="h-9 w-9 flex-shrink-0 rounded-md border border-[#25344a] bg-gradient-to-b from-[#0f1924] to-[#071017] shadow-lg" />
@@ -149,7 +153,7 @@ export default function Monitoring() {
             <div className="rounded-lg border border-[#122333] bg-[#041018] p-2 space-y-2">
                 <div className="flex gap-2 overflow-x-auto no-scrollbar">
                     <StatCard title="Pool" value={<span className="text-sm">stratum+tcp://base:3333</span>} iconPath="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
-                    <StatCard title="Total Hashrate" value={hash} iconPath="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
+                    <StatCard title="Total Hashrate" value={`${totalHashrate} H/s`} iconPath="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
                     <StatCard title="Uptime" value={uptime} iconPath="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
@@ -158,7 +162,7 @@ export default function Monitoring() {
                     </div>
                     <div className="grid grid-cols-2 md:grid-cols-1 gap-2">
                        <DataTile title="Last Share" value={<span className="text-xs truncate">{lastShare}</span>} />
-                       <DataTile title="Power" value={power} color="text-yellow-400" />
+                       <DataTile title="Power" value={`${totalPower} W`} color="text-yellow-400" />
                        <DataTile title="Pool Status" value={<div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-green-400"></div><span>Connected</span></div>} color="text-green-400" />
                     </div>
                 </div>
@@ -170,9 +174,12 @@ export default function Monitoring() {
             <div className="mb-2 flex items-center justify-between">
                 <div>
                     <div className="text-sm font-semibold">Mining Farm Status</div>
-                    <div className="text-xs text-[#9aacc6]">{gpus.length} × GPUs Online • Fan Auto</div>
+                    <div className="text-xs text-[#9aacc6]">{inventory.length} × GPUs Online</div>
                 </div>
-                <div className="text-xs text-[#9aacc6]">Ping: {ping} ms</div>
+                {/* --- Tombol Start/Stop Pindah ke Sini --- */}
+                 <button onClick={() => setMining(m => !m)} className={`rounded-lg border  px-4 py-2 text-sm font-semibold transition-all ${mining ? 'border-red-500/50 bg-red-500/10 text-red-400' : 'border-[#263346] bg-gradient-to-b from-[#111827] to-[#0e1620]'}`}>
+                    {mining ? "Stop Mining" : "Start Mining"}
+                </button>
             </div>
 
             <div className="overflow-hidden rounded-lg border border-[#223146] bg-[#06101a]">
@@ -189,7 +196,7 @@ export default function Monitoring() {
                     </tr>
                 </thead>
                 <tbody className="[&>tr>td]:border-t [&>tr>td]:border-white/5">
-                    {gpus.map(gpu => (
+                    {gpuStats.map(gpu => (
                         <tr key={gpu.id}>
                             <td className="p-2 font-mono text-[#9aacc6]">GPU_{gpu.id}</td>
                             <td className="p-2 text-center font-mono text-green-400">{gpu.temp}</td>
@@ -200,13 +207,7 @@ export default function Monitoring() {
                 </tbody>
             </table>
 
-            <div className="mt-3 grid grid-cols-3 gap-2">
-                <button onClick={() => setMining(m => !m)} className={`rounded-lg border  px-3 py-2 text-sm font-semibold transition-all ${mining ? 'border-red-500/50 bg-red-500/10 text-red-400' : 'border-[#263346] bg-gradient-to-b from-[#111827] to-[#0e1620]'}`}>
-                    {mining ? "Stop Mining" : "Start Mining"}
-                </button>
-                <button onClick={() => setFanBias(b => b + 6)} className="rounded-lg border border-[#263346] bg-gradient-to-b from-[#111827] to-[#0e1620] px-3 py-2 text-sm font-semibold">Fan +</button>
-                <button onClick={() => setFanBias(b => Math.max(-30, b - 6))} className="rounded-lg border border-[#263346] bg-gradient-to-b from-[#111827] to-[#0e1620] px-3 py-2 text-sm font-semibold">Fan −</button>
-            </div>
+            {/* --- Tombol Fan Dihapus Dari Sini --- */}
         </section>
     </div>
   );
