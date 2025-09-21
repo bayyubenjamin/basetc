@@ -1,0 +1,17 @@
+{
+  "name": "BaseTC Mining",
+  "icon": "logo",
+  "description": "A Mini-App NFT Mining Game.",
+  "images": {
+    "logo": {
+      "url": "https://basetc.vercel.app/img/logo.png",
+      "type": "image/png"
+    }
+  },
+  "dapps": [
+    {
+      "name": "BaseTC Mining",
+      "url": "https://basetc.vercel.app"
+    }
+  ]
+}

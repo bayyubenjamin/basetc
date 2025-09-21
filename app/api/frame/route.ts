@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 
 export async function GET() {
-  const img = "https://your-domain.com/img/basic.png";
+  const VERCEL_URL = "https://basetc.vercel.app"; // GANTI DENGAN URL-MU
+  const img = `${VERCEL_URL}/img/basic.png`;
   const html = `<!DOCTYPE html>
 <html>
 <head>
@@ -15,7 +16,7 @@ export async function GET() {
 <meta property="fc:frame:button:2:action" content="post" />
 <meta property="fc:frame:button:3" content="Market" />
 <meta property="fc:frame:button:3:action" content="post" />
-<meta property="fc:frame:post_url" content="https://your-domain.com/api/frame/actions" />
+<meta property="fc:frame:post_url" content="${VERCEL_URL}/api/frame/actions" />
 </head>
 <body></body>
 </html>`;
