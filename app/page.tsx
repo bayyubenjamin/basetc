@@ -142,21 +142,28 @@ export default function Home() {
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-gray-900 text-white">
-      <header className="sticky top-0 left-0 right-0 bg-gray-800 p-4 flex items-center justify-between border-b border-gray-700 z-10">
+    <div className="flex flex-col min-h-dvh bg-[#0b1118]">
+      <header className="sticky top-0 left-0 right-0 bg-[#101826] p-4 flex items-center justify-between border-b border-white/10 z-10">
         <div className="flex items-center space-x-2">
-          <Image src="/img/logo.png" alt="BaseTC Logo" width={32} height={32} />
+          <Image src="/img/logo.png" alt="BaseTC Logo" width={28} height={28} />
           <div>
-            <h1 className="text-lg font-bold leading-tight">BaseTC Mining</h1>
-            {farcasterUser && <p className="text-xs text-purple-400">@{farcasterUser.username || `FID: ${farcasterUser.fid}`}</p>}
+            <h1 className="text-base font-bold leading-tight">BaseTC Mining</h1>
+            {farcasterUser && (
+              <p className="text-[11px] text-purple-400">@{farcasterUser.username || `FID: ${farcasterUser.fid}`}</p>
+            )}
           </div>
         </div>
-        <div className="text-sm font-semibold">
-           {address && `${address.substring(0, 6)}...${address.substring(address.length - 4)}`}
+        <div className="text-[11px] font-semibold text-[#9aacc6]">
+          {address && `${address.substring(0,6)}...${address.substring(address.length - 4)}`}
         </div>
       </header>
-      {renderContent()}
-      <Navigation activeTab={activeTab as TabName} setActiveTab={setActiveTab as any} />
+
+      {/* tambahkan class ini */}
+      <main className="mini-app-content flex-1 flex flex-col">
+        {renderContent()}
+      </main>
+
+      <Navigation activeTab={activeTab as any} setActiveTab={setActiveTab as any} />
     </div>
   );
 }

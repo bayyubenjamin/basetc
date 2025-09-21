@@ -1,28 +1,29 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
-import { Providers } from "./Providers"; // <-- 1. Impor provider baru
+import { Providers } from "./Providers";
 
-// Metadata bisa disesuaikan
 export const metadata: Metadata = {
   title: "BaseTC Mining",
   description: "A Mini-App NFT Mining Game",
 };
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+export const viewport: Viewport = {
+  width: 424,                // pas dengan kanvas mini-app
+  initialScale: 1,
+  maximumScale: 1,
+  viewportFit: "cover",      // safe area iOS
+};
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      {/* Menghapus className font dari body untuk menghindari error jika 
-        font tidak dikonfigurasi. Anda bisa menambahkannya kembali jika perlu.
-      */}
-      <body>
-        <Providers> {/* <-- 2. Bungkus children dengan provider yang benar */}
-          {children}
-        </Providers>
+      <body className="bg-[#0b1118] text-white antialiased">
+        {/* wrapper pusat  */}
+        <div className="mx-auto w-full max-w-[430px] min-h-dvh flex flex-col">
+          <Providers>{children}</Providers>
+        </div>
       </body>
     </html>
   );
 }
+

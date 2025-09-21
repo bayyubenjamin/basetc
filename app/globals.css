@@ -2,94 +2,99 @@
 @tailwind components;
 @tailwind utilities;
 
-/* === Base & Dark Mode Setup === */
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+/* ==== Mini-app baseline (lock dark, kecilkan friction host) ==== */
+:root { color-scheme: dark; }
+*, *::before, *::after { box-sizing: border-box; }
+html, body { height: 100%; }
+html { -webkit-text-size-adjust: 100%; }
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  margin: 0;
+  background: #0b1118;            /* dark brand bg */
+  color: #ffffff;                 /* default fg */
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Helvetica Neue", "Noto Sans", sans-serif;
+  line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* === Custom Terminal Component Styles === */
+/* Elemen media rapih di lebar sempit */
+img, svg, video, canvas { display: block; max-width: 100%; height: auto; }
+
+/* Hilangkan tap highlight iOS */
+button { -webkit-tap-highlight-color: transparent; }
+
+/* ==== Shell & layout helper untuk kanvas mini-app ==== */
+/* Bungkus root kamu pakai .app-shell (lihat catatan di bawah) */
+.app-shell {
+  width: 100%;
+  max-width: 430px;               /* kanvas mini-app */
+  min-height: 100dvh;
+  margin-left: auto;
+  margin-right: auto;
+  display: flex;
+  flex-direction: column;
+  background: #0b1118;
+}
+
+/* Bungkus area konten (di <main>) biar gak ketiban bottom nav */
+.mini-app-content {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 72px); /* nav 64px + buffer */
+}
+
+/* Bottom nav dock, center ke 430px, aman safe-area */
+.bottom-nav {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 0;
+  width: 100%;
+  max-width: 430px;
+  height: 64px;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  background: rgba(11, 17, 24, 0.9);
+  -webkit-backdrop-filter: saturate(180%) blur(10px);
+  backdrop-filter: saturate(180%) blur(10px);
+  border-top: 1px solid rgba(255,255,255,0.1);
+  z-index: 50;
+}
+
+/* ==== Terminal (dipakai di Monitoring) ==== */
 .terminal {
-  background: #01060a;
+  background: #061018;
+  border: 1px solid rgba(255,255,255,0.06);
   border-radius: 8px;
-  border: 1px solid #0f2130;
-  padding: 8px;
-  font-family: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-  font-size: 11px;
-  color: #9fd7ff; /* default color (info) */
-  height: 140px;
+  padding: 8px 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  line-height: 18px;
+  color: #9fd7ff;                 /* default info */
+  height: 160px;
   overflow-y: auto;
-  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.6);
+  box-shadow: inset 0 2px 8px rgba(0,0,0,0.6);
 }
+.term-line { white-space: pre-wrap; }
+.term-ok   { color: #7fe39a; }    /* success */
+.term-warn { color: #ffd47a; }    /* warning */
+.term-err  { color: #ff8a8a; }    /* error */
+.term-info { color: #9fd7ff; }    /* info */
 
-.term-line {
-  white-space: pre-wrap;
-  line-height: 1.5;
-}
+/* ==== Animations (modal/toast) ==== */
+@keyframes fade-in { from {opacity:0;} to {opacity:1;} }
+@keyframes fade-in-down { from {opacity:0; transform: translate(-50%, -20px);} to {opacity:1; transform: translate(-50%, 0);} }
+@keyframes slide-up { from {transform: translateY(100%);} to {transform: translateY(0);} }
 
-.term-ok {
-  color: #9fe7c1; /* Green for success */
-}
+.animate-fade-in { animation: fade-in 0.3s ease-out forwards; }
+.animate-fade-in-down { animation: fade-in-down 0.3s ease-out forwards; }
+.animate-slide-up { animation: slide-up 0.3s ease-out forwards; }
 
-.term-warn {
-  color: #ffd37a; /* Yellow for warnings */
-}
+/* ==== Utilities ==== */
+/* Scrollbar tipis (opsional) */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-thumb { background: #243447; border-radius: 999px; }
 
-.term-err {
-  color: #ff8e8e; /* Red for errors */
-}
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
-.term-info {
-  color: #9fd7ff; /* Blue for general info */
-}
-
-/* === Keyframe Animations for Modals/Toasts === */
-@keyframes fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-@keyframes fade-in-down {
-  from { opacity: 0; transform: translate(-50%, -20px); }
-  to { opacity: 1; transform: translate(-50%, 0); }
-}
-
-@keyframes slide-up {
-  from { transform: translateY(100%); }
-  to { transform: translateY(0); }
-}
-
-.animate-fade-in {
-  animation: fade-in 0.3s ease-out forwards;
-}
-
-.animate-fade-in-down {
-  animation: fade-in-down 0.3s ease-out forwards;
-}
-
-.animate-slide-up {
-  animation: slide-up 0.3s ease-out forwards;
-}
-
-/* === Utility Classes === */
-.no-scrollbar::-webkit-scrollbar {
-  display: none;
-}
-
-.no-scrollbar {
-  -ms-overflow-style: none; /* IE and Edge */
-  scrollbar-width: none; /* Firefox */
-}

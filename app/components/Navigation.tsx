@@ -1,56 +1,43 @@
 "use client";
+import { FC } from "react";
 
-import Image from 'next/image';
-import { TabName } from '../page'; // Impor tipe dari page.tsx
-
-// Definisikan tipe untuk props
-interface NavigationProps {
-  activeTab: TabName;
-  setActiveTab: (tab: TabName) => void;
+interface Props {
+  activeTab: "monitoring" | "rakit" | "market" | "profil";
+  setActiveTab: (t: any) => void;
 }
 
-export default function Navigation({ activeTab, setActiveTab }: NavigationProps) {
-  
-  // Fungsi untuk menentukan style
-  const getTabStyle = (tabName: TabName) => {
-    return activeTab === tabName
-      ? 'text-yellow-400 border-t-2 border-yellow-400'
-      : 'text-gray-400 border-t-2 border-transparent';
-  };
+const Navigation: FC<Props> = ({ activeTab, setActiveTab }) => {
+  const Item = (props: { id: Props["activeTab"]; label: string; icon: React.ReactNode; }) => (
+    <button
+      onClick={() => setActiveTab(props.id)}
+      className={`flex-1 flex flex-col items-center justify-center gap-1 text-xs font-semibold ${
+        activeTab === props.id ? "text-white" : "text-[#9aacc6]"
+      }`}
+    >
+      {props.icon}
+      <span>{props.label}</span>
+    </button>
+  );
 
   return (
-    <footer className="sticky bottom-0 left-0 right-0 bg-gray-800 border-t border-gray-700">
-      <nav className="flex justify-around items-center h-16">
-        <button
-          onClick={() => setActiveTab('monitoring')}
-          className={`flex flex-col items-center justify-center w-full pt-2 ${getTabStyle('monitoring')}`}
-        >
-          <Image src="/file.svg" alt="Monitoring" width={24} height={24} />
-          <span className="text-xs mt-1">Monitoring</span>
-        </button>
-        <button
-          onClick={() => setActiveTab('rakit')}
-          className={`flex flex-col items-center justify-center w-full pt-2 ${getTabStyle('rakit')}`}
-        >
-          <Image src="/window.svg" alt="Rakit" width={24} height={24} />
-          <span className="text-xs mt-1">Rakit</span>
-        </button>
-        <button
-          onClick={() => setActiveTab('market')}
-          className={`flex flex-col items-center justify-center w-full pt-2 ${getTabStyle('market')}`}
-        >
-          <Image src="/globe.svg" alt="Market" width={24} height={24} />
-          <span className="text-xs mt-1">Market</span>
-        </button>
-        <button
-          onClick={() => setActiveTab('profil')}
-          className={`flex flex-col items-center justify-center w-full pt-2 ${getTabStyle('profil')}`}
-        >
-          {/* Ganti dengan ikon profil jika ada */}
-          <Image src="/file.svg" alt="Profil" width={24} height={24} /> 
-          <span className="text-xs mt-1">Profil</span>
-        </button>
-      </nav>
-    </footer>
+    <nav
+      className="
+        bottom-nav
+        fixed bottom-0 left-1/2 -translate-x-1/2 z-50
+        w-full max-w-[430px]
+        border-t border-white/10
+        bg-[#0b1118]/90 backdrop-blur
+      "
+    >
+      <div className="grid grid-cols-4 px-3">
+        <Item id="monitoring" label="Monitoring" icon={<div className="w-5 h-5 rounded bg-white/10" />} />
+        <Item id="rakit" label="Rakit" icon={<div className="w-5 h-5 rounded bg-white/10" />} />
+        <Item id="market" label="Market" icon={<div className="w-5 h-5 rounded bg-white/10" />} />
+        <Item id="profil" label="Profil" icon={<div className="w-5 h-5 rounded bg-white/10" />} />
+      </div>
+    </nav>
   );
-}
+};
+
+export default Navigation;
+
