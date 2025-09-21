@@ -3,9 +3,9 @@
 import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { ethers } from 'ethers';
-import { useAccount } from 'wagmi';
+import { useAccount, useConnect } from 'wagmi'; // <-- Tambahkan useConnect
 import { ConnectWallet } from '@coinbase/onchainkit/wallet';
-import { sdk } from '@farcaster/miniapp-sdk'; // <-- PERBAIKAN: Impor 'sdk' langsung
+import { sdk } from '@farcaster/miniapp-sdk';
 import { useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 
 // Impor komponen UI Anda
@@ -30,11 +30,26 @@ export interface Nft {
 export default function Home() {
   const [activeTab, setActiveTab] = useState<TabName>('monitoring');
   const { address, isConnected } = useAccount();
+  const { connectors, connect } = useConnect(); // <-- Dapatkan fungsi connect dan daftar konektor dari Wagmi
 
-  // Inisialisasi Farcaster SDK
+  // Memberi tahu Farcaster client bahwa mini-app sudah siap
   useEffect(() => {
-    sdk.actions.ready(); // <-- PERBAIKAN: Langsung gunakan sdk.actions.ready()
+    sdk.actions.ready();
   }, []);
+
+  // --> BLOK KODE BARU UNTUK AUTO-CONNECT <--
+  useEffect(() => {
+    // Cari konektor Farcaster dari daftar yang tersedia
+    const farcasterConnector = connectors.find(
+      (connector) => connector.id === 'farcaster',
+    );
+    // Jika belum terkoneksi dan konektor Farcaster ditemukan, coba sambungkan
+    if (!isConnected && farcasterConnector) {
+      connect({ connector: farcasterConnector });
+    }
+  }, [isConnected, connectors, connect]);
+  // --> AKHIR BLOK KODE BARU <--
+
 
   const [inventory, setInventory] = useState<Nft[]>([]);
   const [unclaimedRewards, setUnclaimedRewards] = useState("0");
@@ -87,8 +102,8 @@ export default function Home() {
       <div className="flex flex-col min-h-screen bg-gray-900 text-white items-center justify-center space-y-4">
         <Image src="/img/logo.png" alt="BaseTC Logo" width={96} height={96} />
         <h1 className="text-3xl font-bold">Welcome to BaseTC Mining</h1>
-        <p className="text-gray-400">Connect your wallet to start your mining operation.</p>
-        <div className="mt-4">
+        <p className="text-gray-400">Connecting to Farcaster wallet...</p>
+        <div className="mt-4 opacity-50">
           <ConnectWallet />
         </div>
       </div>
