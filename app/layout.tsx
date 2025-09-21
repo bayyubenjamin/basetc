@@ -8,18 +8,18 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  width: 424,                // pas dengan kanvas mini-app
+  width: 424,
   initialScale: 1,
   maximumScale: 1,
-  viewportFit: "cover",      // safe area iOS
+  viewportFit: "cover",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
       <body className="bg-[#0b1118] text-white antialiased">
-        {/* wrapper pusat  */}
-        <div className="mx-auto w-full max-w-[430px] min-h-dvh flex flex-col">
+        {/* Penting: wrapper kanvas */}
+        <div className="app-shell">
           <Providers>{children}</Providers>
         </div>
       </body>

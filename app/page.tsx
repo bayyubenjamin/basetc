@@ -141,29 +141,30 @@ export default function Home() {
     }
   };
 
-  return (
-    <div className="flex flex-col min-h-dvh bg-[#0b1118]">
-      <header className="sticky top-0 left-0 right-0 bg-[#101826] p-4 flex items-center justify-between border-b border-white/10 z-10">
-        <div className="flex items-center space-x-2">
-          <Image src="/img/logo.png" alt="BaseTC Logo" width={28} height={28} />
-          <div>
-            <h1 className="text-base font-bold leading-tight">BaseTC Mining</h1>
-            {farcasterUser && (
-              <p className="text-[11px] text-purple-400">@{farcasterUser.username || `FID: ${farcasterUser.fid}`}</p>
-            )}
-          </div>
+return (
+  <div className="flex flex-col min-h-dvh bg-[#0b1118]">
+    <header className="sticky top-0 left-0 right-0 bg-[#101826] p-3 flex items-center justify-between border-b border-white/10 z-10">
+      <div className="flex items-center gap-2">
+        <Image src="/img/logo.png" alt="BaseTC Logo" width={26} height={26} />
+        <div className="leading-tight">
+          <h1 className="text-[18px] font-extrabold">BaseTC Mining</h1>
+          {farcasterUser && (
+            <p className="text-[11px] text-purple-400">@{farcasterUser.username || `FID: ${farcasterUser.fid}`}</p>
+          )}
         </div>
-        <div className="text-[11px] font-semibold text-[#9aacc6]">
-          {address && `${address.substring(0,6)}...${address.substring(address.length - 4)}`}
-        </div>
-      </header>
+      </div>
+      <div className="text-[11px] font-semibold text-[#9aacc6]">
+        {address && `${address.substring(0,6)}...${address.substring(address.length - 4)}`}
+      </div>
+    </header>
 
-      {/* tambahkan class ini */}
-      <main className="mini-app-content flex-1 flex flex-col">
-        {renderContent()}
-      </main>
+    {/* PENTING: padding bawah agar gak ketiban nav */}
+    <main className="mini-app-content">
+      {/* status bar pake wrap biar gak tabrakan */}
+      {/* (kalau status ini ada di Monitoring, biarkan di sana; prinsipnya sama) */}
+      {renderContent()}
+    </main>
 
-      <Navigation activeTab={activeTab as any} setActiveTab={setActiveTab as any} />
-    </div>
-  );
-}
+    <Navigation activeTab={activeTab as any} setActiveTab={setActiveTab as any} />
+  </div>
+);

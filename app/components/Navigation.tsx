@@ -1,39 +1,38 @@
 "use client";
 import { FC } from "react";
 
+type Tab = "monitoring" | "rakit" | "market" | "profil";
+
 interface Props {
-  activeTab: "monitoring" | "rakit" | "market" | "profil";
-  setActiveTab: (t: any) => void;
+  activeTab: Tab;
+  setActiveTab: (t: Tab) => void;
 }
 
-const Navigation: FC<Props> = ({ activeTab, setActiveTab }) => {
-  const Item = (props: { id: Props["activeTab"]; label: string; icon: React.ReactNode; }) => (
-    <button
-      onClick={() => setActiveTab(props.id)}
-      className={`flex-1 flex flex-col items-center justify-center gap-1 text-xs font-semibold ${
-        activeTab === props.id ? "text-white" : "text-[#9aacc6]"
-      }`}
-    >
-      {props.icon}
-      <span>{props.label}</span>
-    </button>
-  );
+const Pill = ({ active }: { active: boolean }) => (
+  <div className={`w-5 h-5 rounded ${active ? "bg-white" : "bg-white/15"}`} />
+);
 
+const NavBtn: FC<{ id: Tab; label: string; active: boolean; onClick: () => void }> = ({ id, label, active, onClick }) => (
+  <button
+    onClick={onClick}
+    className={`flex flex-col items-center justify-center py-1 gap-1 text-[11px] font-semibold ${
+      active ? "text-white" : "text-[#9aacc6]"
+    }`}
+  >
+    <Pill active={active} />
+    <span className="leading-none">{label}</span>
+  </button>
+);
+
+const Navigation: FC<Props> = ({ activeTab, setActiveTab }) => {
   return (
-    <nav
-      className="
-        bottom-nav
-        fixed bottom-0 left-1/2 -translate-x-1/2 z-50
-        w-full max-w-[430px]
-        border-t border-white/10
-        bg-[#0b1118]/90 backdrop-blur
-      "
-    >
-      <div className="grid grid-cols-4 px-3">
-        <Item id="monitoring" label="Monitoring" icon={<div className="w-5 h-5 rounded bg-white/10" />} />
-        <Item id="rakit" label="Rakit" icon={<div className="w-5 h-5 rounded bg-white/10" />} />
-        <Item id="market" label="Market" icon={<div className="w-5 h-5 rounded bg-white/10" />} />
-        <Item id="profil" label="Profil" icon={<div className="w-5 h-5 rounded bg-white/10" />} />
+    <nav className="bottom-nav">
+      {/* grid 4 kolom full width */}
+      <div className="grid grid-cols-4 w-full h-full px-3">
+        <NavBtn id="monitoring" label="Monitoring" active={activeTab === "monitoring"} onClick={() => setActiveTab("monitoring")} />
+        <NavBtn id="rakit" label="Rakit" active={activeTab === "rakit"} onClick={() => setActiveTab("rakit")} />
+        <NavBtn id="market" label="Market" active={activeTab === "market"} onClick={() => setActiveTab("market")} />
+        <NavBtn id="profil" label="Profil" active={activeTab === "profil"} onClick={() => setActiveTab("profil")} />
       </div>
     </nav>
   );
