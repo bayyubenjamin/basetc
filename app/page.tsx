@@ -1,17 +1,22 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Image from 'next/image';
+import { ethers } from 'ethers';
+import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
+import { ConnectButton } from '@coinbase/onchainkit';
+
+// Impor komponen UI Anda
 import Monitoring from './components/Monitoring';
 import Navigation from './components/Navigation';
 import Rakit from './components/Rakit';
 import Market from './components/Market';
 import Profil from './components/Profil';
 
-// Tipe untuk nama tab
-export type TabName = 'monitoring' | 'rakit' | 'market' | 'profil';
+// Impor konfigurasi dan ABI
+import { gameCoreAddress, gameCoreABI, rigNftAddress, rigNftABI, baseTcAddress, baseTcABI } from './lib/web3Config';
 
-// Tipe untuk NFT, agar bisa dibagikan
+export type TabName = 'monitoring' | 'rakit' | 'market' | 'profil';
 export interface Nft {
   id: number;
   tier: "Basic" | "Pro" | "Legend";
@@ -20,34 +25,128 @@ export interface Nft {
   durability: number;
 }
 
-// Data awal inventaris
-const initialInventory: Nft[] = [
-  ...Array.from({ length: 4 }, (_, i) => ({ id: 100 + i, tier: "Basic" as const, name: `Basic Rig #${i+1}`, img: "/img/vga_basic.png", durability: Math.floor(Math.random() * 30) + 70 })),
-  ...Array.from({ length: 1 }, (_, i) => ({ id: 200 + i, tier: "Pro" as const, name: `Pro Rig #${i+1}`, img: "/img/vga_pro.png", durability: Math.floor(Math.random() * 20) + 80 })),
-];
-
-
 export default function Home() {
   const [activeTab, setActiveTab] = useState<TabName>('monitoring');
+  const { address, isConnected } = useAccount();
+
+  // State untuk data on-chain
+  const [inventory, setInventory] = useState<Nft[]>([]);
+  const [unclaimedRewards, setUnclaimedRewards] = useState("0");
+  const [totalBalance, setTotalBalance] = useState("0");
+  const [lastClaimTimestamp, setLastClaimTimestamp] = useState(0);
+  const [mining, setMining] = useState(true); // Ini masih simulasi UI untuk visual
+
+  // --- Wagmi Hooks untuk Membaca Data Kontrak ---
+  const { data: playerData, refetch: refetchPlayerData } = useReadContract({
+    address: gameCoreAddress,
+    abi: gameCoreABI,
+    functionName: 'players',
+    args: [address],
+    query: { enabled: isConnected },
+  });
+
+  const { data: pendingRewardsData, refetch: refetchPendingRewards } = useReadContract({
+    address: gameCoreAddress,
+    abi: gameCoreABI,
+    functionName: 'pendingReward',
+    args: [address],
+    query: { enabled: isConnected },
+  });
+
+  const { data: balanceData, refetch: refetchBalance } = useReadContract({
+    address: baseTcAddress,
+    abi: baseTcABI,
+    functionName: 'balanceOf',
+    args: [address],
+    query: { enabled: isConnected },
+  });
+
+  const { data: inventoryData, refetch: refetchInventory } = useReadContract({
+    address: rigNftAddress,
+    abi: rigNftABI,
+    functionName: 'balanceOfBatch',
+    args: [Array(4).fill(address), [1, 2, 3, 4]],
+    query: { enabled: isConnected },
+  });
   
-  // State untuk inventaris dan status mining sekarang ada di sini
-  const [inventory, setInventory] = useState<Nft[]>(initialInventory);
-  const [mining, setMining] = useState(true);
+  // --- Wagmi Hook untuk Menulis/Mengirim Transaksi ---
+  const { data: hash, writeContract, isPending } = useWriteContract();
+  const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({ hash });
+
+
+  // Efek untuk memproses dan mengatur state dari data yang diambil wagmi
+  useEffect(() => {
+    if (playerData) setLastClaimTimestamp(Number((playerData as any).lastRewardClaimTimestamp) * 1000);
+    if (pendingRewardsData) setUnclaimedRewards(ethers.formatEther(pendingRewardsData as ethers.BigNumberish));
+    if (balanceData) setTotalBalance(ethers.formatEther(balanceData as ethers.BigNumberish));
+    if (inventoryData) {
+        const newInventory: Nft[] = [];
+        const tierNames: Nft['tier'][] = ["Basic", "Pro", "Legend"];
+        (inventoryData as ethers.BigNumberish[]).forEach((bal, i) => {
+            const tierName = tierNames[i];
+            if (tierName) {
+                for (let j = 0; j < Number(bal); j++) {
+                    newInventory.push({ id: (i + 1) * 100 + j, tier: tierName, name: `${tierName} Rig #${j + 1}`, img: `/img/vga_${tierName.toLowerCase()}.png`, durability: 100 });
+                }
+            }
+        });
+        setInventory(newInventory);
+    }
+  }, [playerData, pendingRewardsData, balanceData, inventoryData]);
+
+  // Efek untuk me-refresh data setelah transaksi berhasil
+  useEffect(() => {
+    if (isConfirmed) {
+        refetchPlayerData();
+        refetchPendingRewards();
+        refetchBalance();
+        refetchInventory();
+    }
+  }, [isConfirmed]);
+  
+  // Tampilan jika wallet belum terhubung
+  if (!isConnected) {
+    return (
+      <div className="flex flex-col min-h-screen bg-gray-900 text-white items-center justify-center space-y-4">
+        <Image src="/img/logo.png" alt="BaseTC Logo" width={96} height={96} />
+        <h1 className="text-3xl font-bold">Welcome to BaseTC Mining</h1>
+        <p className="text-gray-400">Connect your wallet to start your mining operation.</p>
+        <div className="mt-4">
+          <ConnectButton />
+        </div>
+      </div>
+    );
+  }
+
+  const handleClaim = async () => {
+    writeContract({
+        address: gameCoreAddress,
+        abi: gameCoreABI,
+        functionName: 'claimReward',
+        args: [],
+    });
+  };
 
   const renderContent = () => {
     switch (activeTab) {
       case 'monitoring':
-        // Kirim data inventory dan status mining ke Monitoring
-        return <Monitoring inventory={inventory} mining={mining} setMining={setMining} />;
+        return <Monitoring 
+                  inventory={inventory} 
+                  mining={mining} 
+                  setMining={setMining} 
+                  unclaimedRewards={Number(unclaimedRewards)}
+                  lastClaimTimestamp={lastClaimTimestamp}
+                  handleClaim={handleClaim}
+                  isClaiming={isPending || isConfirming}
+               />;
       case 'rakit':
-        // Kirim data inventory dan fungsi update-nya ke Rakit
         return <Rakit inventory={inventory} setInventory={setInventory} setActiveTab={setActiveTab} />;
       case 'market':
-        return <Market />;
+        return <Market onTransactionSuccess={() => { refetchPlayerData(); refetchInventory(); }} />;
       case 'profil':
         return <Profil />;
       default:
-        return <Monitoring inventory={inventory} mining={mining} setMining={setMining} />;
+        return <div></div>;
     }
   };
 
@@ -58,14 +157,14 @@ export default function Home() {
           <Image src="/img/logo.png" alt="BaseTC Logo" width={32} height={32} />
           <h1 className="text-xl font-bold">BaseTC Mining</h1>
         </div>
-        <div className="text-xs text-yellow-400">
-          Lv. 5
+        <div className="text-sm font-semibold">
+           {address && `${address.substring(0, 6)}...${address.substring(address.length - 4)}`}
         </div>
       </header>
 
       {renderContent()}
 
-      <Navigation activeTab={activeTab} setActiveTab={setActiveTab} />
+      <Navigation activeTab={activeTab as TabName} setActiveTab={setActiveTab as any} />
     </div>
   );
 }

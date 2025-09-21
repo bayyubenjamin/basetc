@@ -54,7 +54,7 @@ const dummyUser: UserProfile = {
 // --- Helper & UI Components ---
 
 const Icon: FC<{ path: string; className?: string }> = ({ path, className = "w-5 h-5" }) => (
-    <svg xmlns="http://www.w.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
         <path strokeLinecap="round" strokeLinejoin="round" d={path} />
     </svg>
 );
@@ -177,4 +177,3 @@ export default function Profil() {
         </div>
     );
 }
-
