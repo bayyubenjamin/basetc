@@ -4,7 +4,8 @@ import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { ethers } from 'ethers';
 import { useAccount } from 'wagmi';
-import { ConnectWallet } from '@coinbase/onchainkit/wallet'; // <-- PERBAIKAN IMPORT
+import { ConnectWallet } from '@coinbase/onchainkit/wallet';
+import { init } from '@farcaster/miniapp-sdk'; // <-- BARIS INI DITAMBAHKAN
 import { useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 
 // Impor komponen UI Anda
@@ -30,7 +31,13 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<TabName>('monitoring');
   const { address, isConnected } = useAccount();
 
-  // (Sisa state dan fungsi Anda tetap sama)
+  // --- Inisialisasi Farcaster SDK ---
+  useEffect(() => {
+    const sdk = init();
+    sdk.actions.ready();
+  }, []);
+  // ------------------------------------
+
   const [inventory, setInventory] = useState<Nft[]>([]);
   const [unclaimedRewards, setUnclaimedRewards] = useState("0");
   const [totalBalance, setTotalBalance] = useState("0");
@@ -84,7 +91,7 @@ export default function Home() {
         <h1 className="text-3xl font-bold">Welcome to BaseTC Mining</h1>
         <p className="text-gray-400">Connect your wallet to start your mining operation.</p>
         <div className="mt-4">
-          <ConnectWallet /> {/* <-- PERBAIKAN KOMPONEN */}
+          <ConnectWallet />
         </div>
       </div>
     );
