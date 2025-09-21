@@ -43,18 +43,16 @@ export default function Home() {
 
   // Inisialisasi Farcaster SDK dan auto-connect
   useEffect(() => {
-    // 1. Beri tahu Farcaster bahwa aplikasi siap
     sdk.actions.ready();
 
-    // 2. Ambil data pengguna Farcaster untuk verifikasi & personalisasi
-    sdk.getFarcasterUser().then(user => {
+    // PERBAIKAN: Gunakan 'getUser' dari dalam 'sdk.actions'
+    sdk.actions.getUser().then(user => {
       if (user) {
         setFarcasterUser(user);
         console.log('Farcaster user:', user);
       }
     }).catch(console.error);
     
-    // 3. Coba auto-connect wallet
     const farcasterConnector = connectors.find(c => c.id === 'farcaster');
     if (!isConnected && farcasterConnector) {
       connect({ connector: farcasterConnector });
