@@ -8,17 +8,16 @@ import { ConnectWallet } from '@coinbase/onchainkit/wallet';
 import { sdk } from '@farcaster/miniapp-sdk';
 import { useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 
-// Impor komponen UI Anda
+// Impor komponen UI
 import Monitoring from './components/Monitoring';
 import Navigation from './components/Navigation';
 import Rakit from './components/Rakit';
 import Market from './components/Market';
 import Profil from './components/Profil';
 
-// Impor konfigurasi dan ABI
+// Konfigurasi & ABI
 import { gameCoreAddress, gameCoreABI, rigNftAddress, rigNftABI, baseTcAddress, baseTcABI } from './lib/web3Config';
 
-// Tipe untuk data pengguna Farcaster
 type FarcasterUser = {
   fid: number;
   username?: string;
@@ -37,32 +36,26 @@ export interface Nft {
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<TabName>('monitoring');
-  const { address, isConnected, connector } = useAccount(); // <-- Tambahkan 'connector' dari useAccount
+  const { address, isConnected, connector } = useAccount();
   const { connectors, connect } = useConnect();
   const [farcasterUser, setFarcasterUser] = useState<FarcasterUser | null>(null);
 
-  // Inisialisasi Farcaster SDK dan auto-connect
+  // Init MiniApp SDK + auto-connect Farcaster connector
   useEffect(() => {
     sdk.actions.ready();
-    
     const farcasterConnector = connectors.find(c => c.id === 'farcaster');
     if (!isConnected && farcasterConnector) {
       connect({ connector: farcasterConnector });
     }
   }, [isConnected, connectors, connect]);
-  
-  // Blok kode baru untuk mengambil data pengguna dari konektor
+
+  // Ambil data user dari konektor Farcaster
   useEffect(() => {
-    // Ambil data user dari konektor SETELAH berhasil terhubung
     if (isConnected && connector?.id === 'farcaster') {
       (async () => {
         try {
-          // Metode ini ada di konektor, bukan di SDK utama
-          const user = await (connector as any).getFarcasterUser();
-          if (user) {
-            setFarcasterUser(user);
-            console.log('Farcaster user:', user);
-          }
+          const user = await (connector as any).getFarcasterUser?.();
+          if (user) setFarcasterUser(user);
         } catch (error) {
           console.error('Failed to get Farcaster user:', error);
         }
