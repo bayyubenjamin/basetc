@@ -51,12 +51,13 @@ export default function Home() {
     }
   }, [isConnected, connectors, connect]);
   
-  // --> BLOK KODE BARU UNTUK MENGAMBIL DATA PENGGUNA <--
+  // Blok kode baru untuk mengambil data pengguna dari konektor
   useEffect(() => {
     // Ambil data user dari konektor SETELAH berhasil terhubung
     if (isConnected && connector?.id === 'farcaster') {
       (async () => {
         try {
+          // Metode ini ada di konektor, bukan di SDK utama
           const user = await (connector as any).getFarcasterUser();
           if (user) {
             setFarcasterUser(user);
@@ -68,7 +69,6 @@ export default function Home() {
       })();
     }
   }, [isConnected, connector]);
-  // --> AKHIR BLOK KODE BARU <--
 
   const [inventory, setInventory] = useState<Nft[]>([]);
   const [unclaimedRewards, setUnclaimedRewards] = useState("0");
