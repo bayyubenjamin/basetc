@@ -3,8 +3,9 @@
 import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { ethers } from 'ethers';
-import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
-import { ConnectButton } from '@coinbase/onchainkit';
+import { useAccount } from 'wagmi';
+import { ConnectWallet } from '@coinbase/onchainkit/wallet'; // <-- PERBAIKAN IMPORT
+import { useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 
 // Impor komponen UI Anda
 import Monitoring from './components/Monitoring';
@@ -29,52 +30,28 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<TabName>('monitoring');
   const { address, isConnected } = useAccount();
 
-  // State untuk data on-chain
+  // (Sisa state dan fungsi Anda tetap sama)
   const [inventory, setInventory] = useState<Nft[]>([]);
   const [unclaimedRewards, setUnclaimedRewards] = useState("0");
   const [totalBalance, setTotalBalance] = useState("0");
   const [lastClaimTimestamp, setLastClaimTimestamp] = useState(0);
-  const [mining, setMining] = useState(true); // Ini masih simulasi UI untuk visual
+  const [mining, setMining] = useState(true);
 
-  // --- Wagmi Hooks untuk Membaca Data Kontrak ---
   const { data: playerData, refetch: refetchPlayerData } = useReadContract({
-    address: gameCoreAddress,
-    abi: gameCoreABI,
-    functionName: 'players',
-    args: [address],
-    query: { enabled: isConnected },
+    address: gameCoreAddress, abi: gameCoreABI, functionName: 'players', args: [address], query: { enabled: isConnected },
   });
-
   const { data: pendingRewardsData, refetch: refetchPendingRewards } = useReadContract({
-    address: gameCoreAddress,
-    abi: gameCoreABI,
-    functionName: 'pendingReward',
-    args: [address],
-    query: { enabled: isConnected },
+    address: gameCoreAddress, abi: gameCoreABI, functionName: 'pendingReward', args: [address], query: { enabled: isConnected },
   });
-
   const { data: balanceData, refetch: refetchBalance } = useReadContract({
-    address: baseTcAddress,
-    abi: baseTcABI,
-    functionName: 'balanceOf',
-    args: [address],
-    query: { enabled: isConnected },
+    address: baseTcAddress, abi: baseTcABI, functionName: 'balanceOf', args: [address], query: { enabled: isConnected },
   });
-
   const { data: inventoryData, refetch: refetchInventory } = useReadContract({
-    address: rigNftAddress,
-    abi: rigNftABI,
-    functionName: 'balanceOfBatch',
-    args: [Array(4).fill(address), [1, 2, 3, 4]],
-    query: { enabled: isConnected },
+    address: rigNftAddress, abi: rigNftABI, functionName: 'balanceOfBatch', args: [Array(4).fill(address), [1, 2, 3, 4]], query: { enabled: isConnected },
   });
-  
-  // --- Wagmi Hook untuk Menulis/Mengirim Transaksi ---
   const { data: hash, writeContract, isPending } = useWriteContract();
   const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({ hash });
 
-
-  // Efek untuk memproses dan mengatur state dari data yang diambil wagmi
   useEffect(() => {
     if (playerData) setLastClaimTimestamp(Number((playerData as any).lastRewardClaimTimestamp) * 1000);
     if (pendingRewardsData) setUnclaimedRewards(ethers.formatEther(pendingRewardsData as ethers.BigNumberish));
@@ -94,17 +71,12 @@ export default function Home() {
     }
   }, [playerData, pendingRewardsData, balanceData, inventoryData]);
 
-  // Efek untuk me-refresh data setelah transaksi berhasil
   useEffect(() => {
     if (isConfirmed) {
-        refetchPlayerData();
-        refetchPendingRewards();
-        refetchBalance();
-        refetchInventory();
+        refetchPlayerData(); refetchPendingRewards(); refetchBalance(); refetchInventory();
     }
-  }, [isConfirmed]);
-  
-  // Tampilan jika wallet belum terhubung
+  }, [isConfirmed, refetchBalance, refetchInventory, refetchPlayerData, refetchPendingRewards]);
+
   if (!isConnected) {
     return (
       <div className="flex flex-col min-h-screen bg-gray-900 text-white items-center justify-center space-y-4">
@@ -112,41 +84,27 @@ export default function Home() {
         <h1 className="text-3xl font-bold">Welcome to BaseTC Mining</h1>
         <p className="text-gray-400">Connect your wallet to start your mining operation.</p>
         <div className="mt-4">
-          <ConnectButton />
+          <ConnectWallet /> {/* <-- PERBAIKAN KOMPONEN */}
         </div>
       </div>
     );
   }
 
   const handleClaim = async () => {
-    writeContract({
-        address: gameCoreAddress,
-        abi: gameCoreABI,
-        functionName: 'claimReward',
-        args: [],
-    });
+    writeContract({ address: gameCoreAddress, abi: gameCoreABI, functionName: 'claimReward', args: [] });
   };
 
   const renderContent = () => {
     switch (activeTab) {
       case 'monitoring':
-        return <Monitoring 
-                  inventory={inventory} 
-                  mining={mining} 
-                  setMining={setMining} 
-                  unclaimedRewards={Number(unclaimedRewards)}
-                  lastClaimTimestamp={lastClaimTimestamp}
-                  handleClaim={handleClaim}
-                  isClaiming={isPending || isConfirming}
-               />;
+        return <Monitoring inventory={inventory} mining={mining} setMining={setMining} unclaimedRewards={Number(unclaimedRewards)} lastClaimTimestamp={lastClaimTimestamp} handleClaim={handleClaim} isClaiming={isPending || isConfirming} />;
       case 'rakit':
         return <Rakit inventory={inventory} setInventory={setInventory} setActiveTab={setActiveTab} />;
       case 'market':
         return <Market onTransactionSuccess={() => { refetchPlayerData(); refetchInventory(); }} />;
       case 'profil':
         return <Profil />;
-      default:
-        return <div></div>;
+      default: return <div></div>;
     }
   };
 
@@ -161,9 +119,7 @@ export default function Home() {
            {address && `${address.substring(0, 6)}...${address.substring(address.length - 4)}`}
         </div>
       </header>
-
       {renderContent()}
-
       <Navigation activeTab={activeTab as TabName} setActiveTab={setActiveTab as any} />
     </div>
   );
