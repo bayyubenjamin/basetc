@@ -1,15 +1,13 @@
 "use client";
 
 import Image from 'next/image';
+import { TabName } from '../page'; // Impor tipe dari page.tsx
 
 // Definisikan tipe untuk props
 interface NavigationProps {
-  activeTab: string;
-  setActiveTab: (tab: string) => void;
+  activeTab: TabName;
+  setActiveTab: (tab: TabName) => void;
 }
-
-// Definisikan tipe untuk tab
-type TabName = 'monitoring' | 'rakit' | 'market' | 'profil';
 
 export default function Navigation({ activeTab, setActiveTab }: NavigationProps) {
   

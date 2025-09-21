@@ -9,11 +9,11 @@ import Market from './components/Market';
 import Profil from './components/Profil';
 
 // Tipe untuk nama tab
-type TabName = 'monitoring' | 'rakit' | 'market' | 'profil';
+export type TabName = 'monitoring' | 'rakit' | 'market' | 'profil';
 
 export default function Home() {
   // State untuk melacak tab yang sedang aktif
-  const [activeTab, setActiveTab] = useState<TabName>('monitoring');
+  const [activeTab, setActiveTab] = useState<TabName>('rakit'); // Default ke 'rakit' untuk testing
 
   // Fungsi untuk merender komponen berdasarkan tab yang aktif
   const renderContent = () => {
@@ -21,7 +21,8 @@ export default function Home() {
       case 'monitoring':
         return <Monitoring />;
       case 'rakit':
-        return <Rakit />;
+        // Teruskan setActiveTab sebagai prop ke Rakit
+        return <Rakit setActiveTab={setActiveTab} />;
       case 'market':
         return <Market />;
       case 'profil':
