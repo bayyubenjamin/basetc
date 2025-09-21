@@ -45,8 +45,8 @@ export default function Home() {
   useEffect(() => {
     sdk.actions.ready();
 
-    // PERBAIKAN: Gunakan 'getUser' dari dalam 'sdk.actions'
-    sdk.actions.getUser().then(user => {
+    // PERBAIKAN FINAL: Gunakan 'getUserInfo' langsung dari 'sdk'
+    sdk.getUserInfo().then(user => {
       if (user) {
         setFarcasterUser(user);
         console.log('Farcaster user:', user);
