@@ -5,7 +5,7 @@ import Image from 'next/image';
 import { ethers } from 'ethers';
 import { useAccount } from 'wagmi';
 import { ConnectWallet } from '@coinbase/onchainkit/wallet';
-import init from '@farcaster/miniapp-sdk'; // <-- INI PERBAIKANNYA
+import init from '@farcaster/miniapp-sdk'; // <-- THIS IS THE FIX
 import { useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 
 // Impor komponen UI Anda
