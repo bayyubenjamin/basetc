@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useRef, useState, FC, ReactNode } from "react";
 import { Nft } from "../page";
-import { useWeb3 } from "../context/Web3Provider"; // <-- Impor hook useWeb3
+import { useWeb3 } from "../context/Web3Provider";
 
 // --- Custom Hook untuk Transisi Angka yang Halus ---
 const useSmoothNumber = (targetValue: number, duration: number = 3000) => {
@@ -52,13 +52,13 @@ interface MonitoringProps {
   setMining: (mining: boolean | ((m: boolean) => boolean)) => void;
   unclaimedRewards: number;
   lastClaimTimestamp: number;
-  handleClaim: () => Promise<void>; // Diubah menjadi promise
+  handleClaim: () => Promise<void>;
+  isClaiming: boolean; // <-- PROPERTI BARU DITAMBAHKAN
 }
 
 // --- Komponen Utama Monitoring ---
-export default function Monitoring({ inventory, mining, setMining, unclaimedRewards, lastClaimTimestamp, handleClaim }: MonitoringProps) {
-  const { gameCoreContract } = useWeb3(); // Ambil kontrak dari context
-  const [isClaiming, setIsClaiming] = useState(false);
+export default function Monitoring({ inventory, mining, setMining, unclaimedRewards, lastClaimTimestamp, handleClaim, isClaiming }: MonitoringProps) {
+  const { gameCoreContract } = useWeb3();
   const [uptimeSec, setUptimeSec] = useState(0);
   const [targetState, setTargetState] = useState({
       ping: 0,
@@ -109,11 +109,13 @@ export default function Monitoring({ inventory, mining, setMining, unclaimedRewa
   }, [mining, inventory]);
 
   const onClaimClick = async () => {
-      setIsClaiming(true);
       addLog('Sending claim transaction...', 'info');
-      await handleClaim(); // Panggil fungsi dari page.tsx
-      addLog('Claim transaction confirmed!', 'ok');
-      setIsClaiming(false);
+      try {
+        await handleClaim();
+        addLog('Claim transaction confirmed!', 'ok');
+      } catch (error) {
+        addLog('Claim failed.', 'error');
+      }
   };
 
   const handleToggleMining = () => {
@@ -136,8 +138,8 @@ export default function Monitoring({ inventory, mining, setMining, unclaimedRewa
             <div className="flex items-center gap-1 rounded-full border border-[#233045] bg-gradient-to-b from-[#0f1622] to-[#0a1119] p-1 text-xs text-yellow-400">
                 <span className="pl-2 font-semibold">Unclaimed:</span>
                 <strong className="text-white font-bold">{unclaimedRewards.toFixed(4)}</strong>
-                <button 
-                    onClick={onClaimClick} 
+                <button
+                    onClick={onClaimClick}
                     disabled={isClaiming || unclaimedRewards <= 0}
                     className="rounded-full bg-[#0f2432] border border-[#30435e] px-3 py-1 text-xs font-semibold text-white hover:bg-[#1a384f] disabled:bg-gray-700 disabled:cursor-not-allowed"
                 >
@@ -178,7 +180,7 @@ export default function Monitoring({ inventory, mining, setMining, unclaimedRewa
                 <tbody className="[&>tr>td]:border-t [&>tr>td]:border-white/5">
                     {inventory.map((nft, index) => {
                         const stats = targetState.gpuStats[index] || { temp: 0, fan: 0, hash: 0 };
-                        const smoothGpuHash = useSmoothNumber(stats.hash); 
+                        const smoothGpuHash = useSmoothNumber(stats.hash);
                         return (<tr key={nft.id}><td className="p-2 font-mono text-[#9aacc6]">GPU_{nft.id}</td><td className="p-2 text-center font-mono text-green-400">{stats.temp.toFixed(1)} °C</td><td className="p-2 text-center font-mono text-blue-400">{stats.fan.toFixed(0)}%</td><td className="p-2 text-right font-mono text-white">{smoothGpuHash.toFixed(2)} H/s</td></tr>);
                     })}
                 </tbody>
