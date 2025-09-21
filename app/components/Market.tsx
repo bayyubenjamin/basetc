@@ -26,18 +26,21 @@ interface User {
   balances: { usdc: number; baseTC: number };
 }
 
+// --- PERUBAHAN DI SINI ---
+// Path gambar diubah untuk menunjuk ke gambar VGA spesifik
 const NFT_DATA: NFTTier[] = [
-  { id: 'basic', name: 'Basic Rig', priceUsd: 2, promoPriceUsd: 1, image: '/img/basic.png', hashrateHint: '~1.5 H/s', slotMax: 10 },
-  { id: 'pro', name: 'Pro Rig', priceUsd: 20, image: '/img/pro.png', hashrateHint: '~5.0 H/s', slotMax: 5 },
-  { id: 'legend', name: 'Legend Rig', priceUsd: 200, image: '/img/legend.png', hashrateHint: '~25.0 H/s', slotMax: 3, limitedCap: 1000, minted: 215 },
+  { id: 'basic', name: 'Basic Rig', priceUsd: 2, promoPriceUsd: 1, image: '/img/vga_basic.png', hashrateHint: '~1.5 H/s', slotMax: 10 },
+  { id: 'pro', name: 'Pro Rig', priceUsd: 20, image: '/img/vga_pro.png', hashrateHint: '~5.0 H/s', slotMax: 5 },
+  { id: 'legend', name: 'Legend Rig', priceUsd: 200, image: '/img/vga_legend.png', hashrateHint: '~25.0 H/s', slotMax: 3, limitedCap: 1000, minted: 215 },
 ];
+// --- AKHIR PERUBAHAN ---
 
 const PROMO_ACTIVE = true;
 
 // --- Helper Components ---
 
 const Icon: FC<{ path: string; className?: string }> = ({ path, className = "w-5 h-5" }) => (
-    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
+    <svg xmlns="http://www.w.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
         <path strokeLinecap="round" strokeLinejoin="round" d={path} />
     </svg>
 );
@@ -274,4 +277,3 @@ export default function Market() {
 .animate-fade-in-down { animation: fade-in-down 0.3s ease-out forwards; }
 .animate-slide-up { animation: slide-up 0.3s ease-out forwards; }
 */
-
