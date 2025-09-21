@@ -5,7 +5,7 @@ import Image from 'next/image';
 import { ethers } from 'ethers';
 import { useAccount } from 'wagmi';
 import { ConnectWallet } from '@coinbase/onchainkit/wallet';
-import { init } from '@farcaster/miniapp-sdk';
+import { sdk } from '@farcaster/miniapp-sdk'; // <-- PERBAIKAN: Impor 'sdk' langsung
 import { useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 
 // Impor komponen UI Anda
@@ -33,8 +33,7 @@ export default function Home() {
 
   // Inisialisasi Farcaster SDK
   useEffect(() => {
-    const sdk = init();
-    sdk.actions.ready();
+    sdk.actions.ready(); // <-- PERBAIKAN: Langsung gunakan sdk.actions.ready()
   }, []);
 
   const [inventory, setInventory] = useState<Nft[]>([]);
