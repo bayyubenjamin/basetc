@@ -37,27 +37,38 @@ export interface Nft {
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<TabName>('monitoring');
-  const { address, isConnected } = useAccount();
+  const { address, isConnected, connector } = useAccount(); // <-- Tambahkan 'connector' dari useAccount
   const { connectors, connect } = useConnect();
   const [farcasterUser, setFarcasterUser] = useState<FarcasterUser | null>(null);
 
   // Inisialisasi Farcaster SDK dan auto-connect
   useEffect(() => {
     sdk.actions.ready();
-
-    // PERBAIKAN FINAL: Gunakan 'getUserInfo' langsung dari 'sdk'
-    sdk.getUserInfo().then(user => {
-      if (user) {
-        setFarcasterUser(user);
-        console.log('Farcaster user:', user);
-      }
-    }).catch(console.error);
     
     const farcasterConnector = connectors.find(c => c.id === 'farcaster');
     if (!isConnected && farcasterConnector) {
       connect({ connector: farcasterConnector });
     }
   }, [isConnected, connectors, connect]);
+  
+  // --> BLOK KODE BARU UNTUK MENGAMBIL DATA PENGGUNA <--
+  useEffect(() => {
+    // Ambil data user dari konektor SETELAH berhasil terhubung
+    if (isConnected && connector?.id === 'farcaster') {
+      (async () => {
+        try {
+          const user = await (connector as any).getFarcasterUser();
+          if (user) {
+            setFarcasterUser(user);
+            console.log('Farcaster user:', user);
+          }
+        } catch (error) {
+          console.error('Failed to get Farcaster user:', error);
+        }
+      })();
+    }
+  }, [isConnected, connector]);
+  // --> AKHIR BLOK KODE BARU <--
 
   const [inventory, setInventory] = useState<Nft[]>([]);
   const [unclaimedRewards, setUnclaimedRewards] = useState("0");
