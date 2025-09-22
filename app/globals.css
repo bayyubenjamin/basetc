@@ -2,109 +2,88 @@
 @tailwind components;
 @tailwind utilities;
 
-/*
-  BaseTC Mining UI - Redesigned by Gemini
-  -----------------------------------------
-  - Modern, dark theme with vibrant accents.
-  - Professional & clean layout.
-  - Functional and precise components.
-*/
-
 :root {
-  /* Colors */
-  --background-primary: #0D1117; /* Deep navy, almost black */
-  --background-secondary: #161B22; /* Slightly lighter navy for panels */
-  --background-tertiary: #21262D; /* Lighter shade for interactive elements */
+  --bg: #0b0e12;
+  --panel: #0e141c;
+  --edge: #202838;
+  --text: #e9eef7;
+  --muted: #9aacc6;
+  --accent: #5ad6ff;
+  --accent2: #a993ff;
+  --ok: #75e0a7;
+  --warn: #ffd37a;
+  --danger: #ff8e8e;
+  --r: 14px;
+  --shadow: 0 12px 32px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.02);
+}
 
-  --border-primary: #30363D; /* Subtle border color */
-  --border-secondary: #8B949E; /* Border for highlighted elements */
+* {
+  box-sizing: border-box;
+}
 
-  --text-primary: #C9D1D9;   /* Main text color, soft white */
-  --text-secondary: #8B949E; /* Muted text for descriptions */
-  --text-tertiary: #58A6FF;  /* Accent blue for links and highlights */
-
-  --accent-blue: #58A6FF;
-  --accent-green: #3FB950;
-  --accent-yellow: #F0B90B;
-  --accent-red: #F85149;
-  --accent-purple: #A371F7;
-
-  /* Typography */
-  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
-  --font-mono: "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-
-  /* Sizing & Radius */
-  --radius-sm: 0.25rem; /* 4px */
-  --radius-md: 0.5rem;  /* 8px */
-  --radius-lg: 0.75rem; /* 12px */
-  --radius-full: 9999px;
-
-  /* Shadows for depth */
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-  --shadow-inner: inset 0 2px 4px 0 rgba(0, 0, 0, 0.06);
+html,
+body {
+  height: 100%;
 }
 
 body {
-  background-color: var(--background-primary);
-  color: var(--text-primary);
-  font-family: var(--font-sans);
+  margin: 0;
+  background: linear-gradient(180deg, #071018, #0b0e12);
+  color: var(--text);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* App Shell for consistent canvas */
 .app-shell {
-  width: 100%;
   max-width: 430px;
+  margin: 0 auto;
   min-height: 100dvh;
-  margin-left: auto;
-  margin-right: auto;
+  padding: env(safe-area-inset-top) 12px calc(72px + env(safe-area-inset-bottom));
   display: flex;
   flex-direction: column;
-  background-color: var(--background-primary);
-  box-shadow: 0 0 20px rgba(0,0,0,0.2);
+  gap: 12px;
 }
 
-.mini-app-content {
-  flex-grow: 1;
-  padding-bottom: calc(env(safe-area-inset-bottom, 1rem) + 80px); /* Adjust for new nav height */
-}
-
-
-/* New Bottom Navigation Style */
+/* Bottom navigation, directly styled from reference */
 .bottom-nav {
   position: fixed;
-  left: 50%;
-  transform: translateX(-50%);
+  left: 0;
+  right: 0;
   bottom: 0;
-  width: 100%;
-  max-width: 430px;
-  padding-bottom: env(safe-area-inset-bottom, 0px);
-  background-color: rgba(22, 27, 34, 0.8); /* secondary with opacity */
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border-top: 1px solid var(--border-primary);
+  padding: 10px;
+  padding-bottom: env(safe-area-inset-bottom, 10px);
   z-index: 100;
-  padding-top: 0.5rem;
-  padding-bottom: calc(env(safe-area-inset-bottom, 0.5rem));
 }
 
+.bottom-nav-inner {
+  width: min(430px, 100%);
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  background: linear-gradient(180deg, #0b1420, #071018);
+  border-radius: var(--r);
+  padding: 8px;
+  border: 1px solid #1d3246;
+  box-shadow: var(--shadow);
+}
 
-/* Custom Scrollbar */
-::-webkit-scrollbar { width: 4px; height: 4px; }
-::-webkit-scrollbar-thumb { background: var(--border-primary); border-radius: var(--radius-full); }
-::-webkit-scrollbar-track { background: transparent; }
+.bottom-nav-btn {
+  background: transparent;
+  border: 0;
+  color: var(--muted);
+  padding: 10px 6px;
+  border-radius: 10px;
+  font-weight: 700;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+  min-height: 44px; /* For touch accessibility */
+}
 
-.no-scrollbar::-webkit-scrollbar { display: none; }
-.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-
-/* Animations */
-@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-@keyframes fadeInUp { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
-@keyframes slideInUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
-
-.animate-fadeIn { animation: fadeIn 0.3s ease-out forwards; }
-.animate-fadeInUp { animation: fadeInUp 0.3s ease-out forwards; }
-.animate-slideInUp { animation: slideInUp 0.3s cubic-bezier(0.25, 0.8, 0.25, 1) forwards; }
+.bottom-nav-btn.active {
+  color: var(--text);
+  background-color: rgba(90, 214, 255, .1);
+  outline: 2px solid rgba(90, 214, 255, .22);
+}
