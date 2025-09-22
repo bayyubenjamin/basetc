@@ -4,7 +4,6 @@ import { useState, useEffect, useMemo } from "react";
 import Image from "next/image";
 import { ethers } from "ethers";
 import { useAccount, useConnect } from "wagmi";
-import { ConnectWallet } from "@coinbase/onchainkit/wallet";
 import { sdk } from "@farcaster/miniapp-sdk";
 import {
   useReadContract,
@@ -45,10 +44,41 @@ export interface Nft {
   durability: number; // Percentage
 }
 
+// --- Skeleton Loader Component ---
+const AppSkeletonLoader = () => (
+    <div className="app-shell animate-pulse">
+        <header className="sticky top-0 bg-[--background-secondary]/80 p-3 flex items-center justify-between border-b border-[--border-primary] z-50">
+            <div className="flex items-center gap-3">
+                <div className="w-8 h-8 bg-gray-700 rounded-full"></div>
+                <div>
+                    <div className="h-4 w-24 bg-gray-700 rounded"></div>
+                    <div className="h-3 w-16 bg-gray-700 rounded mt-1"></div>
+                </div>
+            </div>
+            <div className="h-6 w-24 bg-gray-700 rounded-md"></div>
+        </header>
+        <main className="p-4 space-y-4">
+            <div className="h-20 bg-[--background-secondary] rounded-lg"></div>
+            <div className="h-48 bg-[--background-secondary] rounded-lg"></div>
+            <div className="h-40 bg-[--background-secondary] rounded-lg"></div>
+        </main>
+        {/* Navigation is static, so no need to skeleton it */}
+        <div className="bottom-nav">
+             <div className="grid grid-cols-4 w-full h-full px-2">
+                <div className="h-10 bg-gray-800 rounded-md"></div>
+                <div className="h-10 bg-gray-800 rounded-md"></div>
+                <div className="h-10 bg-gray-800 rounded-md"></div>
+                <div className="h-10 bg-gray-800 rounded-md"></div>
+             </div>
+        </div>
+    </div>
+);
+
+
 export default function Home() {
   const [activeTab, setActiveTab] = useState<TabName>("monitoring");
 
-  const { address, isConnected, connector } = useAccount();
+  const { address, isConnected, connector, isConnecting } = useAccount();
   const { connectors, connect } = useConnect();
   const [farcasterUser, setFarcasterUser] = useState<FarcasterUser | null>(null);
 
@@ -56,10 +86,10 @@ export default function Home() {
   useEffect(() => {
     sdk.actions.ready();
     const farcasterConnector = connectors.find((c) => c.id === "farcaster");
-    if (!isConnected && farcasterConnector) {
+    if (!isConnected && !isConnecting && farcasterConnector) {
       connect({ connector: farcasterConnector });
     }
-  }, [isConnected, connectors, connect]);
+  }, [isConnected, isConnecting, connectors, connect]);
 
   useEffect(() => {
     if (isConnected && connector?.id === "farcaster") {
@@ -89,7 +119,7 @@ export default function Home() {
     abi: gameCoreABI,
     functionName: "players",
     args: [address],
-    query: { enabled: queryEnabled, refetchInterval: 30000 }, // Refetch player data every 30s
+    query: { enabled: queryEnabled, refetchInterval: 30000 },
   });
 
   const { data: pendingRewardsData, refetch: refetchPendingRewards } = useReadContract({
@@ -97,7 +127,7 @@ export default function Home() {
     abi: gameCoreABI,
     functionName: "pendingReward",
     args: [address],
-    query: { enabled: queryEnabled, refetchInterval: 10000 }, // Refetch rewards every 10s
+    query: { enabled: queryEnabled, refetchInterval: 10000 },
   });
 
   const { data: inventoryData, refetch: refetchInventory } = useReadContract({
@@ -151,15 +181,8 @@ export default function Home() {
   }, [isConfirmed, refetchInventory, refetchPlayerData, refetchPendingRewards]);
 
   // --- Render Logic ---
-  if (!isConnected) {
-    return (
-      <div className="flex flex-col min-h-dvh items-center justify-center space-y-4 p-4 text-center bg-gradient-to-b from-[--background-primary] to-[#000]">
-        <Image src="/img/logo.png" alt="BaseTC Logo" width={96} height={96} className="rounded-2xl shadow-lg"/>
-        <h1 className="text-3xl font-extrabold text-white">BaseTC Mining</h1>
-        <p className="text-[--text-secondary]">Connect your Farcaster wallet to start mining.</p>
-        <div className="pt-4"><ConnectWallet /></div>
-      </div>
-    );
+  if (!isConnected || isConnecting) {
+    return <AppSkeletonLoader />;
   }
 
   const handleClaim = async () => {
