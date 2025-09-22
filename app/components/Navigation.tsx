@@ -16,7 +16,7 @@ interface NavigationProps {
 
 const Navigation: FC<NavigationProps> = ({ activeTab, setActiveTab }) => {
   return (
-    <nav className="bottom-nav" role="navigation" aria-label="bottom nav">
+    <nav className="bottom-nav" role="navigation">
       <div className="bottom-nav-inner">
         {NAV_ITEMS.map((item) => (
           <button

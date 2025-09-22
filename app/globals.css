@@ -3,8 +3,8 @@
 @tailwind utilities;
 
 /*
-  BaseTC Mining UI - Redesigned by Gemini V2
-  Based on user-provided HTML reference for a professional, dark, and functional aesthetic.
+  BaseTC Mining UI - Final Redesign by Gemini
+  Fokus pada struktur mobile-first yang presisi dan estetika profesional.
 */
 
 :root {
@@ -14,20 +14,11 @@
   --text: #e9eef7;
   --muted: #9aacc6;
   --accent: #5ad6ff;
-  --accent2: #a993ff;
   --ok: #75e0a7;
   --warn: #ffd37a;
   --danger: #ff8e8e;
-  --r: 14px;
-  --shadow: 0 12px 32px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.02);
-}
-
-* {
-  box-sizing: border-box;
-}
-
-html, body {
-  height: 100%;
+  --radius: 14px;
+  --shadow: 0 12px 32px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.02);
 }
 
 body {
@@ -39,74 +30,58 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-.no-scrollbar::-webkit-scrollbar { display: none; }
-.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-
-/* App Shell - Container Utama */
-.app-shell {
+/*
+  STRUKTUR UTAMA APLIKASI
+  Ini akan memastikan layout tidak rusak di mobile.
+*/
+.app-container {
   max-width: 430px;
   margin: 0 auto;
   min-height: 100dvh;
-  padding: env(safe-area-inset-top) 12px calc(84px + env(safe-area-inset-bottom));
+  position: relative; /* Penting untuk posisi navigasi */
+  padding-bottom: 90px; /* Ruang untuk navigasi bawah */
+}
+
+.app-header {
+  padding: 12px;
+}
+
+.app-content {
+  padding-left: 12px;
+  padding-right: 12px;
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
-/* Bottom Navigation Styling */
-.bottom-nav {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  padding: 10px;
-  padding-bottom: env(safe-area-inset-bottom, 10px);
-  z-index: 100;
-  pointer-events: none; /* Allow click-through */
-}
-
-.bottom-nav-inner {
-  pointer-events: auto; /* Re-enable events for the nav itself */
-  width: min(430px, 100%);
-  margin: 0 auto;
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
-  background: linear-gradient(180deg, #0b1420, #071018);
-  border-radius: var(--r);
-  padding: 8px;
-  border: 1px solid #1d3246;
-  box-shadow: var(--shadow);
-}
-
-.bottom-nav-btn {
-  background: transparent;
-  border: 0;
-  color: var(--muted);
-  padding: 10px 6px;
-  border-radius: 10px;
-  font-weight: 700;
-  font-size: 12px;
-  cursor: pointer;
-  transition: all 0.2s ease-in-out;
-  min-height: 44px;
-}
-
-.bottom-nav-btn.active {
-  color: var(--text);
-  background-color: rgba(90, 214, 255, .1);
-  box-shadow: 0 0 0 2px rgba(90, 214, 255, .22);
-}
-
+/*
+  KOMPONEN & GAYA DARI REFERENSI ANDA
+  Saya definisikan sebagai @layer components agar bisa dipakai sebagai class di Tailwind.
+*/
 @layer components {
-  /* Class utility berdasarkan referensi */
   .panel {
-    @apply bg-gradient-to-b from-panel to-bg p-2.5 rounded-[var(--r)] border border-edge shadow-main;
+    @apply bg-gradient-to-b from-[var(--panel)] to-[var(--bg)] p-2.5 rounded-[var(--radius)] border border-[var(--edge)] shadow-[var(--shadow)];
   }
   .btn {
-    @apply bg-gradient-to-b from-[#111827] to-[#0e1620] border border-[#263346] px-2.5 py-2 rounded-lg text-text-primary font-bold text-sm cursor-pointer;
+    @apply bg-gradient-to-b from-[#111827] to-[#0e1620] border border-[#263346] px-3 py-2 rounded-lg text-[var(--text)] font-bold text-xs cursor-pointer transition-colors hover:border-[var(--accent)];
   }
   .btn-primary {
     @apply bg-gradient-to-b from-[#0f2432] to-[#0b1722] border-[#30435e];
+  }
+
+  /* Navigasi Bawah yang Diperbaiki */
+  .bottom-nav {
+    @apply fixed left-0 right-0 bottom-0 z-50 p-2.5;
+    padding-bottom: calc(10px + env(safe-area-inset-bottom));
+  }
+  .bottom-nav-inner {
+    @apply w-full max-w-[430px] mx-auto grid grid-cols-4 gap-2 rounded-[var(--radius)] p-2 border border-[#1d3246] shadow-[var(--shadow)];
+    background: linear-gradient(180deg, #0b1420, #071018);
+  }
+  .bottom-nav-btn {
+    @apply bg-transparent border-0 text-[var(--muted)] py-2.5 px-1.5 rounded-lg font-bold text-xs cursor-pointer transition-all duration-200 min-h-[44px];
+  }
+  .bottom-nav-btn.active {
+    @apply text-[var(--text)] bg-white/5 shadow-[0_0_0_2px_theme(colors.white/10)];
   }
 }
