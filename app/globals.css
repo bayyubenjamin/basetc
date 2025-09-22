@@ -104,7 +104,7 @@ body {
     @apply bg-gradient-to-b from-panel to-bg p-2.5 rounded-[var(--r)] border border-edge shadow-main;
   }
   .btn {
-    @apply bg-gradient-to-b from-[#111827] to-[#0e1620] border border-[#263346] px-2.5 py-2 rounded-lg text-text font-bold text-sm cursor-pointer;
+    @apply bg-gradient-to-b from-[#111827] to-[#0e1620] border border-[#263346] px-2.5 py-2 rounded-lg text-text-primary font-bold text-sm cursor-pointer;
   }
   .btn-primary {
     @apply bg-gradient-to-b from-[#0f2432] to-[#0b1722] border-[#30435e];
