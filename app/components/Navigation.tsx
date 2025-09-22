@@ -1,7 +1,7 @@
 "use client";
-import { FC, useEffect, useLayoutEffect, useRef } from "react";
+import { FC, useLayoutEffect, useRef } from "react";
 
-type TabName = "monitoring" | "rakit" | "market" | "profil";
+export type TabName = "monitoring" | "rakit" | "market" | "profil";
 
 interface NavItem {
   id: TabName;
@@ -18,10 +18,10 @@ const NAV_ITEMS: NavItem[] = [
 
 const NavBtn: FC<{ item: NavItem; isActive: boolean; onClick: () => void }> = ({ item, isActive, onClick }) => (
   <button onClick={onClick} className={`flex flex-col items-center justify-center gap-1 font-semibold ${isActive ? 'active' : ''}`}>
-    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={isActive ? 2 : 1.5} stroke="currentColor" className="w-6 h-6">
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={isActive ? 2 : 1.5} stroke="currentColor">
       <path strokeLinecap="round" strokeLinejoin="round" d={item.iconPath} />
     </svg>
-    <span className="leading-none text-[11px]">{item.label}</span>
+    <span className="leading-none text-[10px]">{item.label}</span>
   </button>
 );
 
@@ -40,11 +40,9 @@ const Navigation: FC<{ activeTab: TabName; setActiveTab: (tab: TabName) => void 
 
     apply();
 
-    // re-apply saat ukuran berubah (keyboard, orientation, dll)
     const ro = new ResizeObserver(apply);
     ro.observe(el);
 
-    // beberapa mobile browser gak trigger ResizeObserver pada safe-area change → fallback
     const onResize = () => apply();
     window.addEventListener("resize", onResize);
 
