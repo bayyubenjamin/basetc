@@ -2,8 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ============ THEME ============ */
 :root {
-  /* Updated palette for the redesigned mini app.  Colours lean into a glassy dark theme with indigo and pink accents. */
+  /* Palette glassy dark */
   --bg: #050a1f;
   --panel: rgba(255,255,255,0.06);
   --edge: rgba(255,255,255,0.15);
@@ -11,43 +12,47 @@
   --muted: #94a3b8;
   --accent: #6366f1;
   --accent2: #ec4899;
-  --radius: 14px;
-  --shadow: 0 8px 24px rgba(0,0,0,0.5);
 
-  /* Success colour used for accepted shares and status messages */
+  --radius: 14px;
+  --shadow: 0 10px 28px rgba(0,0,0,0.55);
+
+  /* States */
   --ok: #4ade80;
 }
 
+html, body { height: 100%; }
+
 body {
   margin: 0;
-  /* Deep dusk gradient for the app background */
   background: linear-gradient(180deg, #0a1230 0%, #050a1f 100%);
   color: var(--text);
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
+/* ===== Helpers ===== */
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
-@layer components {
-  /* Class utilities have been simplified – bespoke styling for panels and buttons
-     now lives outside this @layer so we can use custom CSS properties such as
-     backdrop filters and translucent gradients. */
+/* ===== App shell ===== */
+.app-wrap{
+  max-width: 430px;
+  margin: 0 auto;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+.content{
+  /* kasih ruang buat bottom nav (height ±78px + safe area) */
+  padding: 0 12px calc(88px + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+header.app-top{
+  padding: calc(env(safe-area-inset-top) + 12px) 12px 8px;
 }
 
-/*
-  ====================================================================
-  Custom styles for the redesigned BaseTC mini app
-
-  The following rules implement a glass‑morphism look using translucent
-  gradients, subtle outlines and backdrop filters. They override the
-  Tailwind defaults and are applied directly via class names in the
-  components.  Where possible colours and sizing are driven from the
-  CSS variables defined above.
-  ====================================================================
-*/
-
-/* Logo block in the header */
+/* ===== Header bits ===== */
 .logo {
   width: 28px;
   height: 28px;
@@ -56,21 +61,19 @@ body {
   border: 1px solid var(--edge);
   box-shadow: var(--shadow);
 }
-
-/* Balance pill element */
 .pill {
   background: linear-gradient(180deg, rgba(99,102,241,0.25), rgba(236,72,153,0.25));
   padding: 6px 8px;
   border-radius: 12px;
   border: 1px solid var(--edge);
   color: var(--text);
-  display: flex;
+  display: inline-flex;
   gap: 6px;
   align-items: center;
   font-size: 12px;
 }
 
-/* Generic button */
+/* ===== Buttons & Panels ===== */
 .btn {
   background: linear-gradient(180deg, rgba(99,102,241,0.35), rgba(236,72,153,0.35));
   border: 1px solid var(--edge);
@@ -81,56 +84,11 @@ body {
   font-size: 13px;
   backdrop-filter: blur(6px);
   cursor: pointer;
-  transition: background-color 0.2s ease;
+  transition: opacity .2s ease;
 }
+.btn-primary { background: linear-gradient(180deg, var(--accent), var(--accent2)); border-color: var(--accent2); }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
 
-/* Primary button variant */
-.btn-primary {
-  background: linear-gradient(180deg, var(--accent), var(--accent2));
-  border-color: var(--accent2);
-}
-
-/* Monitoring wrapper */
-.monitor-wrap {
-  background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
-  border-radius: 12px;
-  padding: 10px;
-  border: 1px solid var(--edge);
-  box-shadow: var(--shadow);
-  backdrop-filter: blur(8px);
-}
-
-/* Summary tile used inside the monitoring screen */
-.sum-tile {
-  min-width: 140px;
-  flex: 0 0 auto;
-  scroll-snap-align: start;
-  background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.015));
-  padding: 10px;
-  border-radius: 10px;
-  border: 1px solid var(--edge);
-  backdrop-filter: blur(6px);
-}
-
-/* Mini plot placeholder */
-.mini-plot {
-  border: 1px solid var(--edge);
-  background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.015));
-  position: relative;
-  backdrop-filter: blur(6px);
-}
-
-/* Tiles on the right side of the monitoring panel */
-.panel-right .tile {
-  background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.015));
-  padding: 10px;
-  border-radius: 8px;
-  border: 1px solid var(--edge);
-  font-size: 12px;
-  backdrop-filter: blur(6px);
-}
-
-/* Generic panel wrapper */
 .panel {
   background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
   border-radius: 12px;
@@ -140,47 +98,94 @@ body {
   backdrop-filter: blur(8px);
 }
 
-/* Bottom navigation */
-.nav {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  padding: calc(env(safe-area-inset-bottom) + 10px) 10px 10px;
-  background: transparent;
-}
-
-.nav-inner {
-  width: min(430px, 100%);
-  margin: 0 auto;
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
-  background: linear-gradient(180deg, rgba(99,102,241,0.15), rgba(236,72,153,0.15));
-  border-radius: 14px;
-  padding: 8px;
-  border: 1px solid var(--edge);
-  box-shadow: var(--shadow);
-  backdrop-filter: blur(8px);
-}
-
-.nav-inner button {
-  background: transparent;
-  border: 0;
-  color: var(--muted);
-  padding: 10px 6px;
-  border-radius: 10px;
-  font-weight: 700;
-  font-size: 12px;
+/* ===== Monitoring tidy layout ===== */
+.monitor {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  justify-content: center;
+  gap: 10px;
 }
 
-.nav-inner button.active {
+.summary-row{
+  display:flex; gap:8px; overflow:auto; padding:2px; scroll-snap-type:x mandatory;
+}
+.summary-tile{
+  min-width: 160px; flex: 0 0 auto; scroll-snap-align:start;
+  background: linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.015));
+  padding: 10px; border-radius: 10px; border: 1px solid var(--edge);
+}
+.k{ color: var(--muted); font-size: 11px; }
+.v{ font-weight: 800; font-size: 15px; }
+
+.screen-grid{
+  display:grid;
+  grid-template-columns: 1.8fr .9fr; /* kiri (chart) : kanan (info) */
+  gap: 10px;
+}
+.chart{
+  height: 130px;
+  border-radius: 10px;
+  border: 1px solid var(--edge);
+  background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.015));
+  position: relative;
+}
+.info-tiles{ display:grid; gap:10px; }
+.info-tiles .tile{
+  background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.015));
+  padding: 10px; border-radius: 10px; border: 1px solid var(--edge);
+  font-size: 12px;
+}
+
+/* Terminal: matiin underline & warna link */
+.terminal{
+  background:#01060a; border-radius:8px; border:1px solid #0f2130; padding:8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size:12px; color:#9fd7ff; height:140px; overflow:auto; box-shadow: inset 0 2px 8px rgba(0,0,0,.6);
+}
+.terminal a{ color:#9fd7ff; text-decoration: none; }
+.term-ok{ color: var(--ok); }
+
+/* Rig image keep ratio */
+.rig-wrap{
+  border-radius: 10px; overflow: hidden; border: 1px solid #223146; background:#06101a;
+}
+.rig-aspect{
+  position: relative; width: 100%; aspect-ratio: 16 / 9;
+}
+.rig-aspect img{ position:absolute; inset:0; width:100%; height:100%; object-fit: cover; }
+
+/* GPU table */
+.table {
+  width:100%; border-collapse: collapse; margin-top:8px; font-size:12px;
+}
+.table th, .table td {
+  padding:8px 6px; text-align:left; border-bottom:1px dashed rgba(255,255,255,.06);
+  color:var(--muted);
+}
+.table th { color:var(--text); font-weight:700; font-size:11px; }
+
+/* ===== Bottom nav ===== */
+.nav{
+  position: fixed; left:0; right:0; bottom:0;
+  padding: calc(env(safe-area-inset-bottom) + 10px) 10px 10px;
+  background: transparent;
+  z-index: 30;
+}
+.nav-inner{
+  width: min(430px, 100%); margin: 0 auto;
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
+  background: linear-gradient(180deg, rgba(99,102,241,0.15), rgba(236,72,153,0.15));
+  border-radius: 14px; padding: 8px; border: 1px solid var(--edge);
+  box-shadow: var(--shadow); backdrop-filter: blur(8px);
+}
+.nav-inner button{
+  background: transparent; border: 0; color: var(--muted);
+  padding: 10px 6px; border-radius: 10px; font-weight: 700; font-size: 12px;
+  display:flex; flex-direction:column; align-items:center; gap:4px; justify-content:center;
+  min-height: 56px;
+}
+.nav-inner button.active{
   color: var(--accent);
   background: rgba(99,102,241,0.2);
   outline: 0;
 }
+
