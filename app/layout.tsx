@@ -8,7 +8,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  width: 424,
+  width: 'device-width',
   initialScale: 1,
   maximumScale: 1,
   viewportFit: "cover",
@@ -17,13 +17,9 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className="bg-[#0b1118] text-white antialiased">
-        {/* Penting: wrapper kanvas */}
-        <div className="app-shell">
+      <body>
           <Providers>{children}</Providers>
-        </div>
       </body>
     </html>
   );
 }
-

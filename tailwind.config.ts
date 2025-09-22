@@ -7,7 +7,7 @@ const config: Config = {
   ],
   theme: {
     extend: {
-      // FIX: Menambahkan nilai spasi yang dibutuhkan dari referensi Anda
+      // FIX: Menambahkan nilai spasi yang hilang
       spacing: {
         '2.5': '0.625rem', // 10px
       },

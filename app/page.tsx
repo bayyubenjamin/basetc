@@ -10,7 +10,6 @@ import Navigation from "./components/Navigation";
 import Rakit from "./components/Rakit";
 import Market from "./components/Market";
 import Profil from "./components/Profil";
-// Import hooks dan ABI lainnya jika diperlukan
 
 // Tipe
 export type TabName = "monitoring" | "rakit" | "market" | "profil";
@@ -42,16 +41,17 @@ export default function Home() {
     }
   }, [isConnected, isConnecting, connectors, connect]);
 
+  // FIX: Mengirim prop yang dibutuhkan oleh komponen anak
   const renderContent = () => {
     switch (activeTab) {
       case "monitoring": return <Monitoring />;
       case "rakit": return <Rakit inventory={inventory} setActiveTab={setActiveTab} />;
-      case "market": return <Market />;
+      case "market": return <Market onTransactionSuccess={() => console.log("Transaction Success!")} />;
       case "profil": return <Profil />;
       default: return null;
     }
   };
-
+  
   if (!isConnected) {
      return (
         <div className="flex items-center justify-center h-screen text-[color:var(--muted)]">
@@ -61,9 +61,8 @@ export default function Home() {
   }
 
   return (
-    <div className="app-shell">
-      {/* Header Sesuai Referensi */}
-      <header className="grid grid-cols-[1fr_auto] gap-2 items-center mb-3">
+    <div className="max-w-[430px] mx-auto min-h-dvh flex flex-col">
+      <header className="p-3 grid grid-cols-[1fr_auto] gap-2 items-center">
         <div className="flex items-center gap-2.5">
           <div className="w-7 h-7 rounded-lg bg-gradient-to-b from-[#0f1924] to-[#071017] border border-[#25344a] shadow-main" />
           <div>
@@ -80,12 +79,11 @@ export default function Home() {
         </div>
       </header>
 
-      {/* Konten dinamis sesuai tab */}
-      <main className="app-content">
+      <main className="px-3 pb-3 flex-grow flex flex-col gap-3">
         {renderContent()}
       </main>
 
-      {/* Navigasi akan diposisikan oleh class .bottom-nav */}
+      {/* Navigasi sekarang berada di luar main content */}
       <Navigation activeTab={activeTab} setActiveTab={setActiveTab} />
     </div>
   );

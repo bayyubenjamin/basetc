@@ -18,57 +18,20 @@ body {
   background: linear-gradient(180deg, #071018, #0b0e12);
   color: var(--text);
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
 }
 
-/* STRUKTUR UTAMA APLIKASI */
-.app-shell {
-  max-width: 430px;
-  margin: 0 auto;
-  min-height: 100dvh;
-  display: flex;
-  flex-direction: column;
-  padding: 12px;
-  padding-top: env(safe-area-inset-top, 12px);
-  /* Padding bawah untuk memberi ruang pada navigasi */
-  padding-bottom: calc(84px + env(safe-area-inset-bottom, 12px));
-}
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
-.app-content {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  flex-grow: 1;
-}
-
-/*
-  KOMPONEN & GAYA DARI REFERENSI ANDA
-*/
 @layer components {
+  /* Class utility untuk konsistensi */
   .panel {
     @apply bg-gradient-to-b from-[var(--panel)] to-[var(--bg)] p-2.5 rounded-[var(--radius)] border border-[var(--edge)] shadow-[var(--shadow)];
   }
   .btn {
-    @apply bg-gradient-to-b from-[#111827] to-[#0e1620] border border-[#263346] px-3 py-2 rounded-lg text-[var(--text)] font-bold text-xs cursor-pointer transition-colors hover:border-[var(--accent)];
+    @apply bg-gradient-to-b from-[#111827] to-[#0e1620] border border-[#263346] px-3 py-2 rounded-lg text-sm font-bold cursor-pointer transition-colors hover:border-[var(--accent)];
   }
   .btn-primary {
     @apply bg-gradient-to-b from-[#0f2432] to-[#0b1722] border-[#30435e];
-  }
-
-  /* Navigasi Bawah yang Diperbaiki */
-  .bottom-nav {
-    @apply fixed left-0 right-0 bottom-0 z-50 p-2.5;
-    padding-bottom: calc(10px + env(safe-area-inset-bottom));
-  }
-  .bottom-nav-inner {
-    @apply w-full max-w-[430px] mx-auto grid grid-cols-4 gap-2 rounded-[var(--radius)] p-2 border border-[#1d3246] shadow-[var(--shadow)];
-    background: linear-gradient(180deg, #0b1420, #071018);
-  }
-  .bottom-nav-btn {
-    @apply bg-transparent border-0 text-[var(--muted)] py-2.5 px-1.5 rounded-lg font-bold text-xs cursor-pointer transition-all duration-200 min-h-[44px];
-  }
-  .bottom-nav-btn.active {
-    @apply text-[var(--text)] bg-white/5 shadow-[0_0_0_2px_theme(colors.white/10)];
   }
 }
