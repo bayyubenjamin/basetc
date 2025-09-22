@@ -25,24 +25,32 @@ interface NavBtnProps {
 const NavBtn: FC<NavBtnProps> = ({ item, isActive, onClick }) => (
   <button
     onClick={onClick}
-    className={`flex flex-col items-center justify-center gap-1 text-xs font-semibold transition-colors duration-200 relative ${
-      isActive ? "text-[--accent-blue]" : "text-[--text-secondary] hover:text-[--text-primary]"
-    }`}
+    /*
+      Buttons inside the navigation rely on global CSS for their base styling.  
+      We only apply layout classes here.  When a button is active it will
+      receive the `.active` class which our stylesheet picks up to set the
+      accent colour and background tint.  
+    */
+    className={`flex flex-col items-center justify-center gap-1 text-xs font-semibold ${isActive ? 'active' : ''}`}
   >
-    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={isActive ? 2 : 1.5} stroke="currentColor" className="w-6 h-6">
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      fill="none"
+      viewBox="0 0 24 24"
+      strokeWidth={isActive ? 2 : 1.5}
+      stroke="currentColor"
+      className="w-6 h-6"
+    >
       <path strokeLinecap="round" strokeLinejoin="round" d={item.iconPath} />
     </svg>
     <span className="leading-none">{item.label}</span>
-     {isActive && (
-        <div className="absolute -top-2 h-1 w-8 bg-[--accent-blue] rounded-full" />
-      )}
   </button>
 );
 
-const Navigation: FC<{ activeTab: TabName, setActiveTab: (tab: TabName) => void }> = ({ activeTab, setActiveTab }) => {
+const Navigation: FC<{ activeTab: TabName; setActiveTab: (tab: TabName) => void }> = ({ activeTab, setActiveTab }) => {
   return (
-    <nav className="bottom-nav">
-      <div className="grid grid-cols-4 w-full h-full px-2">
+    <nav className="nav">
+      <div className="nav-inner">
         {NAV_ITEMS.map((item) => (
           <NavBtn
             key={item.id}

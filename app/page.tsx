@@ -64,16 +64,18 @@ export default function Home() {
     <div className="max-w-[430px] mx-auto min-h-dvh flex flex-col">
       <header className="p-3 grid grid-cols-[1fr_auto] gap-2 items-center">
         <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-lg bg-gradient-to-b from-[#0f1924] to-[#071017] border border-[#25344a] shadow-main" />
+          {/* Logo block now uses a predefined class for its gradient and border */}
+          <div className="logo" />
           <div>
             <div className="font-bold text-sm leading-none">BaseTC Mining Console</div>
-            <div className="text-xs text-[color:var(--muted)]">Farcaster Mini App</div>
+            <div className="text-xs text-[var(--muted)]">Farcaster Mini App</div>
           </div>
         </div>
         <div className="flex items-center gap-1.5">
-          <div className="flex items-center gap-1.5 bg-gradient-to-b from-[#0f1622] to-[#0a1119] text-xs px-2.5 py-1.5 rounded-full border border-[#233045]">
-            <span className="text-[color:var(--muted)]">Balance</span>
-            <strong className="text-[color:var(--text)]">12,345</strong>
+          {/* Balance pill uses the .pill class and displays muted and text colours */}
+          <div className="pill flex items-center gap-1.5">
+            <span className="text-[var(--muted)]">Balance</span>
+            <strong className="text-[var(--text)]">12,345</strong>
           </div>
           <button className="btn btn-primary">Claim</button>
         </div>
