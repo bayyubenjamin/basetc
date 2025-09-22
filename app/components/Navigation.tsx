@@ -1,7 +1,6 @@
 "use client";
 import { FC } from "react";
-
-type TabName = "monitoring" | "rakit" | "market" | "profil";
+import type { TabName } from "../page";
 
 const NAV_ITEMS = [
   { id: "monitoring", label: "Home" },
