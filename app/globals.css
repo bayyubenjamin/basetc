@@ -2,49 +2,78 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ==== Mini-app baseline (lock dark, kecilkan friction host) ==== */
-:root { color-scheme: dark; }
-*, *::before, *::after { box-sizing: border-box; }
-html, body { height: 100%; }
-html { -webkit-text-size-adjust: 100%; }
+/*
+  BaseTC Mining UI - Redesigned by Gemini
+  -----------------------------------------
+  - Modern, dark theme with vibrant accents.
+  - Professional & clean layout.
+  - Functional and precise components.
+*/
+
+:root {
+  /* Colors */
+  --background-primary: #0D1117; /* Deep navy, almost black */
+  --background-secondary: #161B22; /* Slightly lighter navy for panels */
+  --background-tertiary: #21262D; /* Lighter shade for interactive elements */
+
+  --border-primary: #30363D; /* Subtle border color */
+  --border-secondary: #8B949E; /* Border for highlighted elements */
+
+  --text-primary: #C9D1D9;   /* Main text color, soft white */
+  --text-secondary: #8B949E; /* Muted text for descriptions */
+  --text-tertiary: #58A6FF;  /* Accent blue for links and highlights */
+
+  --accent-blue: #58A6FF;
+  --accent-green: #3FB950;
+  --accent-yellow: #F0B90B;
+  --accent-red: #F85149;
+  --accent-purple: #A371F7;
+
+  /* Typography */
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  --font-mono: "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+
+  /* Sizing & Radius */
+  --radius-sm: 0.25rem; /* 4px */
+  --radius-md: 0.5rem;  /* 8px */
+  --radius-lg: 0.75rem; /* 12px */
+  --radius-full: 9999px;
+
+  /* Shadows for depth */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  --shadow-inner: inset 0 2px 4px 0 rgba(0, 0, 0, 0.06);
+}
+
 body {
-  margin: 0;
-  background: #0b1118;            /* dark brand bg */
-  color: #ffffff;                 /* default fg */
-  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Helvetica Neue", "Noto Sans", sans-serif;
-  line-height: 1.4;
+  background-color: var(--background-primary);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Elemen media rapih di lebar sempit */
-img, svg, video, canvas { display: block; max-width: 100%; height: auto; }
-
-/* Hilangkan tap highlight iOS */
-button { -webkit-tap-highlight-color: transparent; }
-
-/* ==== Shell & layout helper untuk kanvas mini-app ==== */
-/* Bungkus root kamu pakai .app-shell (lihat catatan di bawah) */
+/* App Shell for consistent canvas */
 .app-shell {
   width: 100%;
-  max-width: 430px;               /* kanvas mini-app */
+  max-width: 430px;
   min-height: 100dvh;
   margin-left: auto;
   margin-right: auto;
   display: flex;
   flex-direction: column;
-  background: #0b1118;
+  background-color: var(--background-primary);
+  box-shadow: 0 0 20px rgba(0,0,0,0.2);
 }
 
-/* Bungkus area konten (di <main>) biar gak ketiban bottom nav */
 .mini-app-content {
-  flex: 1 1 auto;
-  display: flex;
-  flex-direction: column;
-  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 72px); /* nav 64px + buffer */
+  flex-grow: 1;
+  padding-bottom: calc(env(safe-area-inset-bottom, 1rem) + 80px); /* Adjust for new nav height */
 }
 
-/* Bottom nav dock, center ke 430px, aman safe-area */
+
+/* New Bottom Navigation Style */
 .bottom-nav {
   position: fixed;
   left: 50%;
@@ -52,49 +81,30 @@ button { -webkit-tap-highlight-color: transparent; }
   bottom: 0;
   width: 100%;
   max-width: 430px;
-  height: 64px;
   padding-bottom: env(safe-area-inset-bottom, 0px);
-  background: rgba(11, 17, 24, 0.9);
-  -webkit-backdrop-filter: saturate(180%) blur(10px);
-  backdrop-filter: saturate(180%) blur(10px);
-  border-top: 1px solid rgba(255,255,255,0.1);
-  z-index: 50;
+  background-color: rgba(22, 27, 34, 0.8); /* secondary with opacity */
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-top: 1px solid var(--border-primary);
+  z-index: 100;
+  padding-top: 0.5rem;
+  padding-bottom: calc(env(safe-area-inset-bottom, 0.5rem));
 }
 
-/* ==== Terminal (dipakai di Monitoring) ==== */
-.terminal {
-  background: #061018;
-  border: 1px solid rgba(255,255,255,0.06);
-  border-radius: 8px;
-  padding: 8px 10px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-  font-size: 12px;
-  line-height: 18px;
-  color: #9fd7ff;                 /* default info */
-  height: 160px;
-  overflow-y: auto;
-  box-shadow: inset 0 2px 8px rgba(0,0,0,0.6);
-}
-.term-line { white-space: pre-wrap; }
-.term-ok   { color: #7fe39a; }    /* success */
-.term-warn { color: #ffd47a; }    /* warning */
-.term-err  { color: #ff8a8a; }    /* error */
-.term-info { color: #9fd7ff; }    /* info */
 
-/* ==== Animations (modal/toast) ==== */
-@keyframes fade-in { from {opacity:0;} to {opacity:1;} }
-@keyframes fade-in-down { from {opacity:0; transform: translate(-50%, -20px);} to {opacity:1; transform: translate(-50%, 0);} }
-@keyframes slide-up { from {transform: translateY(100%);} to {transform: translateY(0);} }
-
-.animate-fade-in { animation: fade-in 0.3s ease-out forwards; }
-.animate-fade-in-down { animation: fade-in-down 0.3s ease-out forwards; }
-.animate-slide-up { animation: slide-up 0.3s ease-out forwards; }
-
-/* ==== Utilities ==== */
-/* Scrollbar tipis (opsional) */
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-thumb { background: #243447; border-radius: 999px; }
+/* Custom Scrollbar */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-thumb { background: var(--border-primary); border-radius: var(--radius-full); }
+::-webkit-scrollbar-track { background: transparent; }
 
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
+/* Animations */
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes fadeInUp { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes slideInUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+
+.animate-fadeIn { animation: fadeIn 0.3s ease-out forwards; }
+.animate-fadeInUp { animation: fadeInUp 0.3s ease-out forwards; }
+.animate-slideInUp { animation: slideInUp 0.3s cubic-bezier(0.25, 0.8, 0.25, 1) forwards; }
