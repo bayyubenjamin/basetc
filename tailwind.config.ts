@@ -7,6 +7,10 @@ const config: Config = {
   ],
   theme: {
     extend: {
+      // FIX: Menambahkan nilai spasi yang dibutuhkan dari referensi Anda
+      spacing: {
+        '2.5': '0.625rem', // 10px
+      },
       colors: {
         'bg': '#0b0e12',
         'panel': '#0e141c',
@@ -18,20 +22,6 @@ const config: Config = {
         'ok': '#75e0a7',
         'warn': '#ffd37a',
         'danger': '#ff8e8e',
-        // Gradients from reference
-        'brand-logo-from': '#0f1924',
-        'brand-logo-to': '#071017',
-        'pill-from': '#0f1622',
-        'pill-to': ' #0a1119',
-        'btn-from': '#111827',
-        'btn-to': '#0e1620',
-        'btn-primary-from': '#0f2432',
-        'btn-primary-to': '#0b1722',
-        'monitor-from': '#0f1622',
-        'monitor-to': '#0c1119',
-        'screen-bg': '#041018',
-        'tile-from': '#07121a',
-        'tile-to': '#061018',
       },
       borderRadius: {
         'card': '14px',

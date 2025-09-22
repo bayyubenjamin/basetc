@@ -1,7 +1,6 @@
 import { FC } from 'react';
 import Image from 'next/image';
 
-// Tile kecil di bagian atas
 const StatTile: FC<{ label: string; value: string; }> = ({ label, value }) => (
   <div className="min-w-[160px] flex-shrink-0 snap-start bg-gradient-to-b from-[#07121a] to-[#061018] p-2.5 rounded-xl border border-[#122a3a]">
     <div className="text-xs text-[color:var(--muted)]">{label}</div>
@@ -9,21 +8,16 @@ const StatTile: FC<{ label: string; value: string; }> = ({ label, value }) => (
   </div>
 );
 
-// Terminal Log
 const Terminal: FC = () => (
   <div className="bg-[#01060a] rounded-lg border border-[#0f2130] p-2 font-mono text-xs text-[color:var(--accent)] h-36 overflow-auto shadow-inner no-scrollbar">
     <p><span className="text-gray-600 mr-2">13:15:50</span><span className="text-[color:var(--ok)]">Accepted share - work 0x1234...</span></p>
     <p><span className="text-gray-600 mr-2">13:15:48</span>Pool ping OK</p>
-    <p><span className="text-gray-600 mr-2">13:15:45</span><span className="text-[color:var(--warn)]">Rejected share - stale</span></p>
-    <p><span className="text-gray-600 mr-2">13:15:42</span>Accepted share - work 0xabcd...</p>
   </div>
 );
 
-// Komponen Utama Monitoring
 export default function Monitoring() {
   return (
     <>
-      {/* Panel Atas (Monitor Screen) */}
       <section className="panel flex flex-col gap-2.5">
         <div className="flex gap-2 -m-0.5 p-0.5 overflow-x-auto snap-x no-scrollbar">
           <StatTile label="Pool" value="stratum+tcp://pool.base:3333" />
@@ -45,8 +39,6 @@ export default function Monitoring() {
         </div>
         <Terminal />
       </section>
-
-      {/* Panel Bawah (Rig Room & Controls) */}
       <section className="panel">
         <div className="flex justify-between items-center">
           <div>
@@ -55,11 +47,9 @@ export default function Monitoring() {
           </div>
           <div className="text-xs text-[color:var(--muted)]">Ping <span className="text-[color:var(--text)]">18 ms</span></div>
         </div>
-        
         <div className="rounded-lg overflow-hidden border border-[#223146] bg-[#06101a] mt-2">
             <Image src="/img/pro.png" alt="Mining Rigs" width={400} height={200} className="w-full h-auto" />
         </div>
-        
         <table className="w-full border-collapse mt-2 text-xs text-[color:var(--muted)]">
           <thead>
             <tr className="text-left text-[color:var(--text)] font-bold">
@@ -84,7 +74,6 @@ export default function Monitoring() {
             </tr>
           </tbody>
         </table>
-
         <div className="grid grid-cols-3 gap-2 mt-2">
           <button className="btn">Start</button>
           <button className="btn">Fan +</button>

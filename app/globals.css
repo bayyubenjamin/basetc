@@ -2,11 +2,6 @@
 @tailwind components;
 @tailwind utilities;
 
-/*
-  BaseTC Mining UI - Final Redesign by Gemini
-  Fokus pada struktur mobile-first yang presisi dan estetika profesional.
-*/
-
 :root {
   --bg: #0b0e12;
   --panel: #0e141c;
@@ -14,11 +9,8 @@
   --text: #e9eef7;
   --muted: #9aacc6;
   --accent: #5ad6ff;
-  --ok: #75e0a7;
-  --warn: #ffd37a;
-  --danger: #ff8e8e;
   --radius: 14px;
-  --shadow: 0 12px 32px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.02);
+  --shadow: 0 12px 32px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.02);
 }
 
 body {
@@ -30,33 +22,28 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/*
-  STRUKTUR UTAMA APLIKASI
-  Ini akan memastikan layout tidak rusak di mobile.
-*/
-.app-container {
+/* STRUKTUR UTAMA APLIKASI */
+.app-shell {
   max-width: 430px;
   margin: 0 auto;
   min-height: 100dvh;
-  position: relative; /* Penting untuk posisi navigasi */
-  padding-bottom: 90px; /* Ruang untuk navigasi bawah */
-}
-
-.app-header {
+  display: flex;
+  flex-direction: column;
   padding: 12px;
+  padding-top: env(safe-area-inset-top, 12px);
+  /* Padding bawah untuk memberi ruang pada navigasi */
+  padding-bottom: calc(84px + env(safe-area-inset-bottom, 12px));
 }
 
 .app-content {
-  padding-left: 12px;
-  padding-right: 12px;
   display: flex;
   flex-direction: column;
   gap: 12px;
+  flex-grow: 1;
 }
 
 /*
   KOMPONEN & GAYA DARI REFERENSI ANDA
-  Saya definisikan sebagai @layer components agar bisa dipakai sebagai class di Tailwind.
 */
 @layer components {
   .panel {
