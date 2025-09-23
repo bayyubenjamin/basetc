@@ -55,7 +55,7 @@ export default function Monitoring() {
 
         <div className="rig-image">
           {/* ganti src sesuai asetmu */}
-          <img src="/rig-pro.png" alt="Rig Pro" />
+          <img src="public/img/rig-pro.png" alt="Rig Pro" />
         </div>
 
         <table className="gputable">
