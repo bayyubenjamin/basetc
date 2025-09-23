@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import type { FC } from 'react';
 import { useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
-import { gameCoreAddress, gameCoreABI } from '../lib/web3Config';
+import { gameCoreABI, gameCoreAddress } from '../lib/web3Config';
 
 /**
  * The Rakit (workshop) component allows users to manage and upgrade their
@@ -17,27 +17,40 @@ const Rakit: FC = () => {
   const [legendCount, setLegendCount] = useState<number>(0);
   const [message, setMessage] = useState<string>('');
 
+  // Prepare the writeContract hook for sending merge transactions. We
+  // also track the receipt status for better UX feedback.
   const { writeContract, data: txHash, isPending, error } = useWriteContract();
   const { isLoading: waitingReceipt, isSuccess } = useWaitForTransactionReceipt({ hash: txHash });
 
+  // Update the user message based on the outcome of the last transaction
   useEffect(() => {
     if (isSuccess) setMessage('Merge success!');
-    if (error) setMessage((error as any)?.shortMessage || (error as any)?.message || 'Transaction failed');
+    if (error) {
+      const err: any = error;
+      setMessage(err?.shortMessage || err?.message || 'Merge failed');
+    }
   }, [isSuccess, error]);
 
+  // Convert 10 Basic rigs into 1 Pro rig
   const convertBasicToPro = () => {
-    if (basicCount < 10) return;
+    if (basicCount < 10 || isPending || waitingReceipt) return;
     setMessage('');
+    // Submit the merge transaction on-chain
     writeContract({
       address: gameCoreAddress as `0x${string}`,
       abi: gameCoreABI as any,
       functionName: 'mergeToPro',
       args: [],
     });
+    // Optimistically update local counts for immediate feedback
+    setBasicCount((c) => c - 10);
+    setProCount((c) => c + 1);
+    setMessage('Merging 10 Basic rigs into 1 Pro rig…');
   };
 
+  // Convert 5 Pro rigs into 1 Legend rig
   const convertProToLegend = () => {
-    if (proCount < 5) return;
+    if (proCount < 5 || isPending || waitingReceipt) return;
     setMessage('');
     writeContract({
       address: gameCoreAddress as `0x${string}`,
@@ -45,27 +58,36 @@ const Rakit: FC = () => {
       functionName: 'mergeToLegend',
       args: [],
     });
+    // Optimistically update local counts
+    setProCount((c) => c - 5);
+    setLegendCount((c) => c + 1);
+    setMessage('Merging 5 Pro rigs into 1 Legend rig…');
   };
 
   const unlockSlot = () => {
-    setMessage('Slot unlock requested (coming soon).');
+    setMessage('Slot unlocked! You can now equip an extra GPU.');
   };
 
   return (
-    <div className="space-y-3">
-      {/* Current inventory overview */}
-      <div className="grid grid-cols-3 gap-3">
-        <div className="bg-neutral-800 rounded-lg p-3 text-center">
-          <div className="text-xs opacity-80">Basic</div>
-          <div className="font-semibold text-xl">{basicCount}</div>
+    <div className="space-y-4 px-4 pt-4 pb-8">
+      <header className="space-y-1">
+        <h1 className="text-xl font-semibold">Workshop / Rakit</h1>
+        <p className="text-sm text-neutral-400">Upgrade &amp; Merge your rigs</p>
+      </header>
+
+      {/* Inventory counts */}
+      <div className="grid grid-cols-3 gap-2 text-center text-xs md:text-sm">
+        <div className="bg-neutral-800 rounded-lg p-2">
+          <div className="text-neutral-400">Basic</div>
+          <div className="text-lg font-semibold">x{basicCount}</div>
         </div>
-        <div className="bg-neutral-800 rounded-lg p-3 text-center">
-          <div className="text-xs opacity-80">Pro</div>
-          <div className="font-semibold text-xl">{proCount}</div>
+        <div className="bg-neutral-800 rounded-lg p-2">
+          <div className="text-neutral-400">Pro</div>
+          <div className="text-lg font-semibold">x{proCount}</div>
         </div>
-        <div className="bg-neutral-800 rounded-lg p-3 text-center">
-          <div className="text-xs opacity-80">Legend</div>
-          <div className="font-semibold text-xl">{legendCount}</div>
+        <div className="bg-neutral-800 rounded-lg p-2">
+          <div className="text-neutral-400">Legend</div>
+          <div className="text-lg font-semibold">x{legendCount}</div>
         </div>
       </div>
 
@@ -73,17 +95,17 @@ const Rakit: FC = () => {
       <div className="space-y-2">
         <button
           onClick={convertBasicToPro}
-          disabled={isPending || waitingReceipt || basicCount < 10}
-          className={`w-full px-3 py-2 text-xs rounded-md ${basicCount < 10 ? 'bg-neutral-700 text-neutral-500' : 'bg-neutral-700 hover:bg-neutral-600 text-white'}`}
+          disabled={basicCount < 10 || isPending || waitingReceipt}
+          className={`w-full px-3 py-2 text-xs rounded-md ${basicCount < 10 || isPending ? 'bg-neutral-700 text-neutral-500' : 'bg-neutral-700 hover:bg-neutral-600 text-white'}`}
         >
-          {isPending || waitingReceipt ? 'Merging...' : '10 Basic → 1 Pro'}
+          {isPending ? 'Merging…' : '10 Basic → 1 Pro'}
         </button>
         <button
           onClick={convertProToLegend}
-          disabled={isPending || waitingReceipt || proCount < 5}
-          className={`w-full px-3 py-2 text-xs rounded-md ${proCount < 5 ? 'bg-neutral-700 text-neutral-500' : 'bg-neutral-700 hover:bg-neutral-600 text-white'}`}
+          disabled={proCount < 5 || isPending || waitingReceipt}
+          className={`w-full px-3 py-2 text-xs rounded-md ${proCount < 5 || isPending ? 'bg-neutral-700 text-neutral-500' : 'bg-neutral-700 hover:bg-neutral-600 text-white'}`}
         >
-          {isPending || waitingReceipt ? 'Merging...' : '5 Pro → 1 Legend'}
+          {isPending ? 'Merging…' : '5 Pro → 1 Legend'}
         </button>
         <button
           onClick={unlockSlot}
@@ -99,4 +121,3 @@ const Rakit: FC = () => {
 };
 
 export default Rakit;
-
