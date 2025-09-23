@@ -32,20 +32,15 @@ const Navigation: FC<{ activeTab: TabName; setActiveTab: (tab: TabName) => void 
   useLayoutEffect(() => {
     const el = navRef.current;
     if (!el) return;
-
     const apply = () => {
       const h = el.getBoundingClientRect().height;
       document.documentElement.style.setProperty("--nav-h", `${Math.ceil(h)}px`);
     };
-
     apply();
-
     const ro = new ResizeObserver(apply);
     ro.observe(el);
-
     const onResize = () => apply();
     window.addEventListener("resize", onResize);
-
     return () => {
       ro.disconnect();
       window.removeEventListener("resize", onResize);
