@@ -104,28 +104,33 @@ export default function Monitoring() {
     query: { enabled: Boolean(address) },
   });
 
-  // Read ERC1155 rig balances (IDs: 1=Basic, 2=Pro, 3=Legend)
-  const { data: basicBal } = useReadContract({
-    address: rigNftAddress as `0x${string}`,
-    abi: rigNftABI as any,
-    functionName: 'balanceOf',
-    args: address ? [address, BigInt(1)] : undefined;
-    query: { enabled: Boolean(address) },
-  });
-  const { data: proBal } = useReadContract({
-    address: rigNftAddress as `0x${string}`,
-    abi: rigNftABI as any,
-    functionName: 'balanceOf',
-   args: address ? [address, BigInt(2)] : undefined;
-    query: { enabled: Boolean(address) },
-  });
-  const { data: legendBal } = useReadContract({
-    address: rigNftAddress as `0x${string}`,
-    abi: rigNftABI as any,
-    functionName: 'balanceOf',
-    args: address ? [address, BigInt(3)] : undefined;
-    query: { enabled: Boolean(address) },
-  });
+// Basic
+const { data: basicBal } = useReadContract({
+  address: rigNftAddress as `0x${string}`,
+  abi: rigNftABI as any,
+  functionName: 'balanceOf',
+  args: address ? [address, BigInt(1)] : undefined,   // ← koma, bukan titik-koma
+  query: { enabled: Boolean(address) },
+});
+
+// Pro
+const { data: proBal } = useReadContract({
+  address: rigNftAddress as `0x${string}`,
+  abi: rigNftABI as any,
+  functionName: 'balanceOf',
+  args: address ? [address, BigInt(2)] : undefined,   // ← koma
+  query: { enabled: Boolean(address) },
+});
+
+// Legend
+const { data: legendBal } = useReadContract({
+  address: rigNftAddress as `0x${string}`,
+  abi: rigNftABI as any,
+  functionName: 'balanceOf',
+  args: address ? [address, BigInt(3)] : undefined,   // ← koma
+  query: { enabled: Boolean(address) },
+});
+
 
   // Convert large integer values to human readable decimals
   const pendingReadable = useMemo(() => (pending ? Number(pending as any) / 1e18 : 0), [pending]);
