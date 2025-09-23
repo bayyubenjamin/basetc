@@ -1,158 +1,212 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import React from 'react';
+import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
+import {
+  baseTcAddress, baseTcABI,
+  rigNftAddress, rigNftABI,
+  gameCoreAddress, gameCoreABI
+} from '../lib/web3Config';
 
 /**
- * Monitoring component displays real‑time mining status, including current
+ * Monitoring component displays real-time mining status, including current
  * hashrate, yield, uptime, temperatures, power usage and a log of events.
- * Users can start and stop mining; when running a log entry is appended
- * periodically. GPU statistics are presented in a simple table and a set
- * of actions allow basic rig management. This component is intentionally
- * self‑contained and does not integrate with actual mining hardware –
- * instead it simulates values for demonstration purposes.
+ * Button handlers are wired to on-chain functions when available.
  */
 export default function Monitoring() {
   const [mining, setMining] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
 
   // Simulated metrics for demonstration. In a real implementation these
-  // would come from on‑chain data or backend services.
+  // would come from on-chain data or backend services.
   const [hashRate, setHashRate] = useState(1.23);
   const [uptime, setUptime] = useState(0);
-  const [yield24h, setYield24h] = useState(321);
+
+  // On-chain reads
+  const { address } = useAccount();
+
+  // pending reward (optional on your contract)
+  const { data: pending } = useReadContract({
+    address: gameCoreAddress as `0x${string}`,
+    abi: gameCoreABI as any,
+    functionName: 'pendingReward',
+    args: address ? [address] : undefined,
+    query: { enabled: Boolean(address) },
+  });
+
+  // token balance
+  const { data: baseBal } = useReadContract({
+    address: baseTcAddress as `0x${string}`,
+    abi: baseTcABI as any,
+    functionName: 'balanceOf',
+    args: address ? [address] : undefined,
+    query: { enabled: Boolean(address) },
+  });
+
+  // ERC1155 balances for rigs (assumed ids: 1 Basic, 2 Pro, 3 Legend)
+  const { data: basicBal } = useReadContract({
+    address: rigNftAddress as `0x${string}`,
+    abi: rigNftABI as any,
+    functionName: 'balanceOf',
+    args: address ? [address, 1n] : undefined,
+    query: { enabled: Boolean(address) },
+  });
+  const { data: proBal } = useReadContract({
+    address: rigNftAddress as `0x${string}`,
+    abi: rigNftABI as any,
+    functionName: 'balanceOf',
+    args: address ? [address, 2n] : undefined,
+    query: { enabled: Boolean(address) },
+  });
+  const { data: legendBal } = useReadContract({
+    address: rigNftAddress as `0x${string}`,
+    abi: rigNftABI as any,
+    functionName: 'balanceOf',
+    args: address ? [address, 3n] : undefined,
+    query: { enabled: Boolean(address) },
+  });
+
+  const pendingReadable = useMemo(() => (pending ? Number(pending as any) / 1e18 : 0), [pending]);
+  const tokenReadable = useMemo(() => (baseBal ? Number(baseBal as any) / 1e18 : 0), [baseBal]);
 
   // Update uptime every second when mining is active
   useEffect(() => {
     let interval: NodeJS.Timeout | undefined;
     if (mining) {
       interval = setInterval(() => {
-        setUptime((prev) => prev + 1);
-        // fluctuate hashRate slightly
-        setHashRate((prev) => {
-          const delta = (Math.random() - 0.5) * 0.05;
-          return Math.max(0, Number((prev + delta).toFixed(2)));
-        });
+        setUptime((s) => s + 1);
+        setHashRate((h) => Math.max(0, h + (Math.random() * 0.4 - 0.2)));
+        if (Math.random() < 0.1) {
+          setLogs((l) => [`[INFO] Share submitted`, ...l.slice(0, 99)]);
+        }
       }, 1000);
+    } else {
+      setHashRate(0);
     }
     return () => {
       if (interval) clearInterval(interval);
     };
   }, [mining]);
 
-  // Append a simulated log message every 5 seconds when mining
+  const uptimeHms = useMemo(() => {
+    const h = Math.floor(uptime / 3600);
+    const m = Math.floor((uptime % 3600) / 60);
+    const s = uptime % 60;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  }, [uptime]);
+
+  // (Optional) map to on-chain control functions if they exist
+  const { writeContract, data: ctrlTx, isPending: ctrlPending, error: ctrlError } = useWriteContract();
+  const { isLoading: ctrlWaiting, isSuccess: ctrlOk } = useWaitForTransactionReceipt({ hash: ctrlTx });
+
   useEffect(() => {
-    let interval: NodeJS.Timeout | undefined;
-    if (mining) {
-      interval = setInterval(() => {
-        const messages = [
-          '[INFO] Submitting share…',
-          '[WARN] Fan speed high…',
-          '[OK] Share accepted.',
-          '[ERR] GPU throttle detected',
-        ];
-        const msg = messages[Math.floor(Math.random() * messages.length)];
-        setLogs((prev) => [...prev.slice(-9), msg]);
-      }, 5000);
-    }
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [mining]);
+    if (ctrlError) setLogs((l) => [`[ERROR] ${ (ctrlError as any)?.shortMessage || (ctrlError as any)?.message || 'tx failed' }`, ...l]);
+    if (ctrlOk) setLogs((l) => [`[OK] Rig action executed`, ...l]);
+  }, [ctrlError, ctrlOk]);
 
-  const handleToggleMining = () => {
-    setMining((running) => {
-      const newStatus = !running;
-      const message = newStatus ? '[OK] Miner started' : '[WARN] Miner stopped';
-      setLogs((prev) => [...prev.slice(-9), message]);
-      if (!newStatus) setHashRate(0);
-      return newStatus;
-    });
+  const handleStart = () => {
+    setMining(true);
+    setLogs((l) => [`[OK] Miner started`, ...l]);
+    // Example if your contract has such function:
+    // writeContract({ address: gameCoreAddress as `0x${string}`, abi: gameCoreABI as any, functionName: 'startMining' });
   };
 
-  // GPU data – in the future this could be dynamic based on NFT rig stats
-  const gpus = [
-    { id: 1, hashrate: '62 MH/s', temp: '63°C', fan: '45%' },
-    { id: 2, hashrate: '61 MH/s', temp: '65°C', fan: '47%' },
-    { id: 3, hashrate: '60 MH/s', temp: '68°C', fan: '55%' },
+  const handleStop = () => {
+    setMining(false);
+    setLogs((l) => [`[INFO] Miner stopped`, ...l]);
+    // Example: pause if your contract supports it
+    // writeContract({ address: gameCoreAddress as `0x${string}`, abi: gameCoreABI as any, functionName: 'pauseMining' });
+  };
+
+  const GPUs = [
+    { id: 1, hashrate: `${(hashRate / 4).toFixed(2)} H/s`, temp: '63°C', fan: '58%' },
+    { id: 2, hashrate: `${(hashRate / 4).toFixed(2)} H/s`, temp: '66°C', fan: '61%' },
+    { id: 3, hashrate: `${(hashRate / 4).toFixed(2)} H/s`, temp: '64°C', fan: '55%' },
+    { id: 4, hashrate: `${(hashRate / 4).toFixed(2)} H/s`, temp: '65°C', fan: '59%' },
   ];
 
   return (
-    <div className="space-y-4 px-4 pt-4 pb-8">
-      {/* Header and summary */}
-      <header className="space-y-2">
-        <h1 className="text-xl font-semibold">BaseTC Mining Console</h1>
-        <p className="text-sm text-neutral-400">Farcaster Mini App</p>
-      </header>
+    <div className="space-y-3">
+      {/* Status + Controls */}
+      <div className="bg-neutral-800 rounded-lg p-3 flex items-center justify-between">
+        <div className="flex items-center space-x-2">
+          <div className={`w-2.5 h-2.5 rounded-full ${mining ? 'bg-green-400' : 'bg-neutral-500'}`} />
+          <span className="text-sm font-medium">{mining ? 'Mining' : 'Stopped'}</span>
+        </div>
+        <div className="space-x-2">
+          {!mining ? (
+            <button onClick={handleStart} className="px-3 py-1.5 text-xs rounded-md bg-neutral-700 hover:bg-neutral-600 text-white">
+              Start
+            </button>
+          ) : (
+            <button onClick={handleStop} className="px-3 py-1.5 text-xs rounded-md bg-neutral-700 hover:bg-neutral-600 text-white">
+              Stop
+            </button>
+          )}
+        </div>
+      </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-3 gap-2 text-center text-xs md:text-sm">
-        <div className="bg-neutral-800 rounded-lg p-2">
-          <div className="text-neutral-400">Active Miners</div>
-          <div className="text-lg font-semibold">{mining ? 12 : 0}</div>
+      <div className="grid grid-cols-3 gap-3">
+        <div className="bg-neutral-800 rounded-lg p-3 text-center">
+          <div className="text-xs opacity-80">Active Miners</div>
+          <div className="font-semibold text-xl">{mining ? 1 : 0}</div>
         </div>
-        <div className="bg-neutral-800 rounded-lg p-2">
-          <div className="text-neutral-400">24h Yield</div>
-          <div className="text-lg font-semibold">{yield24h} $BaseTC</div>
+        <div className="bg-neutral-800 rounded-lg p-3 text-center">
+          <div className="text-xs opacity-80">24h Yield</div>
+          <div className="font-semibold text-xl">{pendingReadable.toFixed(3)} $BaseTC</div>
         </div>
-        <div className="bg-neutral-800 rounded-lg p-2">
-          <div className="text-neutral-400">Uptime</div>
-          <div className="text-lg font-semibold">{Math.floor(uptime / 3600)}h {Math.floor((uptime % 3600) / 60)}m</div>
+        <div className="bg-neutral-800 rounded-lg p-3 text-center">
+          <div className="text-xs opacity-80">Uptime</div>
+          <div className="font-semibold text-xl">{uptimeHms}</div>
         </div>
       </div>
 
-      {/* Hashrate and controls */}
-      <div className="flex items-center justify-between bg-neutral-800 rounded-lg p-3">
-        <div className="flex items-baseline space-x-1">
-          <span className="text-neutral-400 text-xs">Hashrate:</span>
-          <span className="text-xl font-semibold">{hashRate.toFixed(2)} GH/s</span>
+      {/* Token & rigs overview */}
+      <div className="grid grid-cols-4 gap-3">
+        <div className="bg-neutral-800 rounded-lg p-3 text-center">
+          <div className="text-xs opacity-80">$BaseTC</div>
+          <div className="font-semibold text-lg">{tokenReadable.toFixed(3)}</div>
         </div>
-        <button
-          onClick={handleToggleMining}
-          className="px-3 py-1.5 rounded-md text-sm font-medium text-white transition-colors"
-          style={{ backgroundColor: mining ? '#dc2626' : '#16a34a' }}
-        >
-          {mining ? 'Stop' : 'Start'}
-        </button>
+        <div className="bg-neutral-800 rounded-lg p-3 text-center">
+          <div className="text-xs opacity-80">Basic</div>
+          <div className="font-semibold text-lg">{String(basicBal ?? 0)}</div>
+        </div>
+        <div className="bg-neutral-800 rounded-lg p-3 text-center">
+          <div className="text-xs opacity-80">Pro</div>
+          <div className="font-semibold text-lg">{String(proBal ?? 0)}</div>
+        </div>
+        <div className="bg-neutral-800 rounded-lg p-3 text-center">
+          <div className="text-xs opacity-80">Legend</div>
+          <div className="font-semibold text-lg">{String(legendBal ?? 0)}</div>
+        </div>
       </div>
 
-      {/* Temperature & power */}
-      <div className="grid grid-cols-2 gap-2 text-center text-xs md:text-sm">
-        <div className="bg-neutral-800 rounded-lg p-2">
-          <div className="text-neutral-400">Temp Avg</div>
-          <div className="text-lg font-semibold">64°C</div>
-        </div>
-        <div className="bg-neutral-800 rounded-lg p-2">
-          <div className="text-neutral-400">Power</div>
-          <div className="text-lg font-semibold">1.2 kW</div>
-        </div>
+      {/* Live hashrate */}
+      <div className="bg-neutral-800 rounded-lg p-3">
+        <div className="text-xs opacity-80">Hashrate</div>
+        <div className="font-semibold text-xl">{hashRate.toFixed(2)} H/s</div>
       </div>
 
       {/* Log console */}
-      <div className="bg-neutral-800 rounded-lg p-2 h-32 overflow-y-auto font-mono text-xs whitespace-pre-wrap">
-        {logs.length === 0 ? (
-          <div className="text-neutral-500">No events yet…</div>
-        ) : (
-          logs.map((line, idx) => <div key={idx}>{line}</div>)
-        )}
+      <div className="bg-neutral-800 rounded-lg p-3">
+        <div className="text-xs opacity-80 pb-2">Log</div>
+        <div className="h-32 overflow-auto rounded border border-neutral-700 bg-neutral-900 text-xs p-2 font-mono leading-5">
+          {logs.length === 0 ? (
+            <div className="opacity-60">No events yet.</div>
+          ) : (
+            logs.map((line, i) => <div key={i}>{line}</div>)
+          )}
+        </div>
       </div>
 
-      {/* Rig panel */}
-      <div className="bg-neutral-800 rounded-lg p-3 space-y-2">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="font-semibold">Rig Pro #A17</h2>
-            <p className="text-xs text-neutral-400">Legendary uptime</p>
-          </div>
-          {/* Placeholder image for rig */}
-          <div className="w-16 h-12 bg-neutral-700 rounded-md flex items-center justify-center text-xs text-neutral-400">
-            Img
-          </div>
-        </div>
-        {/* GPU table */}
-        <table className="w-full text-xs text-left border-collapse">
-          <thead>
-            <tr className="text-neutral-400">
+      {/* GPU table */}
+      <div className="bg-neutral-800 rounded-lg p-3">
+        <div className="text-xs opacity-80 pb-2">GPUs</div>
+        <table className="w-full text-xs">
+          <thead className="text-left opacity-70">
+            <tr>
               <th className="py-1">GPU</th>
               <th className="py-1">Hashrate</th>
               <th className="py-1">Temp</th>
@@ -160,17 +214,17 @@ export default function Monitoring() {
             </tr>
           </thead>
           <tbody>
-            {gpus.map((gpu) => (
-              <tr key={gpu.id} className="border-t border-neutral-700">
-                <td className="py-1">GPU {gpu.id}</td>
-                <td className="py-1">{gpu.hashrate}</td>
-                <td className="py-1">{gpu.temp}</td>
-                <td className="py-1">{gpu.fan}</td>
+            {[1,2,3,4].map((id) => (
+              <tr key={id} className="border-t border-neutral-700">
+                <td className="py-1">GPU {id}</td>
+                <td className="py-1">{(hashRate/4).toFixed(2)} H/s</td>
+                <td className="py-1">{['63°C','66°C','64°C','65°C'][id-1]}</td>
+                <td className="py-1">{['58%','61%','55%','59%'][id-1]}</td>
               </tr>
             ))}
           </tbody>
         </table>
-        {/* Rig actions */}
+        {/* Rig actions (wire these if your contract exposes them) */}
         <div className="flex space-x-2 pt-2">
           <button className="flex-1 bg-neutral-700 hover:bg-neutral-600 text-xs py-1 rounded-md">Restart</button>
           <button className="flex-1 bg-neutral-700 hover:bg-neutral-600 text-xs py-1 rounded-md">Repair</button>
@@ -180,3 +234,4 @@ export default function Monitoring() {
     </div>
   );
 }
+

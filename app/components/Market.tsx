@@ -1,8 +1,10 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { FC } from 'react';
 import Image from 'next/image';
+import { useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
+import { gameCoreAddress, gameCoreABI } from '../lib/web3Config';
 
 // Types for the supported tiers
 type TierID = 'basic' | 'pro' | 'legend';
@@ -16,8 +18,7 @@ interface NFTTier {
   description: string;
 }
 
-// Dummy data for each tier. Replace image paths with actual assets in /public/img
-const NFT_DATA: NFTTier[] = [
+const TIERS: NFTTier[] = [
   {
     id: 'basic',
     name: 'Basic Rig',
@@ -32,74 +33,102 @@ const NFT_DATA: NFTTier[] = [
     image: '/img/vga_pro.png',
     hashrateHint: '~5.0 H/s',
     price: 'TBA',
-    description: 'Upgrade for a significant boost in hashrate.',
+    description: 'Upgrade for a significant boost in mining performance.',
   },
   {
     id: 'legend',
     name: 'Legend Rig',
     image: '/img/vga_legend.png',
-    hashrateHint: '~25.0 H/s',
+    hashrateHint: '~15.0 H/s',
     price: 'TBA',
-    description: 'The ultimate rig for professional miners.',
+    description: 'Top-tier rig with best yield and durability.',
   },
 ];
 
-export interface MarketProps {
+async function getFarcasterInfo(): Promise<{ fid: number | null; referrerFid: number | null }> {
+  try {
+    const { sdk } = await import('@farcaster/miniapp-sdk');
+    const profile = await sdk?.actions?.user?.getCurrentUser?.();
+    const fid = profile?.fid ?? null;
+
+    // Referral dari ?ref=, localStorage, atau initialData.ref
+    const urlRefParam = new URL(window.location.href).searchParams.get('ref');
+    const urlRef = urlRefParam ? Number(urlRefParam) : NaN;
+    const stored = Number(localStorage.getItem('basetc_ref') || '0');
+    const initRef = Number(sdk?.initialData?.ref || '0');
+    const ref = [urlRef, stored, initRef].find((v) => !!v && !Number.isNaN(v)) ?? null;
+    if (ref) localStorage.setItem('basetc_ref', String(ref));
+    return { fid: fid ?? null, referrerFid: (ref as number) ?? null };
+  } catch {
+    return { fid: null, referrerFid: null };
+  }
+}
+
+interface MarketProps {
   onTransactionSuccess?: () => void;
 }
 
-/**
- * Market component lists available NFT rigs. Only the Basic tier can be
- * claimed for free; other tiers are coming soon. When the user claims a
- * free rig a callback is triggered (if provided) and a success message is
- * displayed.
- */
 const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
   const [message, setMessage] = useState<string>('');
 
-  const handleClaim = () => {
-    setMessage('You successfully claimed your free Basic Rig!');
-    onTransactionSuccess?.();
+  // wagmi write + wait
+  const { writeContract, data: txHash, isPending, error } = useWriteContract();
+  const { isLoading: waitingReceipt, isSuccess } = useWaitForTransactionReceipt({ hash: txHash });
+
+  useEffect(() => {
+    if (isSuccess) setMessage('Claim success!');
+    if (error) setMessage((error as any)?.shortMessage || (error as any)?.message || 'Transaction failed');
+  }, [isSuccess, error]);
+
+  const handleClaim = async () => {
+    try {
+      setMessage('');
+      // 1) on-chain transaction
+      writeContract({
+        address: gameCoreAddress as `0x${string}`,
+        abi: gameCoreABI as any,
+        functionName: 'claimFreeBasic',
+        args: [],
+      });
+
+      // 2) referral log (non-blocking)
+      const info = await getFarcasterInfo();
+      fetch('/api/referral', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ userFid: info.fid, referrerFid: info.referrerFid, action: 'claimBasic', tx: txHash }),
+      }).catch(() => {});
+
+      onTransactionSuccess?.();
+    } catch (e: any) {
+      setMessage(e?.shortMessage || e?.message || 'Failed to submit');
+    }
   };
 
   return (
-    <div className="space-y-4 px-4 pt-4 pb-8">
-      <header className="space-y-1">
-        <h1 className="text-xl font-semibold">Market</h1>
-        <p className="text-sm text-neutral-400">Mint &amp; Listings</p>
-      </header>
-      <div className="space-y-4">
-        {NFT_DATA.map((tier) => (
-          <div
-            key={tier.id}
-            className="flex items-center bg-neutral-800 rounded-lg p-3 space-x-3"
-          >
-            {/* Image placeholder */}
-            <div className="w-16 h-16 bg-neutral-700 rounded-md flex items-center justify-center">
-              {/* Use next/image for optimization when actual images available */}
-              <span className="text-xs text-neutral-400">Img</span>
+    <div className="space-y-3">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        {TIERS.map((tier) => (
+          <div key={tier.id} className="bg-neutral-800 rounded-lg p-3 flex space-x-3 items-center">
+            <div className="relative w-16 h-16 shrink-0">
+              <Image src={tier.image} alt={tier.name} fill className="object-contain" />
             </div>
             <div className="flex-1">
-              <div className="flex items-baseline justify-between">
+              <div className="flex items-center justify-between">
                 <h3 className="font-semibold text-sm md:text-base">{tier.name}</h3>
-                <span className="text-xs md:text-sm text-neutral-400">{tier.price}</span>
+                <span className="text-xs opacity-80">{tier.hashrateHint}</span>
               </div>
-              <p className="text-xs text-neutral-400 pt-0.5">{tier.description}</p>
-              <p className="text-xs text-neutral-400 pt-0.5">Est. Hashrate: {tier.hashrateHint}</p>
-            </div>
-            <div>
+              <p className="text-xs opacity-80 py-1">{tier.description}</p>
               {tier.id === 'basic' ? (
                 <button
                   onClick={handleClaim}
-                  className="px-3 py-1.5 text-xs rounded-md bg-neutral-700 hover:bg-neutral-600 text-white"
+                  disabled={isPending || waitingReceipt}
+                  className="px-3 py-1.5 text-xs rounded-md bg-neutral-700 hover:bg-neutral-600 text-white disabled:opacity-60"
                 >
-                  Claim Free Rig
+                  {isPending || waitingReceipt ? 'Claiming...' : 'Claim Free Rig'}
                 </button>
               ) : (
-                <button
-                  disabled
-                  className="px-3 py-1.5 text-xs rounded-md bg-neutral-700 text-neutral-500"
-                >
+                <button className="px-3 py-1.5 text-xs rounded-md bg-neutral-700 text-neutral-500" disabled>
                   Coming Soon
                 </button>
               )}
@@ -113,3 +142,4 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
 };
 
 export default Market;
+
