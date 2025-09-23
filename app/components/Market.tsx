@@ -77,23 +77,24 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
   // dynamically imports the miniapp SDK to avoid build‑time errors. It
   // attempts to read the referrer FID from the URL (?ref=) or
   // localStorage, falling back to sdk.initialData.ref if present.
-  async function getFarcasterInfo(): Promise<{ fid: number | null; referrerFid: number | null }> {
-    try {
-      const { sdk } = await import('@farcaster/miniapp-sdk');
-      const profile = await sdk?.actions?.user?.getCurrentUser?.();
-      const fid = profile?.fid ?? null;
-      // Determine referrer FID from URL, localStorage or initialData
-      const urlRefParam = new URL(window.location.href).searchParams.get('ref');
-      const urlRef = urlRefParam ? Number(urlRefParam) : NaN;
-      const stored = Number(localStorage.getItem('basetc_ref') || '0');
-      const initRef = Number(sdk?.initialData?.ref || '0');
-      const ref = [urlRef, stored, initRef].find((v) => !!v && !Number.isNaN(v)) ?? null;
-      if (ref) localStorage.setItem('basetc_ref', String(ref));
-      return { fid: fid ?? null, referrerFid: ref as number | null };
-    } catch {
-      return { fid: null, referrerFid: null };
-    }
+async function getFarcasterInfo(): Promise<{ fid: number | null; referrerFid: number | null }> {
+  try {
+    const mod = await import('@farcaster/miniapp-sdk');
+    const fid = mod.sdk?.context?.user?.fid ?? null;
+
+    // Referral dari ?ref= atau localStorage (tetap seperti sebelumnya)
+    const urlRefParam = new URL(window.location.href).searchParams.get('ref');
+    const urlRef = urlRefParam ? Number(urlRefParam) : NaN;
+    const stored = Number(localStorage.getItem('basetc_ref') || '0');
+
+    const ref = [urlRef, stored].find((v) => !!v && !Number.isNaN(v)) ?? null;
+    if (ref) localStorage.setItem('basetc_ref', String(ref));
+
+    return { fid, referrerFid: (ref as number) ?? null };
+  } catch {
+    return { fid: null, referrerFid: null };
   }
+}
 
   const handleClaim = async () => {
     try {
