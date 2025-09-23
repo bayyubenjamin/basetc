@@ -2,7 +2,207 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Base colours and typography for the mini app */
-body {
-  @apply bg-neutral-950 text-neutral-50 overflow-x-hidden;
+/* ===== Base layer: variable, reset ringan, body ===== */
+@layer base {
+  :root {
+    --bg:#0b0e12;
+    --panel:#0e141c;
+    --edge:#202838;
+    --text:#e9eef7;
+    --muted:#9aacc6;
+    --accent:#5ad6ff;
+    --accent2:#a993ff;
+    --ok:#75e0a7;
+    --warn:#ffd37a;
+    --danger:#ff8e8e;
+    --r:14px;
+    --shadow:0 12px 32px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.02);
+    --nav-h:56px; /* tinggi nav default; bisa diubah via JS kalau perlu */
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+
+  html, body {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    background: linear-gradient(180deg, #071018, #0b0e12);
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    padding-bottom: var(--nav-h); /* supaya konten gak ketutup nav fixed */
+  }
+
+  /* util kecil yang sering dipakai */
+  .text-muted { color: var(--muted); }
+
+  /* sembunyikan scrollbar (opsional) */
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 }
+
+/* ===== Components layer: kelas2 khusus UI app ===== */
+@layer components {
+  /* === App shell === */
+  .app {
+    max-width: 430px;
+    margin: 0 auto;
+    min-height: 100%;
+    padding: env(safe-area-inset-top) 12px calc(72px + env(safe-area-inset-bottom));
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  /* header */
+  .top { display:grid; grid-template-columns: 1fr auto; gap:8px; align-items:center; }
+  .brand { display:flex; align-items:center; gap:10px; }
+  .logo {
+    width:28px; height:28px; border-radius:8px;
+    background:linear-gradient(180deg,#0f1924,#071017);
+    border:1px solid #25344a; box-shadow:var(--shadow);
+  }
+  .title { font-weight:700; font-size:14px; line-height:1.1; }
+  .sub { font-size:11px; color:var(--muted); }
+  .right { display:flex; gap:6px; align-items:center; justify-self:end; }
+  .pill {
+    background:linear-gradient(180deg,#0f1622,#0a1119);
+    padding:6px 8px; border-radius:12px;
+    border:1px solid #233045;
+    color:var(--muted); display:flex; gap:6px; align-items:center;
+    font-size:12px;
+  }
+  .pill strong { color:var(--text); }
+  .btn {
+    background:linear-gradient(180deg,#111827,#0e1620);
+    border:1px solid #263346;
+    padding:8px 10px; border-radius:10px;
+    color:var(--text); font-weight:700; font-size:13px;
+    cursor:pointer;
+  }
+  .btn.primary {
+    background:linear-gradient(180deg,#0f2432,#0b1722);
+    border-color:#30435e;
+  }
+
+  /* monitor */
+  .monitor-wrap {
+    background:linear-gradient(180deg,#0f1622,#0c1119);
+    border-radius:12px; padding:10px;
+    border:1px solid var(--edge); box-shadow:var(--shadow);
+  }
+  .screen {
+    background:#041018; border-radius:10px;
+    border:1px solid #122333;
+    padding:10px; display:flex; flex-direction:column; gap:10px;
+  }
+  .summaries {
+    display:flex; gap:8px; overflow:auto;
+    -webkit-overflow-scrolling:touch;
+    scroll-snap-type:x mandatory; padding-bottom:2px;
+  }
+  .sum-tile {
+    min-width: 140px; flex:0 0 auto;
+    scroll-snap-align:start;
+    background:linear-gradient(180deg,#07121a,#061018);
+    padding:10px; border-radius:10px; border:1px solid #122a3a;
+  }
+  .k { color:var(--muted); font-size:11px; }
+  .v { font-weight:800; font-size:15px; }
+  .chart-area { display:flex; flex-direction:column; gap:8px; }
+  .mini-plot {
+    width:100%; height:120px; border-radius:8px;
+    border:1px solid #11273a;
+    background:linear-gradient(180deg,#061221,#041018);
+    position:relative;
+  }
+  .panel-right { display:grid; grid-template-columns: 1fr 1fr; gap:8px; }
+  .panel-right .tile {
+    background:linear-gradient(180deg,#08141b,#061018);
+    padding:10px; border-radius:8px; border:1px solid #122b3c;
+    font-size:12px;
+  }
+
+  /* terminal */
+  .terminal {
+    background:#01060a; border-radius:8px;
+    border:1px solid #0f2130; padding:8px;
+    font-family: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    font-size:11px; color:#9fd7ff;
+    height:140px; overflow:auto;
+    box-shadow: inset 0 2px 8px rgba(0,0,0,.6);
+  }
+  .term-line { white-space:pre-wrap; }
+  .term-ok { color:#9fe7c1; }
+  .term-warn { color:#ffd37a; }
+  .term-err { color:#ff8e8e; }
+  .term-info { color:#9fd7ff; }
+
+  /* rig panel */
+  .panel {
+    background:linear-gradient(180deg,#0f1622,#0b1118);
+    border-radius:12px; padding:10px;
+    border:1px solid #182737; box-shadow:var(--shadow);
+  }
+  .heading { display:flex; align-items:center; justify-content:space-between; }
+  .rig-image {
+    border-radius:10px; overflow:hidden;
+    border:1px solid #223146; background:#06101a; margin-top:8px;
+  }
+  .rig-image img { display:block; width:100%; height:auto; }
+  .gputable {
+    width:100%; border-collapse:collapse;
+    margin-top:8px; font-size:12px;
+  }
+  .gputable th, .gputable td {
+    padding:8px 6px; text-align:left;
+    border-bottom:1px dashed rgba(255,255,255,.04);
+    color:var(--muted);
+  }
+  .gputable th {
+    color:var(--text); font-weight:700; font-size:11px;
+  }
+  .controls {
+    display:grid; grid-template-columns: repeat(3, 1fr);
+    gap:8px; margin-top:8px;
+  }
+  .controls .btn { width:100%; padding:10px; }
+
+  .small { font-size:11px; color:var(--muted); }
+
+  /* bottom nav */
+  .nav {
+    position:fixed; left:0; right:0; bottom:0;
+    padding: env(safe-area-inset-bottom) 10px 10px;
+    background: transparent;
+  }
+  .nav-inner {
+    width:min(430px, 100%); margin:0 auto;
+    display:grid; grid-template-columns:repeat(4,1fr); gap:8px;
+    background:linear-gradient(180deg,#0b1420,#071018);
+    border-radius:14px; padding:8px;
+    border:1px solid #1d3246; box-shadow:var(--shadow);
+  }
+  .nav-inner button {
+    background:transparent; border:0;
+    color:var(--muted); padding:10px 6px;
+    border-radius:10px; font-weight:700; font-size:12px;
+  }
+  .nav-inner button.active {
+    color:var(--text);
+    outline:2px solid rgba(90,214,255,.22);
+  }
+  button { min-height:44px; }
+
+  /* tablet+ */
+  @media (min-width:768px){
+    .app { max-width:740px; }
+    .panel-right { grid-template-columns: 1fr 1fr 1fr; }
+    .mini-plot { height:160px; }
+    .terminal { height:160px; font-size:12px; }
+  }
+}
+
