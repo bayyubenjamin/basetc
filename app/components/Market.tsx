@@ -80,9 +80,25 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
 async function getFarcasterInfo(): Promise<{ fid: number | null; referrerFid: number | null }> {
   try {
     const mod = await import('@farcaster/miniapp-sdk');
-    const fid = mod.sdk?.context?.user?.fid ?? null;
 
-    // Referral dari ?ref= atau localStorage (tetap seperti sebelumnya)
+    // Ambil konteks user secara defensif:
+    // - Jika sdk.context adalah function async → panggil lalu await
+    // - Jika sdk.context adalah Promise → langsung await
+    // - Jika sdk.context adalah object biasa → pakai langsung
+    const rawCtx: any = (mod as any)?.sdk?.context;
+    let ctx: any = null;
+
+    if (typeof rawCtx === 'function') {
+      ctx = await rawCtx.call((mod as any).sdk);
+    } else if (rawCtx && typeof rawCtx.then === 'function') {
+      ctx = await rawCtx;
+    } else {
+      ctx = rawCtx ?? null;
+    }
+
+    const fid: number | null = ctx?.user?.fid ?? null;
+
+    // Referral dari ?ref= atau localStorage
     const urlRefParam = new URL(window.location.href).searchParams.get('ref');
     const urlRef = urlRefParam ? Number(urlRefParam) : NaN;
     const stored = Number(localStorage.getItem('basetc_ref') || '0');
@@ -95,6 +111,7 @@ async function getFarcasterInfo(): Promise<{ fid: number | null; referrerFid: nu
     return { fid: null, referrerFid: null };
   }
 }
+
 
   const handleClaim = async () => {
     try {
