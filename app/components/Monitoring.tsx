@@ -109,21 +109,21 @@ export default function Monitoring() {
     address: rigNftAddress as `0x${string}`,
     abi: rigNftABI as any,
     functionName: 'balanceOf',
-    args: address ? [address, 1n] : undefined,
+    args: address ? [address, BigInt(1)] : undefined;
     query: { enabled: Boolean(address) },
   });
   const { data: proBal } = useReadContract({
     address: rigNftAddress as `0x${string}`,
     abi: rigNftABI as any,
     functionName: 'balanceOf',
-    args: address ? [address, 2n] : undefined,
+   args: address ? [address, BigInt(2)] : undefined;
     query: { enabled: Boolean(address) },
   });
   const { data: legendBal } = useReadContract({
     address: rigNftAddress as `0x${string}`,
     abi: rigNftABI as any,
     functionName: 'balanceOf',
-    args: address ? [address, 3n] : undefined,
+    args: address ? [address, BigInt(3)] : undefined;
     query: { enabled: Boolean(address) },
   });
 
