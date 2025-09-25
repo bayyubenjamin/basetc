@@ -1,0 +1,17 @@
+// app/lib/addresses.ts
+export const ADDR = {
+  BASETC:        "0x6F1d3aEB43beE9337dbeA4574dACC22AE0a0B7FB",
+  RIGNFT:        "0x86D72B2b46B0461aaCEDa6bf8a5F1A71Cf1DDfEf",
+  GAMECORE:      "0x7D666afDe0728E3856Ba0D6fb47dE67bc82f29C1",
+  REWARDS_VAULT: "0x94301D1ad0228b60C9D2C320E99d43A5A45150aC",
+  RIGSALE:       "0x03e3B57EEE457785420eFD8db66cB04ACbE3D17D",
+  TREASURY:      "0x8eC2Ca3fdea29C1658c7ecF8b8dCE7EC09Fa7E55",
+  USDC:          "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+  REFERRAL:      "0x8f75cB6135F106C45f2B7B8841ecA92dD25e47B5",
+} as const;
+
+export const CHAIN = {
+  id: 84532,
+  rpcUrl: "https://sepolia.base.org",
+} as const;
+
