@@ -1,47 +1,82 @@
 "use client";
 
-import { useEffect, useState } from 'react';
-// Avoid importing the SDK at the module level to prevent build‑time
-// resolution errors. It will be loaded dynamically inside useEffect.
-import Navigation, { TabName } from './components/Navigation';
-import Monitoring from './components/Monitoring';
-import Rakit from './components/Rakit';
-import Market from './components/Market';
-import Profil from './components/Profil';
+import { useEffect, useMemo, useState } from "react";
+import Navigation, { TabName } from "./components/Navigation";
+import Monitoring from "./components/Monitoring";
+import Rakit from "./components/Rakit";
+import Market from "./components/Market";
+import Profil from "./components/Profil";
 
-/**
- * The main entrypoint for the BaseTC Mini App. This component handles
- * navigation between different sections (Monitoring, Rakit, Market, Profil)
- * and signals readiness to the Farcaster Mini App SDK on mount. It also
- * ensures that content is padded to avoid overlapping with the bottom
- * navigation bar on small screens.
- */
+const DEFAULT_TAB: TabName = "monitoring";
+const TAB_KEY = "basetc_active_tab";
+
 export default function Page() {
-  const [activeTab, setActiveTab] = useState<TabName>('monitoring');
+  const [activeTab, setActiveTab] = useState<TabName>(DEFAULT_TAB);
 
+  // init: Farcaster SDK ready + restore tab dari ?tab= atau localStorage
   useEffect(() => {
-    // Dynamically import the Farcaster miniapp SDK and signal that the
-    // frame is ready. This pattern prevents Next.js from resolving
-    // the module on the server during build.
     (async () => {
       try {
-        const { sdk } = await import('@farcaster/miniapp-sdk');
-        sdk.actions.ready();
+        const { sdk } = await import("@farcaster/miniapp-sdk");
+        sdk.actions.ready?.();
       } catch (err) {
-        console.warn('[miniapp] SDK not available:', err);
+        console.warn("[miniapp] SDK not available:", err);
       }
     })();
+
+    try {
+      const url = new URL(window.location.href);
+      const q = (url.searchParams.get("tab") || "").toLowerCase();
+      const fromQuery = ["monitoring", "rakit", "market", "profil"].includes(q)
+        ? (q as TabName)
+        : null;
+      const fromStorage = (localStorage.getItem(TAB_KEY) || "") as TabName;
+      const initial =
+        fromQuery ||
+        (["monitoring", "rakit", "market", "profil"].includes(fromStorage)
+          ? fromStorage
+          : DEFAULT_TAB);
+      setActiveTab(initial);
+    } catch {
+      setActiveTab(DEFAULT_TAB);
+    }
   }, []);
+
+  // simpan tab + scroll to top saat tab berubah
+  useEffect(() => {
+    try {
+      localStorage.setItem(TAB_KEY, activeTab);
+    } catch {}
+    window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
+  }, [activeTab]);
+
+  // pilih konten
+  const content = useMemo(() => {
+    switch (activeTab) {
+      case "rakit":
+        return <Rakit />;
+      case "market":
+        return <Market />;
+      case "profil":
+        return <Profil />;
+      case "monitoring":
+      default:
+        return <Monitoring />;
+    }
+  }, [activeTab]);
 
   return (
     <div className="flex flex-col min-h-screen">
-      <div className="flex-1 pb-16">{/* leave space for nav */}
-        {activeTab === 'monitoring' && <Monitoring />}
-        {activeTab === 'rakit' && <Rakit />}
-        {activeTab === 'market' && <Market />}
-        {activeTab === 'profil' && <Profil />}
+      {/* padding bottom untuk nav + safe area iOS */}
+      <div
+        className="flex-1"
+        style={{ paddingBottom: "calc(4rem + env(safe-area-inset-bottom, 0px))" }}
+      >
+        {content}
       </div>
+
       <Navigation activeTab={activeTab} setActiveTab={setActiveTab} />
     </div>
   );
 }
+
