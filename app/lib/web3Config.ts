@@ -1,31 +1,39 @@
 // app/lib/web3Config.ts
 import { ADDR, CHAIN } from "./addresses";
 
-// JSON ABI imports (butuh resolveJsonModule:true)
+// Pastikan tsconfig: "resolveJsonModule": true
 import baseTcABI         from "./abi/baseTc.json";
 import rigNftABI         from "./abi/rigNft.json";
-import rigSaleABI        from "./abi/rigSale.json";
+import rigSaleABI        from "./abi/rigSale.json";      // ← ABI kontrak RigSaleFlexible final (FID)
 import gameCoreABI       from "./abi/gameCore.json";
 import rewardsVaultABI   from "./abi/rewardsVault.json";
 import treasuryVaultABI  from "./abi/treasuryVault.json";
 import referralABI       from "./abi/referralClaimer.json";
 
-// Named exports yang dipakai komponen
-export const rpcUrl = CHAIN.rpcUrl;
+// RPC & Chain
+export const rpcUrl  = CHAIN.rpcUrl;
 export const chainId = CHAIN.id;
 
-// Addresses (named) — match dengan import di komponen
-export const baseTcAddress        = ADDR.BASETC;
-export const rigNftAddress        = ADDR.RIGNFT;
-export const rigSaleAddress       = ADDR.RIGSALE;
-export const gameCoreAddress      = ADDR.GAMECORE;
-export const rewardsVaultAddress  = ADDR.REWARDS_VAULT;
-export const treasuryVaultAddress = ADDR.TREASURY;
-export const referralAddress      = ADDR.REFERRAL;
-export const usdcAddress          = ADDR.USDC;
+// Addresses (named) — diambil dari addresses.ts (sudah kamu set di situ)
+export const baseTcAddress        = ADDR.BASETC as `0x${string}`;
+export const rigNftAddress        = ADDR.RIGNFT as `0x${string}`;
+export const rigSaleAddress       = ADDR.RIGSALE as `0x${string}`;    // ← 0x6DAb... (dari addresses.ts)
+export const gameCoreAddress      = ADDR.GAMECORE as `0x${string}`;
+export const rewardsVaultAddress  = ADDR.REWARDS_VAULT as `0x${string}`;
+export const treasuryVaultAddress = ADDR.TREASURY as `0x${string}`;
+export const referralAddress      = ADDR.REFERRAL as `0x${string}`;
+export const usdcAddress          = ADDR.USDC as `0x${string}`;
 
-// ABIs (named)
-export { baseTcABI, rigNftABI, rigSaleABI, gameCoreABI, rewardsVaultABI, treasuryVaultABI, referralABI };
+// ABIs (named exports)
+export {
+  baseTcABI,
+  rigNftABI,
+  rigSaleABI,         // ← digunakan Market & komponen lain
+  gameCoreABI,
+  rewardsVaultABI,
+  treasuryVaultABI,
+  referralABI,
+};
 
 // (opsional) satu objek config
 export const CFG = {
