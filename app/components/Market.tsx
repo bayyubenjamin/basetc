@@ -2,12 +2,18 @@
 
 import { useState, useEffect } from "react";
 import type { FC } from "react";
-import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import {
+  useAccount,
+  useReadContract,
+  useWriteContract,
+  useWaitForTransactionReceipt,
+} from "wagmi";
 import {
   rigSaleAddress,
   rigSaleABI,
   rigNftAddress,
   rigNftABI,
+  chainId as BASE_CHAIN_ID,
 } from "../lib/web3Config";
 
 // Types for the supported tiers
@@ -64,7 +70,7 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
   const { address } = useAccount();
   const [message, setMessage] = useState<string>("");
 
-  // Ambil BASIC/PRO/LEGEND id dari kontrak (lebih aman daripada hardcode)
+  // Ambil BASIC id dari kontrak (hindari hardcode)
   const basicId = useReadContract({
     address: rigNftAddress as `0x${string}`,
     abi: rigNftABI as any,
@@ -74,9 +80,11 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
 
   // write hook buat RigSale
   const { writeContract, data: txHash, isPending, error } = useWriteContract();
-  const { isLoading: waitingReceipt, isSuccess } = useWaitForTransactionReceipt({ hash: txHash });
+  const { isLoading: waitingReceipt, isSuccess } = useWaitForTransactionReceipt({
+    hash: txHash,
+  });
 
-  // Kirim referral setelah hash ada (lebih reliable daripada di dalam handler sebelum hash tersedia)
+  // Kirim referral setelah hash ada
   useEffect(() => {
     if (!txHash) return;
     (async () => {
@@ -106,7 +114,10 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
   }, [isSuccess, error]);
 
   // Farcaster helpers
-  async function getFarcasterInfo(): Promise<{ fid: number | null; referrerFid: number | null }> {
+  async function getFarcasterInfo(): Promise<{
+    fid: number | null;
+    referrerFid: number | null;
+  }> {
     try {
       const mod = await import("@farcaster/miniapp-sdk");
       const rawCtx: any = (mod as any)?.sdk?.context;
@@ -144,13 +155,13 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
       }
 
       // FREE mint via RigSale (value 0n).
-      // Jika nanti bayar ETH: tambahkan `value: BigInt(hargaWei)`.
-      // Jika bayar $BaseTC: lakukan approve terlebih dahulu lalu panggil mintBySale.
       writeContract({
         address: rigSaleAddress as `0x${string}`,
         abi: rigSaleABI as any,
         functionName: "mintBySale",
-        args: [address, BASIC_ID, 1n],
+        args: [address as `0x${string}`, BASIC_ID as bigint, 1n] as const,
+        account: address as `0x${string}`,
+        chainId: BASE_CHAIN_ID,
         // value: 0n, // default gratis
       });
 
@@ -186,14 +197,18 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
                 <span className="text-xs md:text-sm text-neutral-400">{tier.price}</span>
               </div>
               <p className="text-xs text-neutral-400 pt-0.5">{tier.description}</p>
-              <p className="text-xs text-neutral-400 pt-0.5">Est. Hashrate: {tier.hashrateHint}</p>
+              <p className="text-xs text-neutral-400 pt-0.5">
+                Est. Hashrate: {tier.hashrateHint}
+              </p>
             </div>
 
             <div>
               {tier.id === "basic" ? (
                 <button
                   onClick={handleClaim}
-                  disabled={!address || typeof BASIC_ID === "undefined" || isPending || waitingReceipt}
+                  disabled={
+                    !address || typeof BASIC_ID === "undefined" || isPending || waitingReceipt
+                  }
                   className="px-3 py-1.5 text-xs rounded-md bg-neutral-700 hover:bg-neutral-600 text-white disabled:bg-neutral-700 disabled:text-neutral-500"
                   title={!address ? "Connect wallet first" : undefined}
                 >

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import type { FC } from "react";
 import {
   useAccount,
@@ -13,9 +13,10 @@ import {
   rigNftABI,
   gameCoreAddress,
   gameCoreABI,
+  chainId as BASE_CHAIN_ID,
 } from "../lib/web3Config";
 
-// Helper ambil FID & referral dari Farcaster (aman di client)
+// Helper ambil FID Farcaster (client-only, aman untuk Next)
 async function getFarcasterFID(): Promise<bigint | null> {
   try {
     const mod = await import("@farcaster/miniapp-sdk");
@@ -100,7 +101,9 @@ const Rakit: FC = () => {
 
   // ------- TX hooks -------
   const { writeContract, data: txHash, isPending, error } = useWriteContract();
-  const { isLoading: waitingReceipt, isSuccess } = useWaitForTransactionReceipt({ hash: txHash });
+  const { isLoading: waitingReceipt, isSuccess } = useWaitForTransactionReceipt({
+    hash: txHash,
+  });
 
   useEffect(() => {
     if (isSuccess) setMessage("Merge success!");
@@ -128,9 +131,10 @@ const Rakit: FC = () => {
       address: gameCoreAddress as `0x${string}`,
       abi: gameCoreABI as any,
       functionName: "mergeBasicToPro",
-      args: [address, fid],
+      args: [address as `0x${string}`, fid as bigint] as const,
+      account: address as `0x${string}`,
+      chainId: BASE_CHAIN_ID,
     });
-    // (Tidak pakai optimistic update — biar sinkron dengan on-chain reads)
     setMessage(`Merging ${needBP} Basic → 1 Pro…`);
   };
 
@@ -151,7 +155,9 @@ const Rakit: FC = () => {
       address: gameCoreAddress as `0x${string}`,
       abi: gameCoreABI as any,
       functionName: "mergeProToLegend",
-      args: [address, fid],
+      args: [address as `0x${string}`, fid as bigint] as const,
+      account: address as `0x${string}`,
+      chainId: BASE_CHAIN_ID,
     });
     setMessage(`Merging ${needPL} Pro → 1 Legend…`);
   };

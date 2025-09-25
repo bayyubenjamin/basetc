@@ -16,6 +16,7 @@ import {
   rigNftABI,
   gameCoreAddress,
   gameCoreABI,
+  chainId as BASE_CHAIN_ID,
 } from "../lib/web3Config";
 
 type Achievement = { name: string; icon: string };
@@ -23,9 +24,9 @@ type LbRow = {
   fid?: number | null;
   username?: string | null;
   display_name?: string | null;
-  score?: number | null;        // fleksibel: pakai score bila ada
-  rewards?: number | null;      // atau rewards
-  total_rewards?: number | null;// atau total_rewards
+  score?: number | null;
+  rewards?: number | null;
+  total_rewards?: number | null;
   hashrate?: number | null;
   rank?: number | null;
 };
@@ -94,7 +95,6 @@ async function fetchLeaderboard(): Promise<LbRow[]> {
     const { createClient } = await import("@supabase/supabase-js");
     const supabase = createClient(url, key, { auth: { persistSession: false } });
 
-    // Skema fleksibel: coba ambil semua kolom, urutkan by 'score' desc; fallback di UI
     const { data, error } = await supabase
       .from("leaderboard")
       .select("*")
@@ -243,7 +243,9 @@ export default function Profil() {
       address: gameCoreAddress as `0x${string}`,
       abi: gameCoreABI as any,
       functionName: "claim",
-      args: [e - 1n, address],
+      args: [e - 1n, address as `0x${string}`] as const,
+      account: address as `0x${string}`,
+      chainId: BASE_CHAIN_ID,
     });
     setMsg("Claiming reward…");
   };
@@ -275,7 +277,6 @@ export default function Profil() {
     const v = row.score ?? row.total_rewards ?? row.rewards ?? null;
     if (v === null || typeof v !== "number") return "-";
     return `${v.toFixed(3)} $BaseTC`;
-    // kalau skor bukan reward, tinggal ganti label sesuai backend
   };
 
   return (
@@ -312,7 +313,6 @@ export default function Profil() {
             )}
           </div>
         </div>
-        {/* optional badge supreme */}
         {(isSupreme.data as boolean | undefined) && (
           <div className="px-2 py-1 rounded-md text-[10px] bg-purple-700/30 border border-purple-600/40">
             Supreme
@@ -398,7 +398,6 @@ export default function Profil() {
             </table>
           </div>
         )}
-        {/* Keterangan kecil */}
         <p className="text-[10px] text-neutral-500">
           *Leaderboard membaca tabel <code>leaderboard</code> di Supabase. Sesuaikan kolom sesuai backend (score/total_rewards/rewards/hashrate/rank).
         </p>
