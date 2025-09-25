@@ -2,7 +2,7 @@
 export const runtime = 'nodejs';
 
 import { NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/app/lib/supabase/server';
+import { supabaseAdmin } from '../../lib/supabase/server';
 
 export async function GET() {
   try {

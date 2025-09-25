@@ -2,7 +2,7 @@
 export const runtime = 'nodejs';
 
 import { NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/app/lib/supabase/server';
+import { supabaseAdmin } from '../../lib/supabase/server';
 
 type Body = { fid: number; action: string; limit?: number };
 

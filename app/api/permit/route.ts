@@ -3,7 +3,7 @@ export const runtime = 'nodejs';
 
 import { NextResponse } from 'next/server';
 import { privateKeyToAccount } from 'viem/accounts';
-import { gameCoreAddress } from '@/app/lib/web3Config';
+import { gameCoreAddress } from '../../lib/web3Config';
 
 const CHAIN_ID = Number(process.env.NEXT_PUBLIC_CHAIN_ID || 84532); // Base Sepolia
 const NAME = 'BaseTC';
