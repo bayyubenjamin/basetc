@@ -7,6 +7,7 @@ import {
   useReadContract,
   useWriteContract,
 } from "wagmi";
+import { baseSepolia } from "wagmi/chains"; // ← PENTING: pakai wagmi/chains, bukan viem/chains
 import {
   rigSaleAddress,
   rigSaleABI,
@@ -31,7 +32,6 @@ const erc20ABI = [
   },
 ] as const;
 
-// Types for the supported tiers (untuk UI list)
 type TierID = "basic" | "pro" | "legend";
 interface NFTTier {
   id: TierID;
@@ -61,14 +61,9 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
   const PRO    = proId.data   as bigint | undefined;
   const LEGEND = legId.data   as bigint | undefined;
 
-  // ----- Mode & Token Pembayaran dari RigSaleFlexible -----
-  const modeRes = useReadContract({
-    address: rigSaleAddress, abi: rigSaleABI as any, functionName: "currentMode",
-  }); // 0=ETH, 1=ERC20
-  const payTokenRes = useReadContract({
-    address: rigSaleAddress, abi: rigSaleABI as any, functionName: "paymentToken",
-  });
-
+  // ----- Mode & Token Pembayaran -----
+  const modeRes = useReadContract({ address: rigSaleAddress, abi: rigSaleABI as any, functionName: "currentMode" }); // 0=ETH, 1=ERC20
+  const payTokenRes = useReadContract({ address: rigSaleAddress, abi: rigSaleABI as any, functionName: "paymentToken" });
   const modeVal = modeRes.data as number | undefined;
   const tokenAddr = (payTokenRes.data as `0x${string}` | undefined) || undefined;
 
@@ -84,7 +79,7 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
   const tokenDecimals = (decRes.data as number | undefined) ?? 18;
   const tokenSymbol   = (symRes.data as string | undefined) ?? "TOKEN";
 
-  // ----- Harga aktif per ID (mengikuti mode) -----
+  // ----- Harga aktif per ID -----
   const priceBasicRes = useReadContract({
     address: rigSaleAddress, abi: rigSaleABI as any, functionName: "priceOf",
     args: BASIC !== undefined ? [BASIC] : undefined,
@@ -100,7 +95,6 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
     args: LEGEND !== undefined ? [LEGEND] : undefined,
     query: { enabled: Boolean(LEGEND !== undefined) },
   });
-
   const priceOf = (id: bigint | undefined) => {
     if (id === BASIC)  return priceBasicRes.data as bigint | undefined;
     if (id === PRO)    return priceProRes.data as bigint | undefined;
@@ -116,13 +110,12 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
     args: address ? [address] : undefined,
     query: { enabled: Boolean(address) },
   });
-
   const freeOpen  = Boolean(freeOpenRes.data);
   const freeId    = freeIdRes.data as bigint | undefined;
   const freeUsed  = Boolean(freeMineRes.data);
   const isBasicFreeForMe = freeOpen && BASIC !== undefined && freeId === BASIC && !freeUsed;
 
-  // ----- ERC20 allowance (untuk buy token mode) -----
+  // ----- ERC20 allowance -----
   const allowanceRes = useReadContract({
     address: tokenAddr, abi: erc20ABI as any, functionName: "allowance",
     args: address && tokenAddr ? [address, rigSaleAddress] : undefined,
@@ -130,7 +123,7 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
   });
   const allowance = (allowanceRes.data as bigint | undefined) ?? 0n;
 
-  // ----- Writer (pakai async biar bisa berantai approve → buy) -----
+  // ----- Writer -----
   const { writeContractAsync } = useWriteContract();
 
   // Helper format harga
@@ -140,8 +133,6 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
     if (modeVal === 1) return `${Number(formatUnits(p, tokenDecimals)).toLocaleString()} ${tokenSymbol}`;
     return "Loading…";
   };
-
-  // Label harga per tier (FREE jika basic eligible)
   const priceLabel = (id: bigint | undefined, tier: TierID) => {
     if (!id) return "Loading…";
     if (tier === "basic" && isBasicFreeForMe) return "FREE";
@@ -149,19 +140,21 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
   };
 
   // ---- Handlers ----
-
-  // FREE mint per-wallet (praktis). Jika mau per-FID: panggil claimFreeByFidSig(fid,...)
   const handleClaimBasicFree = async () => {
     try {
       setMessage("");
       if (!address) return setMessage("Connect wallet first.");
       if (!isBasicFreeForMe) return setMessage("No free mint available.");
+
       await writeContractAsync({
         address: rigSaleAddress,
         abi: rigSaleABI as any,
         functionName: "claimFree",
         args: [],
+        account: address as `0x${string}`,
+        chain: baseSepolia, // ← tambahkan chain + account
       });
+
       setMessage("Claim success!");
       onTransactionSuccess?.();
     } catch (e: any) {
@@ -177,38 +170,43 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
       const price = priceOf(id);
       if (!price || price === 0n) return setMessage("Not for sale.");
 
-      // Mode ETH
       if (modeVal === 0) {
+        // ETH
         await writeContractAsync({
           address: rigSaleAddress,
           abi: rigSaleABI as any,
           functionName: "buyWithETH",
-          args: [id, 1n],
+          args: [id, 1n] as const,
           value: price,
+          account: address as `0x${string}`,
+          chain: baseSepolia,
         });
         setMessage("Purchase success (ETH)!");
         onTransactionSuccess?.();
         return;
       }
 
-      // Mode ERC20 → approve jika allowance kurang, lalu buy
       if (modeVal === 1 && tokenAddr) {
         if (allowance < price) {
-          // Approve exact price (atau infinite jika kamu mau)
+          // approve dulu
           await writeContractAsync({
             address: tokenAddr,
             abi: erc20ABI as any,
             functionName: "approve",
-            args: [rigSaleAddress, price],
+            args: [rigSaleAddress, price] as const,
+            account: address as `0x${string}`,
+            chain: baseSepolia,
           });
         }
         await writeContractAsync({
           address: rigSaleAddress,
           abi: rigSaleABI as any,
           functionName: "buyWithERC20",
-          args: [id, 1n],
+          args: [id, 1n] as const,
+          account: address as `0x${string}`,
+          chain: baseSepolia,
         });
-        setMessage(`Purchase success (${tokenSymbol})!`);
+        setMessage(`Purchase success!`);
         onTransactionSuccess?.();
         return;
       }
@@ -219,21 +217,13 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
     }
   };
 
-  // Mapping id tier → onClick
-  const tierId = (t: TierID) =>
-    t === "basic" ? BASIC : t === "pro" ? PRO : LEGEND;
-
+  const tierId = (t: TierID) => (t === "basic" ? BASIC : t === "pro" ? PRO : LEGEND);
   const onClickCta = (t: TierID) => {
     const id = tierId(t);
     if (t === "basic" && isBasicFreeForMe) return () => handleClaimBasicFree();
     return () => handleBuy(id);
   };
-
-  // CTA label
-  const ctaText = (t: TierID) => {
-    if (t === "basic" && isBasicFreeForMe) return "Claim Free Rig";
-    return "Buy";
-  };
+  const ctaText = (t: TierID) => (t === "basic" && isBasicFreeForMe ? "Claim Free Rig" : "Buy");
 
   return (
     <div className="space-y-4 px-4 pt-4 pb-8">
@@ -242,7 +232,6 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
         <p className="text-sm text-neutral-400">Mint &amp; Listings</p>
       </header>
 
-      {/* Info mode */}
       <div className="text-[11px] text-neutral-400">
         Mode: {modeVal === 0 ? "ETH" : modeVal === 1 ? `Token (${tokenSymbol})` : "—"}
       </div>
