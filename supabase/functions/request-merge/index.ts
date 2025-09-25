@@ -1,5 +1,4 @@
 // deno-lint-ignore-file no-explicit-any
-import "jsr:@supabase/functions-js/edge-runtime";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const MERGE_RULES = {
@@ -27,7 +26,6 @@ Deno.serve(async (req: Request) => {
       Deno.env.get("EDGE_SUPABASE_SERVICE_ROLE")!
     );
 
-    // NOTE: nanti tambahkan call onchain ke GameCore.merge(...) lalu catat tx_hash ke merge_events.
     const { error } = await supabase.rpc("fn_merge_tier", {
       p_fid: fid,
       p_from_tier: fromTier,

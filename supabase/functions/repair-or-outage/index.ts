@@ -1,10 +1,9 @@
 // deno-lint-ignore-file no-explicit-any
-import "jsr:@supabase/functions-js/edge-runtime";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 Deno.serve(async (req: Request) => {
   try {
-    const { fid, tier, action } = await req.json(); // action: 'OUTAGE' | 'REPAIR'
+    const { fid, tier, action } = await req.json(); // action: "OUTAGE" | "REPAIR"
     if (!fid || !tier || !action) {
       return new Response(JSON.stringify({ error: "MISSING_PARAMS" }), { status: 400 });
     }
