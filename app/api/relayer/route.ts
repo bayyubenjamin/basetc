@@ -25,7 +25,7 @@ export async function POST(req: Request) {
         functionName: "setActive",
         args: [user, active],
         chain: baseSepolia,
-        account: walletClient.account!,
+        account: walletClient.account!, // aman, sudah di-set dari PK
       });
       return NextResponse.json({ ok: true, hash });
     }
