@@ -16,7 +16,7 @@ const account = privateKeyToAccount(PK as `0x${string}`);
 export const relayerAddress = account.address;
 
 export const relayerClient = createWalletClient({
-  chain: baseSepolia,       // Base Sepolia (84532)
+  chain: baseSepolia,
   transport: http(RPC),
   account,
 });

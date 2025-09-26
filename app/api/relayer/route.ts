@@ -1,22 +1,16 @@
 // app/api/relayer/route.ts
 import "server-only";
 import { NextResponse } from "next/server";
-import { relayerClient, relayerAddress } from "@/app/lib/server/relayerClient";
-// HINDARI alias kalau project kamu belum set baseUrl/paths. Kalau error, ganti ke:
-// import { relayerClient, relayerAddress } from "../../lib/server/relayerClient";
 
-import {
-  gameCoreAddress,
-  gameCoreABI,
-} from "@/app/lib/web3Config";
-// Kalau alias error, ganti ke: import { gameCoreAddress, gameCoreABI } from "../../lib/web3Config";
+// ⬇️ GANTI alias ke relative path
+import { relayerClient, relayerAddress } from "../../lib/server/relayerClient";
+import { gameCoreAddress, gameCoreABI } from "../../lib/web3Config";
 
-export const runtime = "nodejs";         // penting: JANGAN edge
-export const dynamic = "force-dynamic";  // jangan di-prerender/di-cache
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 function isAuthorized(req: Request) {
-  // Opsional: pakai API key sederhana
   const needKey = process.env.RELAYER_API_KEY;
   if (!needKey) return true;
   return req.headers.get("x-api-key") === needKey;
@@ -42,7 +36,6 @@ async function write<TArgs extends any[]>(
 }
 
 export async function GET() {
-  // Endpoint kecil buat cek relayer
   try {
     const epoch = (await (relayerClient as any).readContract({
       address: gameCoreAddress as `0x${string}`,
@@ -78,10 +71,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, error: "missing action" }, { status: 400 });
     }
 
-    // =========
-    // ACTIONS:
-    // =========
-    // 1) Mining switch: setMiningActive(user, active)
     if (action === "setMiningActive") {
       const [user, active] = args as [`0x${string}`, boolean];
       if (typeof user !== "string" || typeof active !== "boolean")
@@ -90,7 +79,6 @@ export async function POST(req: Request) {
       return NextResponse.json(res, { status: res.ok ? 200 : 500 });
     }
 
-    // 2) Cooldown setter: setMiningCooldown(seconds)
     if (action === "setMiningCooldown") {
       const [secs] = args as [number];
       if (typeof secs !== "number")
@@ -99,7 +87,6 @@ export async function POST(req: Request) {
       return NextResponse.json(res, { status: res.ok ? 200 : 500 });
     }
 
-    // 3) Snapshot kontribusi user untuk epoch berjalan: pushSnapshot(user)
     if (action === "pushSnapshot") {
       const [user] = args as [`0x${string}`];
       if (typeof user !== "string")
@@ -108,7 +95,6 @@ export async function POST(req: Request) {
       return NextResponse.json(res, { status: res.ok ? 200 : 500 });
     }
 
-    // 4) Claim: claim(epoch, user)
     if (action === "claim") {
       const [epoch, user] = args as [number | string | bigint, `0x${string}`];
       if ((typeof epoch !== "number" && typeof epoch !== "string" && typeof epoch !== "bigint") || typeof user !== "string")
@@ -117,7 +103,6 @@ export async function POST(req: Request) {
       return NextResponse.json(res, { status: res.ok ? 200 : 500 });
     }
 
-    // 5) Merge Basic->Pro: mergeBasicToPro(user, fid)
     if (action === "mergeBasicToPro") {
       const [user, fid] = args as [`0x${string}`, number | string | bigint];
       if (typeof user !== "string")
@@ -126,7 +111,6 @@ export async function POST(req: Request) {
       return NextResponse.json(res, { status: res.ok ? 200 : 500 });
     }
 
-    // 6) Merge Pro->Legend: mergeProToLegend(user, fid)
     if (action === "mergeProToLegend") {
       const [user, fid] = args as [`0x${string}`, number | string | bigint];
       if (typeof user !== "string")
@@ -135,7 +119,6 @@ export async function POST(req: Request) {
       return NextResponse.json(res, { status: res.ok ? 200 : 500 });
     }
 
-    // 7) Finalize epoch: finalizeEpoch(e, totalHash, baseSum)
     if (action === "finalizeEpoch") {
       const [e, totalHash, baseSum] = args as [
         number | string | bigint,
@@ -146,7 +129,6 @@ export async function POST(req: Request) {
       return NextResponse.json(res, { status: res.ok ? 200 : 500 });
     }
 
-    // 8) Burn leftover: burnLeftover(e, amount)  // e tak dipakai di kontrak, tapi ikut request OK
     if (action === "burnLeftover") {
       const [e, amount] = args as [number | string | bigint, number | string | bigint];
       const res = await write("burnLeftover", [BigInt(e), BigInt(amount)]);
