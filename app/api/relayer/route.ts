@@ -1,143 +1,135 @@
-// app/api/relayer/route.ts
-import "server-only";
-import { NextResponse } from "next/server";
-
-// ⬇️ GANTI alias ke relative path
-import { relayerClient, relayerAddress } from "../../lib/server/relayerClient";
-import { gameCoreAddress, gameCoreABI } from "../../lib/web3Config";
-
+// Run on Node.js (bukan Edge)
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const revalidate = 0;
 
-function isAuthorized(req: Request) {
-  const needKey = process.env.RELAYER_API_KEY;
-  if (!needKey) return true;
-  return req.headers.get("x-api-key") === needKey;
+import { NextRequest, NextResponse } from "next/server";
+import { createPublicClient, createWalletClient, http, isAddress } from "viem";
+import { privateKeyToAccount } from "viem/accounts";
+import { baseSepolia } from "viem/chains";
+
+// Import config & ABI/addresses (server-safe)
+import {
+  rpcUrl,
+  gameCoreAddress,
+  gameCoreABI,
+} from "@/app/lib/web3Config";
+
+// --- Helpers ---
+function json(data: any, init?: number | ResponseInit) {
+  return NextResponse.json(data, init);
 }
 
-type WriteResult = { ok: true; tx: `0x${string}` } | { ok: false; error: string };
+function requireEnv(name: string): string {
+  const v = process.env[name];
+  if (!v) throw new Error(`Missing env: ${name}`);
+  return v;
+}
 
-async function write<TArgs extends any[]>(
-  fn: string,
-  args: TArgs
-): Promise<WriteResult> {
+async function getClients() {
+  const RPC_URL = requireEnv("RPC_URL");                  // ex: https://sepolia.base.org
+  const PK = requireEnv("RELAYER_PRIVATE_KEY");           // HARUS ada "0x" di depan
+
+  const account = privateKeyToAccount(PK as `0x${string}`);
+
+  const publicClient = createPublicClient({
+    chain: baseSepolia,
+    transport: http(RPC_URL),
+  });
+
+  const walletClient = createWalletClient({
+    chain: baseSepolia,
+    transport: http(RPC_URL),
+    account,
+  });
+
+  return { publicClient, walletClient, account };
+}
+
+// --- Handlers ---
+async function handleSetActive(
+  body: any,
+  walletClient: ReturnType<typeof createWalletClient> extends infer T ? T : never
+) {
+  const user = body?.user as string | undefined;
+  const active = body?.active as boolean | undefined;
+
+  if (!user || !isAddress(user)) return { ok: false, error: "invalid user address" };
+  if (typeof active !== "boolean") return { ok: false, error: "invalid active flag" };
+
+  // Coba panggil setUserActive(user, active). Kalau ABI beda, fallback ke start/stop.
   try {
-    const tx = await (relayerClient as any).writeContract({
+    const hash = await walletClient.writeContract({
       address: gameCoreAddress as `0x${string}`,
       abi: gameCoreABI as any,
-      functionName: fn,
-      args: args as any[],
+      functionName: "setUserActive",
+      args: [user as `0x${string}`, active],
     });
-    return { ok: true, tx };
+    return { ok: true, hash };
   } catch (e: any) {
-    return { ok: false, error: e?.shortMessage || e?.message || "failed" };
+    // Fallback bila kontrak kamu masih pakai startMining/stopMining
+    try {
+      const fn = active ? "startMining" : "stopMining";
+      const hash2 = await walletClient.writeContract({
+        address: gameCoreAddress as `0x${string}`,
+        abi: gameCoreABI as any,
+        functionName: fn,
+        args: [user as `0x${string}`],
+      });
+      return { ok: true, hash: hash2 };
+    } catch (e2: any) {
+      return { ok: false, error: e2?.shortMessage || e2?.message || "set-active failed" };
+    }
   }
 }
 
-export async function GET() {
-  try {
-    const epoch = (await (relayerClient as any).readContract({
-      address: gameCoreAddress as `0x${string}`,
-      abi: gameCoreABI as any,
-      functionName: "epochNow",
-      args: [],
-    })) as bigint;
-
-    return NextResponse.json({
-      relayer: relayerAddress,
-      chain: "base-sepolia",
-      epochNow: epoch.toString(),
-    });
-  } catch {
-    return NextResponse.json({
-      relayer: relayerAddress,
-      chain: "base-sepolia",
-    });
-  }
+// (opsional) contoh endpoint snapshot/claim/finalize kalau kamu butuh ke depannya
+async function handlePushSnapshot(body: any) {
+  return { ok: false, error: "not implemented" };
+}
+async function handleClaim(body: any) {
+  return { ok: false, error: "not implemented" };
+}
+async function handleFinalize(body: any) {
+  return { ok: false, error: "not implemented" };
 }
 
-export async function POST(req: Request) {
+// --- Route utama ---
+export async function POST(req: NextRequest) {
   try {
-    if (!isAuthorized(req))
-      return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
+    const body = await req.json().catch(() => ({}));
+    const action = String(body?.action || "");
 
-    const { action, args } = (await req.json()) as {
-      action?: string;
-      args?: any[];
-    };
+    const { walletClient, account } = await getClients();
+    // Log tipis untuk debug di Vercel Logs
+    console.log("[relayer] action:", action);
+    console.log("[relayer] relayer:", account.address);
+    console.log("[relayer] gameCore:", gameCoreAddress);
+    console.log("[relayer] rpcUrl set:", Boolean(process.env.RPC_URL));
 
-    if (!action) {
-      return NextResponse.json({ ok: false, error: "missing action" }, { status: 400 });
+    if (action === "set-active") {
+      const res = await handleSetActive(body, walletClient);
+      return json(res, res.ok ? 200 : 400);
     }
 
-    if (action === "setMiningActive") {
-      const [user, active] = args as [`0x${string}`, boolean];
-      if (typeof user !== "string" || typeof active !== "boolean")
-        return NextResponse.json({ ok: false, error: "bad args" }, { status: 400 });
-      const res = await write("setMiningActive", [user, active]);
-      return NextResponse.json(res, { status: res.ok ? 200 : 500 });
-    }
-
-    if (action === "setMiningCooldown") {
-      const [secs] = args as [number];
-      if (typeof secs !== "number")
-        return NextResponse.json({ ok: false, error: "bad args" }, { status: 400 });
-      const res = await write("setMiningCooldown", [BigInt(secs)]);
-      return NextResponse.json(res, { status: res.ok ? 200 : 500 });
-    }
-
-    if (action === "pushSnapshot") {
-      const [user] = args as [`0x${string}`];
-      if (typeof user !== "string")
-        return NextResponse.json({ ok: false, error: "bad args" }, { status: 400 });
-      const res = await write("pushSnapshot", [user]);
-      return NextResponse.json(res, { status: res.ok ? 200 : 500 });
+    if (action === "push-snapshot") {
+      const res = await handlePushSnapshot(body);
+      return json(res, res.ok ? 200 : 400);
     }
 
     if (action === "claim") {
-      const [epoch, user] = args as [number | string | bigint, `0x${string}`];
-      if ((typeof epoch !== "number" && typeof epoch !== "string" && typeof epoch !== "bigint") || typeof user !== "string")
-        return NextResponse.json({ ok: false, error: "bad args" }, { status: 400 });
-      const res = await write("claim", [BigInt(epoch), user]);
-      return NextResponse.json(res, { status: res.ok ? 200 : 500 });
+      const res = await handleClaim(body);
+      return json(res, res.ok ? 200 : 400);
     }
 
-    if (action === "mergeBasicToPro") {
-      const [user, fid] = args as [`0x${string}`, number | string | bigint];
-      if (typeof user !== "string")
-        return NextResponse.json({ ok: false, error: "bad args" }, { status: 400 });
-      const res = await write("mergeBasicToPro", [user, BigInt(fid)]);
-      return NextResponse.json(res, { status: res.ok ? 200 : 500 });
+    if (action === "finalize") {
+      const res = await handleFinalize(body);
+      return json(res, res.ok ? 200 : 400);
     }
 
-    if (action === "mergeProToLegend") {
-      const [user, fid] = args as [`0x${string}`, number | string | bigint];
-      if (typeof user !== "string")
-        return NextResponse.json({ ok: false, error: "bad args" }, { status: 400 });
-      const res = await write("mergeProToLegend", [user, BigInt(fid)]);
-      return NextResponse.json(res, { status: res.ok ? 200 : 500 });
-    }
-
-    if (action === "finalizeEpoch") {
-      const [e, totalHash, baseSum] = args as [
-        number | string | bigint,
-        number | string | bigint,
-        number | string | bigint
-      ];
-      const res = await write("finalizeEpoch", [BigInt(e), BigInt(totalHash), BigInt(baseSum)]);
-      return NextResponse.json(res, { status: res.ok ? 200 : 500 });
-    }
-
-    if (action === "burnLeftover") {
-      const [e, amount] = args as [number | string | bigint, number | string | bigint];
-      const res = await write("burnLeftover", [BigInt(e), BigInt(amount)]);
-      return NextResponse.json(res, { status: res.ok ? 200 : 500 });
-    }
-
-    return NextResponse.json({ ok: false, error: "unknown action" }, { status: 400 });
+    return json({ ok: false, error: "unknown action" }, 400);
   } catch (e: any) {
-    return NextResponse.json({ ok: false, error: e?.message || "failed" }, { status: 500 });
+    console.error("[relayer] error:", e);
+    return json({ ok: false, error: e?.message || "internal error" }, 500);
   }
 }
 
