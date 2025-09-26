@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Navigation, { TabName } from "./components/Navigation";
+import Navigation, { type TabName } from "./components/Navigation";
 import Monitoring from "./components/Monitoring";
 import Rakit from "./components/Rakit";
 import Market from "./components/Market";
