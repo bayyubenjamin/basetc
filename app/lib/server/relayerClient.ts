@@ -1,23 +1,35 @@
 // app/lib/server/relayerClient.ts
-import "server-only";
-import { createWalletClient, http } from "viem";
+"use server";
+
+import { createPublicClient, createWalletClient, http, getContract, type Address } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { baseSepolia } from "viem/chains";
+import { CFG } from "../web3Config"; // ⬅️ relative (file ini ada di app/lib/server, jadi ../web3Config)
 
-const RPC = process.env.RPC_URL;
-let PK = process.env.RELAYER_PRIVATE_KEY as string | undefined;
+export async function getRelayerClients() {
+  const RPC_URL = process.env.RPC_URL || CFG.rpcUrl;
+  const PK = process.env.RELAYER_PRIVATE_KEY; // harus dengan prefix 0x
 
-if (!RPC) throw new Error("RPC_URL is missing");
-if (!PK) throw new Error("RELAYER_PRIVATE_KEY is missing");
-if (!PK.startsWith("0x")) PK = `0x${PK}`;
+  if (!PK) throw new Error("RELAYER_PRIVATE_KEY missing");
+  const account = privateKeyToAccount(PK as `0x${string}`);
 
-const account = privateKeyToAccount(PK as `0x${string}`);
+  const publicClient = createPublicClient({
+    chain: baseSepolia,
+    transport: http(RPC_URL),
+  });
 
-export const relayerAddress = account.address;
+  const walletClient = createWalletClient({
+    chain: baseSepolia,
+    transport: http(RPC_URL),
+    account,
+  });
 
-export const relayerClient = createWalletClient({
-  chain: baseSepolia,
-  transport: http(RPC),
-  account,
-});
+  const gameCore = getContract({
+    address: CFG.addresses.GAMECORE as Address,
+    abi: CFG.abis.gameCore as any,
+    client: { public: publicClient, wallet: walletClient },
+  });
+
+  return { publicClient, walletClient, gameCore, account };
+}
 
