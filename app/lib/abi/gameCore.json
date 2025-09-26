@@ -2,17 +2,17 @@
 	{
 		"inputs": [
 			{
-				"internalType": "bytes32",
-				"name": "role",
-				"type": "bytes32"
+				"internalType": "address",
+				"name": "user",
+				"type": "address"
 			},
 			{
-				"internalType": "address",
-				"name": "account",
-				"type": "address"
+				"internalType": "uint256",
+				"name": "fid",
+				"type": "uint256"
 			}
 		],
-		"name": "grantRole",
+		"name": "mergeBasicToPro",
 		"outputs": [],
 		"stateMutability": "nonpayable",
 		"type": "function"
@@ -212,9 +212,9 @@
 		"inputs": [
 			{
 				"indexed": false,
-				"internalType": "uint256",
-				"name": "time",
-				"type": "uint256"
+				"internalType": "bool",
+				"name": "value",
+				"type": "bool"
 			}
 		],
 		"name": "GoLiveSet",
@@ -223,17 +223,17 @@
 	{
 		"inputs": [
 			{
-				"internalType": "address",
-				"name": "user",
-				"type": "address"
+				"internalType": "bytes32",
+				"name": "role",
+				"type": "bytes32"
 			},
 			{
-				"internalType": "uint256",
-				"name": "fid",
-				"type": "uint256"
+				"internalType": "address",
+				"name": "account",
+				"type": "address"
 			}
 		],
-		"name": "mergeBasicToPro",
+		"name": "grantRole",
 		"outputs": [],
 		"stateMutability": "nonpayable",
 		"type": "function"
@@ -545,7 +545,7 @@
 			},
 			{
 				"internalType": "bool",
-				"name": "active",
+				"name": "active_",
 				"type": "bool"
 			}
 		],
@@ -606,9 +606,9 @@
 	{
 		"inputs": [
 			{
-				"internalType": "uint256",
-				"name": "t",
-				"type": "uint256"
+				"internalType": "bool",
+				"name": "value",
+				"type": "bool"
 			}
 		],
 		"name": "setGoLive",
@@ -953,25 +953,12 @@
 	},
 	{
 		"inputs": [],
-		"name": "goLiveSet",
+		"name": "goLive",
 		"outputs": [
 			{
 				"internalType": "bool",
 				"name": "",
 				"type": "bool"
-			}
-		],
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"inputs": [],
-		"name": "goLiveTime",
-		"outputs": [
-			{
-				"internalType": "uint256",
-				"name": "",
-				"type": "uint256"
 			}
 		],
 		"stateMutability": "view",
@@ -1045,6 +1032,19 @@
 				"internalType": "uint256",
 				"name": "",
 				"type": "uint256"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "isPrelaunch",
+		"outputs": [
+			{
+				"internalType": "bool",
+				"name": "",
+				"type": "bool"
 			}
 		],
 		"stateMutability": "view",
