@@ -36,11 +36,13 @@ export default function Monitoring() {
   const [terminalLogs, setTerminalLogs] = useState<string[]>([]);
   const terminalRef = useRef<HTMLDivElement>(null);
 
-  // Mining stream state (per-epoch budgeting)
-  const [epochRemainAmt, setEpochRemainAmt] = useState(0);  // sisa Base Unit untuk epoch berjalan
-  const [epochRemainSec, setEpochRemainSec] = useState(0);  // sisa detik epoch berjalan
+  // Budget stream (gabung jadi satu state supaya update atomik per detik)
+  const [epochBudget, setEpochBudget] = useState<{ amt: number; sec: number }>({
+    amt: 0,
+    sec: 0,
+  });
   const [lastSeenEpoch, setLastSeenEpoch] = useState<bigint | undefined>(undefined);
-  const [showClaim, setShowClaim] = useState(false);        // tampilkan tombol Claim saat rollover
+  const [showClaim, setShowClaim] = useState(false);
 
   // Ticker 1s
   useEffect(() => {
@@ -48,7 +50,7 @@ export default function Monitoring() {
     return () => clearInterval(t);
   }, []);
 
-  // Auto scroll ke log terbaru (bawah)
+  // Auto-scroll ke log terbaru (bawah)
   useEffect(() => {
     if (terminalRef.current) {
       terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
@@ -57,7 +59,6 @@ export default function Monitoring() {
 
   const addLog = (message: string) => {
     const timestamp = new Date().toLocaleTimeString();
-    // tambahkan ke bawah & jaga max 200 baris
     setTerminalLogs((prev) => [...prev, `[${timestamp}] ${message}`].slice(-200));
   };
 
@@ -105,16 +106,16 @@ export default function Monitoring() {
     return v ? Number(v) : 0;
   }, [hashrate.data]);
 
-  // Base Unit dari kontrak pakai 18 desimal (reward per epoch/hari)
+  // Base Unit per epoch (18 desimal)
   const baseUnitPerEpoch = useMemo(() => {
     const v = baseUnit.data as bigint | undefined;
     if (!v) return 0;
-    return Number(formatUnits(v, 18)); // contoh: 1.665 untuk 5 Basic
+    return Number(formatUnits(v, 18)); // contoh: 1.665 (5 Basic)
   }, [baseUnit.data]);
 
   const active = Boolean((miningActive.data as boolean | undefined) ?? false);
   const eNow = (epochNow.data as bigint | undefined) ?? undefined;
-  const eLen = (epochLength.data as bigint | undefined) ?? undefined; // detik per epoch (1 hari)
+  const eLen = (epochLength.data as bigint | undefined) ?? undefined; // detik/epoch
   const sTime = (startTime.data as bigint | undefined) ?? undefined;
   const lastE = (lastToggleEpoch.data as bigint | undefined) ?? 0n;
   const cd = (toggleCooldown.data as bigint | undefined) ?? 0n;
@@ -189,7 +190,7 @@ export default function Monitoring() {
     writeContract({ address: gameCoreAddress as `0x${string}`, abi: gameCoreABI as any, functionName: "stopMining", args: [], account: address as `0x${string}`, chain: baseSepolia, chainId: BASE_CHAIN_ID });
   };
 
-  // NOTE: Ganti "claim" sesuai nama fungsi klaim di GameCore kamu (mis. claimDaily / claimEpoch / claimRewards)
+  // TODO: ganti "claim" sesuai fungsi klaim di kontrakmu
   const onClaim = () => {
     if (!address) { setMsg("Connect wallet dulu."); return; }
     setMsg("");
@@ -199,46 +200,51 @@ export default function Monitoring() {
 
   const busy = isPending || waitingReceipt;
 
-  // ========== MINING STREAM (acak, ter-budget) ==========
-  // Reset budget saat:
-  // - ganti epoch, atau
-  // - Base Unit/epoch berubah, atau
-  // - belum pernah set
+  // ===== Reset budget saat epoch berubah / halaman dibuka di tengah epoch =====
   useEffect(() => {
     if (!eLen || !eNow) return;
-    const len = Number(eLen);
-    // Saat epoch berubah:
-    if (lastSeenEpoch === undefined || eNow !== lastSeenEpoch) {
-      setLastSeenEpoch(eNow);
-      setEpochRemainAmt(baseUnitPerEpoch); // reset sisa reward epoch
-      setEpochRemainSec(len);               // reset sisa detik
-      // Jika sedang aktif, munculkan tombol Claim untuk epoch sebelumnya
-      if (lastSeenEpoch !== undefined) setShowClaim(true);
-    }
-  }, [eNow, eLen, baseUnitPerEpoch, lastSeenEpoch]);
+    const totalSec = Number(eLen);
+    const leftSec = epochProgress.leftSec || totalSec;
 
-  // Tiap detik: kalau aktif & bukan prelaunch & ada budget → emisi pecahan acak
+    // Jika ini epoch pertama yang dilihat user → jangan munculkan Claim.
+    // Kalau sebelumnya sudah melihat epoch dan sekarang berubah → munculkan Claim.
+    if (lastSeenEpoch !== undefined && eNow !== lastSeenEpoch) {
+      setShowClaim(true);
+    }
+    setLastSeenEpoch(eNow);
+
+    // Budget sisa disesuaikan proporsional terhadap waktu tersisa
+    const proportion = totalSec > 0 ? leftSec / totalSec : 0;
+    const initAmt = baseUnitPerEpoch * proportion;
+
+    setEpochBudget({ amt: initAmt, sec: leftSec });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eNow, eLen, baseUnitPerEpoch, epochProgress.leftSec]);
+
+  // ===== Stream tepat 1x per detik =====
   useEffect(() => {
     if (!active || (prelaunch && goLiveOn)) return;
-    if (epochRemainAmt <= 0 || epochRemainSec <= 0) return;
-    // baseline = rata-rata sisa/detik, lalu beri jitter (±40%)
-    const baseline = epochRemainAmt / epochRemainSec;
-    const jitter = 0.6 + Math.random() * 0.8; // 0.6 .. 1.4
-    let inc = baseline * jitter;
-    // jaga supaya sisa bisa habis tepat di akhir epoch:
-    if (inc > epochRemainAmt) inc = epochRemainAmt;
-    const nextAmt = +(epochRemainAmt - inc);
-    const nextSec = Math.max(0, epochRemainSec - 1);
+    if (showClaim) return; // berhenti sambil nunggu klaim
+    if (epochBudget.sec <= 0 || epochBudget.amt <= 0) return;
 
-    setEpochRemainAmt(nextAmt);
-    setEpochRemainSec(nextSec);
+    // Update atomik berbasis state sebelumnya (1 tick = 1 detik)
+    setEpochBudget((prev) => {
+      if (prev.sec <= 0 || prev.amt <= 0) return prev;
 
-    // tulis log (6 desimal biar halus)
-    addLog(`+${inc.toFixed(6)} Base Unit (left: ${nextAmt.toFixed(6)})`);
+      const baseline = prev.amt / prev.sec;        // rata-rata sisa per detik
+      const jitter = 0.85 + Math.random() * 0.3;   // 0.85 .. 1.15 → smooth
+      let inc = baseline * jitter;
+      if (inc > prev.amt) inc = prev.amt;
+
+      const next = { amt: prev.amt - inc, sec: prev.sec - 1 };
+      addLog(`+${inc.toFixed(6)} Base Unit (left: ${next.amt.toFixed(6)})`);
+      return next;
+    });
+    // jalan persis tiap 'now' (1 Hz), tak terpicu ulang oleh perubahan amt/sec
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [now, active, prelaunch, goLiveOn, epochRemainAmt, epochRemainSec]);
+  }, [now, active, prelaunch, goLiveOn, showClaim]);
 
-  // Setelah klaim sukses → sembunyikan tombol Claim
+  // Setelah klaim sukses → siap start lagi
   useEffect(() => {
     if (isSuccess && showClaim) {
       setShowClaim(false);
@@ -283,7 +289,7 @@ export default function Monitoring() {
             Cooldown: <span className="text-neutral-200">{String(cd ?? 0n)} epoch</span>
           </div>
 
-          {/* Tombol dinamis: Claim saat rollover, else Start/Stop */}
+          {/* Tombol dinamis: Claim saat rollover, selain itu Start/Stop */}
           {showClaim ? (
             <button
               onClick={onClaim}
@@ -313,7 +319,7 @@ export default function Monitoring() {
         {!!msg && <div className="text-xs text-emerald-400 pt-1">{msg}</div>}
       </div>
 
-      {/* Terminal: log terbaru di bawah + auto-scroll */}
+      {/* Terminal: terbaru di bawah + auto-scroll */}
       <div
         ref={terminalRef}
         className="bg-black/50 border border-neutral-800 rounded-lg p-3 font-mono text-xs text-green-400 space-y-1 h-32 overflow-y-auto"
