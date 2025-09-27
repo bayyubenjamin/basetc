@@ -27,6 +27,8 @@ const formatNumber = (num: number) => {
   return num.toString();
 };
 
+type ActionType = "start" | "claim" | null;
+
 export default function Monitoring() {
   const { address } = useAccount();
 
@@ -36,13 +38,15 @@ export default function Monitoring() {
   const [terminalLogs, setTerminalLogs] = useState<string[]>([]);
   const terminalRef = useRef<HTMLDivElement>(null);
 
-  // Budget stream (gabung jadi satu state supaya update atomik per detik)
+  // Mining stream budget (atomik per detik)
   const [epochBudget, setEpochBudget] = useState<{ amt: number; sec: number }>({
     amt: 0,
     sec: 0,
   });
   const [lastSeenEpoch, setLastSeenEpoch] = useState<bigint | undefined>(undefined);
-  const [showClaim, setShowClaim] = useState(false);
+
+  // Track aksi terakhir buat auto-refresh terarah
+  const [lastAction, setLastAction] = useState<ActionType>(null);
 
   // Ticker 1s
   useEffect(() => {
@@ -63,42 +67,178 @@ export default function Monitoring() {
   };
 
   // IDs
-  const basicId = useReadContract({ address: rigNftAddress as `0x${string}`, abi: rigNftABI as any, functionName: "BASIC" });
-  const proId = useReadContract({ address: rigNftAddress as `0x${string}`, abi: rigNftABI as any, functionName: "PRO" });
-  const legendId = useReadContract({ address: rigNftAddress as `0x${string}`, abi: rigNftABI as any, functionName: "LEGEND" });
+  const basicId = useReadContract({
+    address: rigNftAddress as `0x${string}`,
+    abi: rigNftABI as any,
+    functionName: "BASIC",
+  });
+  const proId = useReadContract({
+    address: rigNftAddress as `0x${string}`,
+    abi: rigNftABI as any,
+    functionName: "PRO",
+  });
+  const legendId = useReadContract({
+    address: rigNftAddress as `0x${string}`,
+    abi: rigNftABI as any,
+    functionName: "LEGEND",
+  });
 
   const BASIC = basicId.data as bigint | undefined;
   const PRO = proId.data as bigint | undefined;
   const LEGEND = legendId.data as bigint | undefined;
 
   // Balances
-  const basicBal = useReadContract({ address: rigNftAddress as `0x${string}`, abi: rigNftABI as any, functionName: "balanceOf", args: address && BASIC !== undefined ? [address, BASIC] : undefined, query: { enabled: Boolean(address && BASIC !== undefined) } });
-  const proBal = useReadContract({ address: rigNftAddress as `0x${string}`, abi: rigNftABI as any, functionName: "balanceOf", args: address && PRO !== undefined ? [address, PRO] : undefined, query: { enabled: Boolean(address && PRO !== undefined) } });
-  const legendBal = useReadContract({ address: rigNftAddress as `0x${string}`, abi: rigNftABI as any, functionName: "balanceOf", args: address && LEGEND !== undefined ? [address, LEGEND] : undefined, query: { enabled: Boolean(address && LEGEND !== undefined) } });
+  const basicBal = useReadContract({
+    address: rigNftAddress as `0x${string}`,
+    abi: rigNftABI as any,
+    functionName: "balanceOf",
+    args: address && BASIC !== undefined ? [address, BASIC] : undefined,
+    query: { enabled: Boolean(address && BASIC !== undefined) },
+  });
+  const proBal = useReadContract({
+    address: rigNftAddress as `0x${string}`,
+    abi: rigNftABI as any,
+    functionName: "balanceOf",
+    args: address && PRO !== undefined ? [address, PRO] : undefined,
+    query: { enabled: Boolean(address && PRO !== undefined) },
+  });
+  const legendBal = useReadContract({
+    address: rigNftAddress as `0x${string}`,
+    abi: rigNftABI as any,
+    functionName: "balanceOf",
+    args: address && LEGEND !== undefined ? [address, LEGEND] : undefined,
+    query: { enabled: Boolean(address && LEGEND !== undefined) },
+  });
 
   const countBasic = (basicBal.data as bigint | undefined) ?? 0n;
   const countPro = (proBal.data as bigint | undefined) ?? 0n;
   const countLegend = (legendBal.data as bigint | undefined) ?? 0n;
 
   // $BaseTC
-  const baseBal = useReadContract({ address: baseTcAddress as `0x${string}`, abi: baseTcABI as any, functionName: "balanceOf", args: address ? [address] : undefined, query: { enabled: Boolean(address) } });
+  const baseBal = useReadContract({
+    address: baseTcAddress as `0x${string}`,
+    abi: baseTcABI as any,
+    functionName: "balanceOf",
+    args: address ? [address] : undefined,
+    query: { enabled: Boolean(address) },
+  });
   const tokenReadable = useMemo(() => {
     const v = baseBal.data as bigint | undefined;
     return v ? Number(v) / 1e18 : 0;
   }, [baseBal.data]);
 
-  // GameCore reads
-  const epochNow = useReadContract({ address: gameCoreAddress as `0x${string}`, abi: gameCoreABI as any, functionName: "epochNow" });
-  const epochLength = useReadContract({ address: gameCoreAddress as `0x${string}`, abi: gameCoreABI as any, functionName: "epochLength" });
-  const startTime = useReadContract({ address: gameCoreAddress as `0x${string}`, abi: gameCoreABI as any, functionName: "startTime" });
-  const isPrelaunch = useReadContract({ address: gameCoreAddress as `0x${string}`, abi: gameCoreABI as any, functionName: "isPrelaunch" });
-  const goLive = useReadContract({ address: gameCoreAddress as `0x${string}`, abi: gameCoreABI as any, functionName: "goLive" });
-  const miningActive = useReadContract({ address: gameCoreAddress as `0x${string}`, abi: gameCoreABI as any, functionName: "miningActive", args: address ? [address] : undefined, query: { enabled: Boolean(address) } });
-  const lastToggleEpoch = useReadContract({ address: gameCoreAddress as `0x${string}`, abi: gameCoreABI as any, functionName: "lastToggleEpoch", args: address ? [address] : undefined, query: { enabled: Boolean(address) } });
-  const toggleCooldown = useReadContract({ address: gameCoreAddress as `0x${string}`, abi: gameCoreABI as any, functionName: "toggleCooldown" });
-  const hashrate = useReadContract({ address: gameCoreAddress as `0x${string}`, abi: gameCoreABI as any, functionName: "getHashrate", args: address ? [address] : undefined, query: { enabled: Boolean(address) } });
-  const baseUnit = useReadContract({ address: gameCoreAddress as `0x${string}`, abi: gameCoreABI as any, functionName: "getBaseUnit", args: address ? [address] : undefined, query: { enabled: Boolean(address) } });
-  const isSupreme = useReadContract({ address: gameCoreAddress as `0x${string}`, abi: gameCoreABI as any, functionName: "isSupreme", args: address ? [address] : undefined, query: { enabled: Boolean(address) } });
+  // GameCore reads (utama)
+  const epochNow = useReadContract({
+    address: gameCoreAddress as `0x${string}`,
+    abi: gameCoreABI as any,
+    functionName: "epochNow",
+  });
+  const epochLength = useReadContract({
+    address: gameCoreAddress as `0x${string}`,
+    abi: gameCoreABI as any,
+    functionName: "epochLength",
+  });
+  const startTime = useReadContract({
+    address: gameCoreAddress as `0x${string}`,
+    abi: gameCoreABI as any,
+    functionName: "startTime",
+  });
+  const isPrelaunch = useReadContract({
+    address: gameCoreAddress as `0x${string}`,
+    abi: gameCoreABI as any,
+    functionName: "isPrelaunch",
+  });
+  const goLive = useReadContract({
+    address: gameCoreAddress as `0x${string}`,
+    abi: gameCoreABI as any,
+    functionName: "goLive",
+  });
+  const miningActive = useReadContract({
+    address: gameCoreAddress as `0x${string}`,
+    abi: gameCoreABI as any,
+    functionName: "miningActive",
+    args: address ? [address] : undefined,
+    query: { enabled: Boolean(address) },
+  });
+  const lastToggleEpoch = useReadContract({
+    address: gameCoreAddress as `0x${string}`,
+    abi: gameCoreABI as any,
+    functionName: "lastToggleEpoch",
+    args: address ? [address] : undefined,
+    query: { enabled: Boolean(address) },
+  });
+  const toggleCooldown = useReadContract({
+    address: gameCoreAddress as `0x${string}`,
+    abi: gameCoreABI as any,
+    functionName: "toggleCooldown",
+  });
+  const hashrate = useReadContract({
+    address: gameCoreAddress as `0x${string}`,
+    abi: gameCoreABI as any,
+    functionName: "getHashrate",
+    args: address ? [address] : undefined,
+    query: { enabled: Boolean(address) },
+  });
+  const baseUnit = useReadContract({
+    address: gameCoreAddress as `0x${string}`,
+    abi: gameCoreABI as any,
+    functionName: "getBaseUnit",
+    args: address ? [address] : undefined,
+    query: { enabled: Boolean(address) },
+  });
+  const isSupreme = useReadContract({
+    address: gameCoreAddress as `0x${string}`,
+    abi: gameCoreABI as any,
+    functionName: "isSupreme",
+    args: address ? [address] : undefined,
+    query: { enabled: Boolean(address) },
+  });
+
+  // --- Refs untuk refetch cepat setelah tx sukses ---
+  const { refetch: refetchEpochNow } = epochNow as any;
+  const { refetch: refetchMiningActive } = miningActive as any;
+  const { refetch: refetchBaseUnit } = baseUnit as any;
+  const { refetch: refetchBaseBal } = baseBal as any;
+  const { refetch: refetchHashrate } = hashrate as any;
+
+  // ===== Claim-related reads (sesuai ABI) =====
+  const eNowBn = epochNow.data as bigint | undefined;
+  const claimEpoch = useMemo(() => {
+    if (!eNowBn || eNowBn === 0n) return undefined;
+    return eNowBn - 1n; // klaim epoch yang sudah selesai
+  }, [eNowBn]);
+
+  const finalizedPrev = useReadContract({
+    address: gameCoreAddress as `0x${string}`,
+    abi: gameCoreABI as any,
+    functionName: "finalized",
+    args: claimEpoch !== undefined ? [claimEpoch] : undefined,
+    query: { enabled: claimEpoch !== undefined },
+  });
+
+  const alreadyClaimed = useReadContract({
+    address: gameCoreAddress as `0x${string}`,
+    abi: gameCoreABI as any,
+    functionName: "claimed",
+    args: claimEpoch !== undefined && address ? [claimEpoch, address] : undefined,
+    query: { enabled: claimEpoch !== undefined && Boolean(address) },
+  });
+
+  const claimAmount = useReadContract({
+    address: gameCoreAddress as `0x${string}`,
+    abi: gameCoreABI as any,
+    functionName: "preview",
+    args: claimEpoch !== undefined && address ? [claimEpoch, address] : undefined,
+    query: { enabled: claimEpoch !== undefined && Boolean(address) },
+  });
+
+  const canClaim = useMemo(() => {
+    const fin = (finalizedPrev.data as boolean | undefined) ?? false;
+    const cl = (alreadyClaimed.data as boolean | undefined) ?? false;
+    const amtBn = (claimAmount.data as bigint | undefined) ?? 0n;
+    const amt = Number(formatUnits(amtBn, 18)); // asumsi 18 desimal untuk token reward
+    return Boolean(claimEpoch !== undefined && fin && !cl && amt > 0);
+  }, [claimEpoch, finalizedPrev.data, alreadyClaimed.data, claimAmount.data]);
 
   // Normalize
   const hrNum = useMemo(() => {
@@ -114,7 +254,6 @@ export default function Monitoring() {
   }, [baseUnit.data]);
 
   const active = Boolean((miningActive.data as boolean | undefined) ?? false);
-  const eNow = (epochNow.data as bigint | undefined) ?? undefined;
   const eLen = (epochLength.data as bigint | undefined) ?? undefined; // detik/epoch
   const sTime = (startTime.data as bigint | undefined) ?? undefined;
   const lastE = (lastToggleEpoch.data as bigint | undefined) ?? 0n;
@@ -143,26 +282,43 @@ export default function Monitoring() {
   }, [epochProgress.leftSec]);
 
   const canToggle = useMemo(() => {
+    const eNow = eNowBn;
     if (eNow === undefined) return false;
     if (prelaunch && goLiveOn) return false;
     return eNow >= lastE + cd;
-  }, [eNow, lastE, cd, prelaunch, goLiveOn]);
+  }, [eNowBn, lastE, cd, prelaunch, goLiveOn]);
 
   // TX
   const { writeContract, data: txHash, isPending, error } = useWriteContract();
-  const { isLoading: waitingReceipt, isSuccess } = useWaitForTransactionReceipt({ hash: txHash });
+  const { isLoading: waitingReceipt, isSuccess } = useWaitForTransactionReceipt({
+    hash: txHash,
+  });
 
+  // TX lifecycle messages + auto-refetch setelah sukses
   useEffect(() => {
     if (isSuccess) {
       setMsg("Transaksi berhasil.");
       addLog(`Success: Transaction confirmed.`);
+      // Auto-refresh reads penting supaya UI update tanpa reload
+      refetchEpochNow?.();
+      refetchMiningActive?.();
+      refetchBaseUnit?.();
+      refetchBaseBal?.();
+      refetchHashrate?.();
+      // Claim-related
+      (finalizedPrev as any)?.refetch?.();
+      (alreadyClaimed as any)?.refetch?.();
+      (claimAmount as any)?.refetch?.();
+      setLastAction(null);
     }
     if (error) {
       const e: any = error;
       const shortMsg = e?.shortMessage || e?.message || "Transaction failed";
       setMsg(shortMsg);
       addLog(`Error: ${shortMsg}`);
+      setLastAction(null);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSuccess, error]);
 
   useEffect(() => {
@@ -173,66 +329,87 @@ export default function Monitoring() {
 
   // Actions
   const onStart = () => {
-    if (!address) { setMsg("Connect wallet dulu."); return; }
-    if (prelaunch && goLiveOn) { setMsg("Prelaunch aktif. Tunggu epoch 1."); return; }
-    if (!canToggle) { setMsg("Masih cooldown. Coba lagi nanti."); return; }
+    if (!address) {
+      setMsg("Connect wallet dulu.");
+      return;
+    }
+    if (prelaunch && goLiveOn) {
+      setMsg("Prelaunch aktif. Tunggu epoch 1.");
+      return;
+    }
+    if (!canToggle) {
+      setMsg("Masih cooldown. Coba lagi nanti.");
+      return;
+    }
     setMsg("");
+    setLastAction("start");
     addLog("Sending start mining transaction...");
-    writeContract({ address: gameCoreAddress as `0x${string}`, abi: gameCoreABI as any, functionName: "startMining", args: [], account: address as `0x${string}`, chain: baseSepolia, chainId: BASE_CHAIN_ID });
+    writeContract({
+      address: gameCoreAddress as `0x${string}`,
+      abi: gameCoreABI as any,
+      functionName: "startMining",
+      args: [],
+      account: address as `0x${string}`,
+      chain: baseSepolia,
+      chainId: BASE_CHAIN_ID,
+    });
   };
 
-  const onStop = () => {
-    if (!address) { setMsg("Connect wallet dulu."); return; }
-    if (prelaunch && goLiveOn) { setMsg("Prelaunch aktif. Tunggu epoch 1."); return; }
-    if (!canToggle) { setMsg("Masih cooldown. Coba lagi nanti."); return; }
-    setMsg("");
-    addLog("Sending stop mining transaction...");
-    writeContract({ address: gameCoreAddress as `0x${string}`, abi: gameCoreABI as any, functionName: "stopMining", args: [], account: address as `0x${string}`, chain: baseSepolia, chainId: BASE_CHAIN_ID });
-  };
-
-  // TODO: ganti "claim" sesuai fungsi klaim di kontrakmu
+  // NOTE: sesuai ABI → claim(uint256 epoch, address user)
   const onClaim = () => {
-    if (!address) { setMsg("Connect wallet dulu."); return; }
+    if (!address) {
+      setMsg("Connect wallet dulu.");
+      return;
+    }
+    if (claimEpoch === undefined) {
+      setMsg("Epoch belum siap diklaim.");
+      return;
+    }
     setMsg("");
-    addLog("Claiming epoch rewards...");
-    writeContract({ address: gameCoreAddress as `0x${string}`, abi: gameCoreABI as any, functionName: "claim", args: [], account: address as `0x${string}`, chain: baseSepolia, chainId: BASE_CHAIN_ID });
+    setLastAction("claim");
+    addLog(`Claiming rewards for epoch #${String(claimEpoch)}...`);
+    writeContract({
+      address: gameCoreAddress as `0x${string}`,
+      abi: gameCoreABI as any,
+      functionName: "claim",
+      args: [claimEpoch, address],
+      account: address as `0x${string}`,
+      chain: baseSepolia,
+      chainId: BASE_CHAIN_ID,
+    });
   };
 
   const busy = isPending || waitingReceipt;
 
   // ===== Reset budget saat epoch berubah / halaman dibuka di tengah epoch =====
   useEffect(() => {
-    if (!eLen || !eNow) return;
+    if (!eLen || !eNowBn) return;
     const totalSec = Number(eLen);
     const leftSec = epochProgress.leftSec || totalSec;
 
-    // Jika ini epoch pertama yang dilihat user → jangan munculkan Claim.
-    // Kalau sebelumnya sudah melihat epoch dan sekarang berubah → munculkan Claim.
-    if (lastSeenEpoch !== undefined && eNow !== lastSeenEpoch) {
-      setShowClaim(true);
+    // Track epoch terlihat
+    if (lastSeenEpoch === undefined || eNowBn !== lastSeenEpoch) {
+      setLastSeenEpoch(eNowBn);
     }
-    setLastSeenEpoch(eNow);
 
-    // Budget sisa disesuaikan proporsional terhadap waktu tersisa
+    // Budget sisa proporsional waktu sisa
     const proportion = totalSec > 0 ? leftSec / totalSec : 0;
     const initAmt = baseUnitPerEpoch * proportion;
 
     setEpochBudget({ amt: initAmt, sec: leftSec });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [eNow, eLen, baseUnitPerEpoch, epochProgress.leftSec]);
+  }, [eNowBn, eLen, baseUnitPerEpoch, epochProgress.leftSec]);
 
-  // ===== Stream tepat 1x per detik =====
+  // ===== Stream tepat 1x per detik (random, terbudget) =====
   useEffect(() => {
     if (!active || (prelaunch && goLiveOn)) return;
-    if (showClaim) return; // berhenti sambil nunggu klaim
     if (epochBudget.sec <= 0 || epochBudget.amt <= 0) return;
 
-    // Update atomik berbasis state sebelumnya (1 tick = 1 detik)
     setEpochBudget((prev) => {
       if (prev.sec <= 0 || prev.amt <= 0) return prev;
 
-      const baseline = prev.amt / prev.sec;        // rata-rata sisa per detik
-      const jitter = 0.85 + Math.random() * 0.3;   // 0.85 .. 1.15 → smooth
+      const baseline = prev.amt / prev.sec;
+      const jitter = 0.85 + Math.random() * 0.3; // 0.85..1.15 smooth
       let inc = baseline * jitter;
       if (inc > prev.amt) inc = prev.amt;
 
@@ -240,18 +417,9 @@ export default function Monitoring() {
       addLog(`+${inc.toFixed(6)} Base Unit (left: ${next.amt.toFixed(6)})`);
       return next;
     });
-    // jalan persis tiap 'now' (1 Hz), tak terpicu ulang oleh perubahan amt/sec
+    // 1 Hz via 'now'
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [now, active, prelaunch, goLiveOn, showClaim]);
-
-  // Setelah klaim sukses → siap start lagi
-  useEffect(() => {
-    if (isSuccess && showClaim) {
-      setShowClaim(false);
-      addLog("Claim success. Ready for next epoch.");
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isSuccess]);
+  }, [now, active, prelaunch, goLiveOn]);
 
   // =========== UI ===========
   return (
@@ -260,27 +428,40 @@ export default function Monitoring() {
         <h1 className="text-xl font-semibold">Mining Console</h1>
         <p className="text-sm text-neutral-400">Real-time on-chain monitoring</p>
       </header>
-      
+
       <div className="bg-neutral-900/60 border border-neutral-800 rounded-xl p-4 space-y-3 shadow-lg">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <span className="text-xs text-neutral-400">Epoch</span>
-            <span className="text-lg font-semibold">{typeof eNow !== "undefined" ? String(eNow) : "—"}</span>
+            <span className="text-lg font-semibold">
+              {typeof eNowBn !== "undefined" ? String(eNowBn) : "—"}
+            </span>
           </div>
           <div className="flex items-center gap-2">
-            <span className={`px-2 py-1 rounded-md text-xs font-medium border ${prelaunch && goLiveOn ? "bg-yellow-500/10 text-yellow-300 border-yellow-500/30" : (active ? "bg-green-500/10 text-green-400 border-green-500/30" : "bg-neutral-800 text-neutral-300 border-neutral-700")}`}>
+            <span
+              className={`px-2 py-1 rounded-md text-xs font-medium border ${
+                prelaunch && goLiveOn
+                  ? "bg-yellow-500/10 text-yellow-300 border-yellow-500/30"
+                  : active
+                  ? "bg-green-500/10 text-green-400 border-green-500/30"
+                  : "bg-neutral-800 text-neutral-300 border-neutral-700"
+              }`}
+            >
               {prelaunch && goLiveOn ? "Prelaunch" : active ? "Active" : "Paused"}
             </span>
           </div>
         </div>
-        
+
         <div>
           <div className="flex items-center justify-between text-xs text-neutral-400 mb-1">
             <span>Epoch progress</span>
             <span>Next in {leftMMSS}</span>
           </div>
           <div className="h-2 w-full rounded-full bg-neutral-800 overflow-hidden">
-            <div className="h-full bg-blue-500 transition-all" style={{ width: `${epochProgress.pct}%` }}/>
+            <div
+              className="h-full bg-blue-500 transition-all"
+              style={{ width: `${epochProgress.pct}%` }}
+            />
           </div>
         </div>
 
@@ -289,30 +470,36 @@ export default function Monitoring() {
             Cooldown: <span className="text-neutral-200">{String(cd ?? 0n)} epoch</span>
           </div>
 
-          {/* Tombol dinamis: Claim saat rollover, selain itu Start/Stop */}
-          {showClaim ? (
+          {/* Tombol: saat ACTIVE → tampilkan CLAIM (abu-abu jika belum bisa).
+              Saat TIDAK ACTIVE → tampilkan START. Stop mining dihapus. */}
+          {active ? (
             <button
               onClick={onClaim}
-              disabled={!address || busy}
-              className={`px-4 py-2 rounded-lg text-sm font-medium text-white shadow ${!address || busy ? "bg-neutral-700 text-neutral-400" : "bg-indigo-600 hover:bg-indigo-500"}`}
+              disabled={!address || busy || !canClaim}
+              className={`px-4 py-2 rounded-lg text-sm font-medium text-white shadow ${
+                !address || busy || !canClaim
+                  ? "bg-neutral-700 text-neutral-400"
+                  : "bg-indigo-600 hover:bg-indigo-500"
+              }`}
+              title={
+                canClaim
+                  ? "Claim rewards"
+                  : "Belum bisa claim (menunggu epoch finalize / belum eligible)"
+              }
             >
-              {busy ? "Claiming…" : "Claim"}
-            </button>
-          ) : active ? (
-            <button
-              onClick={onStop}
-              disabled={!address || busy || !canToggle || (prelaunch && goLiveOn)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium text-white shadow ${!address || busy || !canToggle || (prelaunch && goLiveOn) ? "bg-neutral-700 text-neutral-400" : "bg-red-600 hover:bg-red-500"}`}
-            >
-              {busy ? "Stopping…" : "Stop Mining"}
+              {busy && lastAction === "claim" ? "Claiming…" : "Claim"}
             </button>
           ) : (
             <button
               onClick={onStart}
               disabled={!address || busy || !canToggle || (prelaunch && goLiveOn)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium text-white shadow ${!address || busy || !canToggle || (prelaunch && goLiveOn) ? "bg-neutral-700 text-neutral-400" : "bg-emerald-600 hover:bg-emerald-500"}`}
+              className={`px-4 py-2 rounded-lg text-sm font-medium text-white shadow ${
+                !address || busy || !canToggle || (prelaunch && goLiveOn)
+                  ? "bg-neutral-700 text-neutral-400"
+                  : "bg-emerald-600 hover:bg-emerald-500"
+              }`}
             >
-              {busy ? "Starting…" : "Start Mining"}
+              {busy && lastAction === "start" ? "Starting…" : "Start Mining"}
             </button>
           )}
         </div>
@@ -335,8 +522,13 @@ export default function Monitoring() {
         {/* Base Unit: 2 angka + tooltip exact */}
         <StatCardWithTooltip
           title="Base Unit"
-          valueShort={baseUnitPerEpoch.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          valueExact={baseUnitPerEpoch.toLocaleString("en-US", { minimumFractionDigits: 12 })}
+          valueShort={baseUnitPerEpoch.toLocaleString("en-US", {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          })}
+          valueExact={baseUnitPerEpoch.toLocaleString("en-US", {
+            minimumFractionDigits: 12,
+          })}
         />
         <StatCard title="$BaseTC" value={tokenReadable.toFixed(3)} />
       </div>
@@ -344,9 +536,24 @@ export default function Monitoring() {
       <div className="bg-neutral-900/60 border border-neutral-800 rounded-xl p-4 space-y-3">
         <h2 className="text-sm font-semibold">Your Rigs</h2>
         <div className="grid grid-cols-3 gap-3">
-          <RigCard tier="Basic" count={String(countBasic)} image="/img/basic.png" owned={countBasic > 0n} />
-          <RigCard tier="Pro" count={String(countPro)} image="/img/pro.png" owned={countPro > 0n} />
-          <RigCard tier="Legend" count={String(countLegend)} image="/img/legend.png" owned={countLegend > 0n} />
+          <RigCard
+            tier="Basic"
+            count={String(countBasic)}
+            image="/img/basic.png"
+            owned={countBasic > 0n}
+          />
+          <RigCard
+            tier="Pro"
+            count={String(countPro)}
+            image="/img/pro.png"
+            owned={countPro > 0n}
+          />
+          <RigCard
+            tier="Legend"
+            count={String(countLegend)}
+            image="/img/legend.png"
+            owned={countLegend > 0n}
+          />
         </div>
       </div>
     </div>
@@ -364,18 +571,30 @@ function StatCard({ title, value }: { title: string; value: string }) {
   );
 }
 
-function StatCardWithTooltip({ title, valueShort, valueExact }: { title: string; valueShort: string; valueExact: string }) {
+function StatCardWithTooltip({
+  title,
+  valueShort,
+  valueExact,
+}: {
+  title: string;
+  valueShort: string;
+  valueExact: string;
+}) {
   return (
     <div className="bg-neutral-900/60 border border-neutral-800 rounded-xl p-4 text-center shadow">
       <div className="relative inline-block group">
         <div className="text-lg font-semibold cursor-help">{valueShort}</div>
         {/* Tooltip di atas */}
-        <div className="absolute -top-2 left-1/2 -translate-x-1/2 -translate-y-full
+        <div
+          className="absolute -top-2 left-1/2 -translate-x-1/2 -translate-y-full
                         hidden group-hover:block bg-neutral-800 text-neutral-100 text-xs
-                        px-2 py-1 rounded shadow-lg whitespace-nowrap border border-neutral-700">
+                        px-2 py-1 rounded shadow-lg whitespace-nowrap border border-neutral-700"
+        >
           Exact: {valueExact}
-          <div className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-full
-                          w-0 h-0 border-l-4 border-r-4 border-t-4 border-l-transparent border-r-transparent border-t-neutral-800" />
+          <div
+            className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-full
+                          w-0 h-0 border-l-4 border-r-4 border-t-4 border-l-transparent border-r-transparent border-t-neutral-800"
+          />
         </div>
       </div>
       <div className="text-xs text-neutral-400 mt-1">{title}</div>
@@ -383,10 +602,24 @@ function StatCardWithTooltip({ title, valueShort, valueExact }: { title: string;
   );
 }
 
-function RigCard({ tier, count, image, owned }: { tier: string; count: string; image: string; owned: boolean }) {
+function RigCard({
+  tier,
+  count,
+  image,
+  owned,
+}: {
+  tier: string;
+  count: string;
+  image: string;
+  owned: boolean;
+}) {
   return (
     <div className="bg-neutral-800 rounded-lg p-3 text-center space-y-2">
-      <div className={`relative aspect-square transition-all duration-300 ${!owned ? "filter blur-sm opacity-50" : ""}`}>
+      <div
+        className={`relative aspect-square transition-all duration-300 ${
+          !owned ? "filter blur-sm opacity-50" : ""
+        }`}
+      >
         <Image src={image} alt={`${tier} Rig`} fill style={{ objectFit: "contain" }} />
       </div>
       <div>
