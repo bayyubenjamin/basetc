@@ -19,15 +19,21 @@ import {
   chainId as BASE_CHAIN_ID,
 } from "../lib/web3Config";
 
-// Fungsi untuk meringkas angka besar
-const formatNumber = (num: number) => {
-  if (num >= 1000000) {
-    return (num / 1000000).toFixed(1) + "M";
-  }
-  if (num >= 1000) {
-    return (num / 1000).toFixed(1) + "K";
-  }
-  return num.toString();
+// --- FUNGSI BARU UNTUK FORMAT ANGKA (LEBIH BAIK) ---
+const formatNumber = (num: number): string => {
+  if (num === 0) return "0";
+  if (num < 1000) return num.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 1 });
+
+  const units = ["K", "M", "G", "T", "P", "E"];
+  const tier = Math.floor(Math.log10(num) / 3) | 0;
+
+  if (tier === 0) return String(num);
+
+  const unit = units[tier - 1];
+  const scaled = num / Math.pow(1000, tier);
+
+  // Menghapus .00 jika tidak ada desimal
+  return scaled.toFixed(2).replace(/\.0+$/, "") + unit;
 };
 
 export default function Monitoring() {
