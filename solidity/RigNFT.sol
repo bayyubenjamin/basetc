@@ -8,6 +8,10 @@ import "@openzeppelin/contracts/utils/Pausable.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 import "@openzeppelin/contracts/utils/Base64.sol";
 
+interface IGameCoreHook {
+    function onRigBalanceWillChange(address user) external;
+}
+
 contract RigNFT is ERC1155, ERC1155Supply, AccessControl, Pausable {
     using Strings for uint256;
 
@@ -22,7 +26,7 @@ contract RigNFT is ERC1155, ERC1155Supply, AccessControl, Pausable {
     bytes32 public constant BURNER_ROLE      = keccak256("BURNER_ROLE");
     bytes32 public constant PAUSER_ROLE      = keccak256("PAUSER_ROLE");
 
-    // --- Supply Caps for Legend Tier (Diperbarui) ---
+    // --- Supply Caps for Legend Tier ---
     uint256 public constant LEGEND_TOTAL_CAP = 3000;
     uint256 public constant LEGEND_SALE_CAP  = 1500;
     uint256 public constant LEGEND_GAME_CAP  = 1500;
@@ -30,35 +34,47 @@ contract RigNFT is ERC1155, ERC1155Supply, AccessControl, Pausable {
     uint256 public legendSaleMinted;
     uint256 public legendGameMinted;
 
-    // --- Metadata: Menyimpan URL gambar dari Pinata ---
+    // --- Metadata (Pinata URLs) ---
     string private basicImageURI;
     string private proImageURI;
     string private legendImageURI;
 
-    // Event untuk melacak minting setiap tier
+    // --- GameCore Hook ---
+    address public gameCore;
+    event GameCoreSet(address indexed gameCore);
+
+    // Event mint
     event RigMinted(address indexed to, uint256 indexed tierId, uint256 amount, string tierName);
 
     constructor() ERC1155("") {
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(PAUSER_ROLE, msg.sender);
 
-        // Langsung set URL gambar dari Pinata saat kontrak di-deploy
-        basicImageURI = "https://amethyst-elegant-spider-17.mypinata.cloud/ipfs/bafkreiewdqrirz76f2a7vcesiobufbvvjc4okjcagdzrmqq5l2f2d7kneq";
-        proImageURI = "https://amethyst-elegant-spider-17.mypinata.cloud/ipfs/bafkreibt6czouhp4uxmh6zn3ggy44x4gytssjw3m4jyhn5k4mvhuabptdq";
+        basicImageURI  = "https://amethyst-elegant-spider-17.mypinata.cloud/ipfs/bafkreiewdqrirz76f2a7vcesiobufbvvjc4okjcagdzrmqq5l2f2d7kneq";
+        proImageURI    = "https://amethyst-elegant-spider-17.mypinata.cloud/ipfs/bafkreibt6czouhp4uxmh6zn3ggy44x4gytssjw3m4jyhn5k4mvhuabptdq";
         legendImageURI = "https://amethyst-elegant-spider-17.mypinata.cloud/ipfs/bafkreib74sdvzq7uiw7kg5ljizr4hanrj34enyzkyvbrloozwxafz2mowu";
     }
 
-    // ---------- Admin Functions ----------
-    function setImageURIs(string calldata newBasicURI, string calldata newProURI, string calldata newLegendURI) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        basicImageURI = newBasicURI;
-        proImageURI = newProURI;
+    // ---------- Admin ----------
+    function setImageURIs(string calldata newBasicURI, string calldata newProURI, string calldata newLegendURI)
+        external
+        onlyRole(DEFAULT_ADMIN_ROLE)
+    {
+        basicImageURI  = newBasicURI;
+        proImageURI    = newProURI;
         legendImageURI = newLegendURI;
+    }
+
+    function setGameCore(address _gameCore) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(_gameCore != address(0), "ZERO_ADDR");
+        gameCore = _gameCore;
+        emit GameCoreSet(_gameCore);
     }
 
     function pause() external onlyRole(PAUSER_ROLE) { _pause(); }
     function unpause() external onlyRole(PAUSER_ROLE) { _unpause(); }
 
-    // ---------- Minting Functions ----------
+    // ---------- Minting ----------
     function mintBySale(address to, uint256 id, uint256 amount) external onlyRole(SALE_MINTER_ROLE) {
         if (id == LEGEND) {
             require(legendSaleMinted + amount <= LEGEND_SALE_CAP, "LEGEND sale cap exceeded");
@@ -79,40 +95,28 @@ contract RigNFT is ERC1155, ERC1155Supply, AccessControl, Pausable {
         emit RigMinted(to, id, amount, _getTierNameById(id));
     }
 
-    // ---------- Burn Function ----------
+    // ---------- Burn ----------
     function burnFrom(address account, uint256 id, uint256 amount) external onlyRole(BURNER_ROLE) {
         _burn(account, id, amount);
     }
 
-    // ---------- Metadata URI (Final Version) ----------
+    // ---------- Metadata ----------
     function uri(uint256 id) public view override returns (string memory) {
         (string memory tier, string memory image) = _meta(id);
-
         bytes memory json = abi.encodePacked(
             '{"name":"BaseTC Rig - ', tier, '",',
             '"description":"Mining rig NFT for BaseTC game.",',
             '"image":"', image, '",',
             '"attributes":[{"trait_type":"Tier","value":"', tier, '"}]}'
         );
-
-        return string(
-            abi.encodePacked(
-                "data:application/json;base64,",
-                Base64.encode(json)
-            )
-        );
+        return string(abi.encodePacked("data:application/json;base64,", Base64.encode(json)));
     }
 
     function _meta(uint256 id) internal view returns (string memory tier, string memory image) {
-        if (id == BASIC) {
-            return ("BASIC", basicImageURI);
-        } else if (id == PRO) {
-            return ("PRO", proImageURI);
-        } else if (id == LEGEND) {
-            return ("LEGEND", legendImageURI);
-        } else {
-            revert("URIQueryForNonexistentToken");
-        }
+        if (id == BASIC)  return ("BASIC",  basicImageURI);
+        if (id == PRO)    return ("PRO",    proImageURI);
+        if (id == LEGEND) return ("LEGEND", legendImageURI);
+        revert("URIQueryForNonexistentToken");
     }
 
     function _getTierNameById(uint256 id) internal pure returns (string memory) {
@@ -122,7 +126,8 @@ contract RigNFT is ERC1155, ERC1155Supply, AccessControl, Pausable {
         return "UNKNOWN";
     }
 
-    // ---------- Hooks & Interface Support ----------
+    // ---------- Hooks ----------
+    // OZ v5 pattern: _update dipanggil untuk mint/burn/transfer
     function _update(
         address from,
         address to,
@@ -133,6 +138,18 @@ contract RigNFT is ERC1155, ERC1155Supply, AccessControl, Pausable {
         override(ERC1155, ERC1155Supply)
         whenNotPaused
     {
+        // PANGGIL HOOK KE GameCore **SEBELUM** saldo berubah
+        // - from != address(0)  => transfer/burn: beritahu balance akan berkurang
+        // - to   != address(0)  => transfer/mint: beritahu balance akan bertambah
+        if (gameCore != address(0) && from != to) {
+            if (from != address(0)) {
+                IGameCoreHook(gameCore).onRigBalanceWillChange(from);
+            }
+            if (to != address(0)) {
+                IGameCoreHook(gameCore).onRigBalanceWillChange(to);
+            }
+        }
+
         super._update(from, to, ids, amounts);
     }
 
@@ -145,3 +162,4 @@ contract RigNFT is ERC1155, ERC1155Supply, AccessControl, Pausable {
         return super.supportsInterface(interfaceId);
     }
 }
+

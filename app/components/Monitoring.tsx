@@ -20,6 +20,12 @@ import {
 } from "../lib/web3Config";
 import { formatUnits } from "viem";
 
+// ======================
+// Util & Constants
+// ======================
+const RELAYER_ENDPOINT = "/api/sign-user-action"; // backend harus mengembalikan { signature }
+type ActionType = "start" | "claim" | null;
+
 // Ringkas angka besar (untuk Hashrate)
 const formatNumber = (num: number) => {
   if (num >= 1_000_000) return (num / 1_000_000).toFixed(1) + "M";
@@ -27,10 +33,38 @@ const formatNumber = (num: number) => {
   return num.toString();
 };
 
-type ActionType = "start" | "claim" | null;
+// Minta signature dari relayer (user bayar gas, relayer hanya otorisasi)
+async function getRelayerSig(params: {
+  user: `0x${string}`;
+  action: "start" | "stop" | "claim";
+  nonce: bigint;
+  deadline: bigint;
+  chainId: number;
+  verifyingContract: `0x${string}`;
+}): Promise<string> {
+  const resp = await fetch(RELAYER_ENDPOINT, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      user: params.user,
+      action: params.action,
+      nonce: params.nonce.toString(),
+      deadline: params.deadline.toString(),
+      chainId: params.chainId,
+      verifyingContract: params.verifyingContract,
+    }),
+  });
+  if (!resp.ok) {
+    const text = await resp.text();
+    throw new Error(`Relayer refused: ${text}`);
+  }
+  const { signature } = await resp.json();
+  if (!signature) throw new Error("No signature returned by relayer");
+  return signature as string;
+}
 
 export default function Monitoring() {
-  const { address } = useAccount();
+  const { address, chainId } = useAccount();
 
   // UI state
   const [msg, setMsg] = useState("");
@@ -38,14 +72,14 @@ export default function Monitoring() {
   const [terminalLogs, setTerminalLogs] = useState<string[]>([]);
   const terminalRef = useRef<HTMLDivElement>(null);
 
-  // Mining stream budget (atomik per detik)
+  // Mining stream budget (atomik per detik; untuk animasi terminal)
   const [epochBudget, setEpochBudget] = useState<{ amt: number; sec: number }>({
     amt: 0,
     sec: 0,
   });
   const [lastSeenEpoch, setLastSeenEpoch] = useState<bigint | undefined>(undefined);
 
-  // Track aksi terakhir buat auto-refresh terarah
+  // Track aksi terakhir buat auto-label tombol
   const [lastAction, setLastAction] = useState<ActionType>(null);
 
   // Ticker 1s
@@ -54,7 +88,7 @@ export default function Monitoring() {
     return () => clearInterval(t);
   }, []);
 
-  // Auto-scroll ke log terbaru (bawah)
+  // Auto-scroll terminal ke bawah
   useEffect(() => {
     if (terminalRef.current) {
       terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
@@ -66,7 +100,9 @@ export default function Monitoring() {
     setTerminalLogs((prev) => [...prev, `[${timestamp}] ${message}`].slice(-200));
   };
 
-  // IDs
+  // ======================
+  // NFT IDs & Balances
+  // ======================
   const basicId = useReadContract({
     address: rigNftAddress as `0x${string}`,
     abi: rigNftABI as any,
@@ -87,7 +123,6 @@ export default function Monitoring() {
   const PRO = proId.data as bigint | undefined;
   const LEGEND = legendId.data as bigint | undefined;
 
-  // Balances
   const basicBal = useReadContract({
     address: rigNftAddress as `0x${string}`,
     abi: rigNftABI as any,
@@ -114,7 +149,9 @@ export default function Monitoring() {
   const countPro = (proBal.data as bigint | undefined) ?? 0n;
   const countLegend = (legendBal.data as bigint | undefined) ?? 0n;
 
-  // $BaseTC
+  // ======================
+  // $BaseTC Balance
+  // ======================
   const baseBal = useReadContract({
     address: baseTcAddress as `0x${string}`,
     abi: baseTcABI as any,
@@ -127,7 +164,9 @@ export default function Monitoring() {
     return v ? Number(v) / 1e18 : 0;
   }, [baseBal.data]);
 
-  // GameCore reads (utama)
+  // ======================
+  // GameCore Reads (ABI terbaru)
+  // ======================
   const epochNow = useReadContract({
     address: gameCoreAddress as `0x${string}`,
     abi: gameCoreABI as any,
@@ -153,6 +192,7 @@ export default function Monitoring() {
     abi: gameCoreABI as any,
     functionName: "goLive",
   });
+
   const miningActive = useReadContract({
     address: gameCoreAddress as `0x${string}`,
     abi: gameCoreABI as any,
@@ -160,6 +200,7 @@ export default function Monitoring() {
     args: address ? [address] : undefined,
     query: { enabled: Boolean(address) },
   });
+
   const lastToggleEpoch = useReadContract({
     address: gameCoreAddress as `0x${string}`,
     abi: gameCoreABI as any,
@@ -167,11 +208,13 @@ export default function Monitoring() {
     args: address ? [address] : undefined,
     query: { enabled: Boolean(address) },
   });
+
   const toggleCooldown = useReadContract({
     address: gameCoreAddress as `0x${string}`,
     abi: gameCoreABI as any,
     functionName: "toggleCooldown",
   });
+
   const hashrate = useReadContract({
     address: gameCoreAddress as `0x${string}`,
     abi: gameCoreABI as any,
@@ -179,6 +222,7 @@ export default function Monitoring() {
     args: address ? [address] : undefined,
     query: { enabled: Boolean(address) },
   });
+
   const baseUnit = useReadContract({
     address: gameCoreAddress as `0x${string}`,
     abi: gameCoreABI as any,
@@ -186,61 +230,54 @@ export default function Monitoring() {
     args: address ? [address] : undefined,
     query: { enabled: Boolean(address) },
   });
-  const isSupreme = useReadContract({
+
+  // NEW: pending reward (accumulator)
+  const pendingRw = useReadContract({
     address: gameCoreAddress as `0x${string}`,
     abi: gameCoreABI as any,
-    functionName: "isSupreme",
+    functionName: "pending",
     args: address ? [address] : undefined,
     query: { enabled: Boolean(address) },
   });
 
-  // --- Refs untuk refetch cepat setelah tx sukses ---
+  // NEW: sessionEndAt (untuk ritual harian auto-stop)
+  const sessionEndAt = useReadContract({
+    address: gameCoreAddress as `0x${string}`,
+    abi: gameCoreABI as any,
+    functionName: "sessionEndAt",
+    args: address ? [address] : undefined,
+    query: { enabled: Boolean(address) },
+  });
+
+  // NEW: nonces untuk WithSig (dibaca saat butuh)
+  const userNonce = useReadContract({
+    address: gameCoreAddress as `0x${string}`,
+    abi: gameCoreABI as any,
+    functionName: "nonces",
+    args: address ? [address] : undefined,
+    query: { enabled: Boolean(address) },
+  });
+
+  // Refs buat refetch setelah tx sukses
   const { refetch: refetchEpochNow } = epochNow as any;
   const { refetch: refetchMiningActive } = miningActive as any;
   const { refetch: refetchBaseUnit } = baseUnit as any;
   const { refetch: refetchBaseBal } = baseBal as any;
   const { refetch: refetchHashrate } = hashrate as any;
+  const { refetch: refetchPending } = pendingRw as any;
+  const { refetch: refetchSessionEnd } = sessionEndAt as any;
+  const { refetch: refetchNonce } = userNonce as any;
 
-  // ===== Claim-related reads (sesuai ABI) =====
+  // Normalize & derived states
   const eNowBn = epochNow.data as bigint | undefined;
-  const claimEpoch = useMemo(() => {
-    if (!eNowBn || eNowBn === 0n) return undefined;
-    return eNowBn - 1n; // klaim epoch yang sudah selesai
-  }, [eNowBn]);
+  const eLen = (epochLength.data as bigint | undefined) ?? undefined;
+  const sTime = (startTime.data as bigint | undefined) ?? undefined;
+  const lastE = (lastToggleEpoch.data as bigint | undefined) ?? 0n;
+  const cd = (toggleCooldown.data as bigint | undefined) ?? 0n;
+  const prelaunch = Boolean((isPrelaunch.data as boolean | undefined) ?? false);
+  const goLiveOn = Boolean((goLive.data as boolean | undefined) ?? false);
+  const active = Boolean((miningActive.data as boolean | undefined) ?? false);
 
-  const finalizedPrev = useReadContract({
-    address: gameCoreAddress as `0x${string}`,
-    abi: gameCoreABI as any,
-    functionName: "finalized",
-    args: claimEpoch !== undefined ? [claimEpoch] : undefined,
-    query: { enabled: claimEpoch !== undefined },
-  });
-
-  const alreadyClaimed = useReadContract({
-    address: gameCoreAddress as `0x${string}`,
-    abi: gameCoreABI as any,
-    functionName: "claimed",
-    args: claimEpoch !== undefined && address ? [claimEpoch, address] : undefined,
-    query: { enabled: claimEpoch !== undefined && Boolean(address) },
-  });
-
-  const claimAmount = useReadContract({
-    address: gameCoreAddress as `0x${string}`,
-    abi: gameCoreABI as any,
-    functionName: "preview",
-    args: claimEpoch !== undefined && address ? [claimEpoch, address] : undefined,
-    query: { enabled: claimEpoch !== undefined && Boolean(address) },
-  });
-
-  const canClaim = useMemo(() => {
-    const fin = (finalizedPrev.data as boolean | undefined) ?? false;
-    const cl = (alreadyClaimed.data as boolean | undefined) ?? false;
-    const amtBn = (claimAmount.data as bigint | undefined) ?? 0n;
-    const amt = Number(formatUnits(amtBn, 18)); // asumsi 18 desimal untuk token reward
-    return Boolean(claimEpoch !== undefined && fin && !cl && amt > 0);
-  }, [claimEpoch, finalizedPrev.data, alreadyClaimed.data, claimAmount.data]);
-
-  // Normalize
   const hrNum = useMemo(() => {
     const v = hashrate.data as bigint | undefined;
     return v ? Number(v) : 0;
@@ -250,16 +287,16 @@ export default function Monitoring() {
   const baseUnitPerEpoch = useMemo(() => {
     const v = baseUnit.data as bigint | undefined;
     if (!v) return 0;
-    return Number(formatUnits(v, 18)); // contoh: 1.665 (5 Basic)
+    return Number(formatUnits(v, 18)); // contoh: 1.665
   }, [baseUnit.data]);
 
-  const active = Boolean((miningActive.data as boolean | undefined) ?? false);
-  const eLen = (epochLength.data as bigint | undefined) ?? undefined; // detik/epoch
-  const sTime = (startTime.data as bigint | undefined) ?? undefined;
-  const lastE = (lastToggleEpoch.data as bigint | undefined) ?? 0n;
-  const cd = (toggleCooldown.data as bigint | undefined) ?? 0n;
-  const prelaunch = Boolean((isPrelaunch.data as boolean | undefined) ?? false);
-  const goLiveOn = Boolean((goLive.data as boolean | undefined) ?? false);
+  // Pending amount (enable claim jika >0)
+  const pendingAmt = useMemo(() => {
+    const v = pendingRw.data as bigint | undefined;
+    return v ? Number(formatUnits(v, 18)) : 0;
+  }, [pendingRw.data]);
+
+  const canClaim = pendingAmt > 0;
 
   // Epoch progress & ETA
   const epochProgress = useMemo(() => {
@@ -288,27 +325,26 @@ export default function Monitoring() {
     return eNow >= lastE + cd;
   }, [eNowBn, lastE, cd, prelaunch, goLiveOn]);
 
-  // TX
+  // ======================
+  // TX (user pays gas)
+  // ======================
   const { writeContract, data: txHash, isPending, error } = useWriteContract();
-  const { isLoading: waitingReceipt, isSuccess } = useWaitForTransactionReceipt({
-    hash: txHash,
-  });
+  const { isLoading: waitingReceipt, isSuccess } = useWaitForTransactionReceipt({ hash: txHash });
 
-  // TX lifecycle messages + auto-refetch setelah sukses
+  // TX lifecycle
   useEffect(() => {
     if (isSuccess) {
       setMsg("Transaksi berhasil.");
       addLog(`Success: Transaction confirmed.`);
-      // Auto-refresh reads penting supaya UI update tanpa reload
+      // Refresh semua read penting
       refetchEpochNow?.();
       refetchMiningActive?.();
       refetchBaseUnit?.();
       refetchBaseBal?.();
       refetchHashrate?.();
-      // Claim-related
-      (finalizedPrev as any)?.refetch?.();
-      (alreadyClaimed as any)?.refetch?.();
-      (claimAmount as any)?.refetch?.();
+      refetchPending?.();
+      refetchSessionEnd?.();
+      refetchNonce?.();
       setLastAction(null);
     }
     if (error) {
@@ -327,80 +363,104 @@ export default function Monitoring() {
     return () => clearTimeout(t);
   }, [msg]);
 
-  // Actions
-  const onStart = () => {
-    if (!address) {
-      setMsg("Connect wallet dulu.");
-      return;
+  // ======================
+  // Actions (WithSig)
+  // ======================
+  const onStart = async () => {
+    if (!address) return setMsg("Connect wallet dulu.");
+    if (prelaunch && goLiveOn) return setMsg("Prelaunch aktif. Tunggu epoch 1.");
+    if (!canToggle) return setMsg("Masih cooldown. Coba lagi nanti.");
+
+    try {
+      setMsg("");
+      setLastAction("start");
+      addLog("Requesting relayer signature for START...");
+      const nonce = (userNonce.data as bigint | undefined) ?? 0n;
+      const deadline = BigInt(Math.floor(Date.now() / 1000) + 15 * 60);
+      const relayerSig = await getRelayerSig({
+        user: address as `0x${string}`,
+        action: "start",
+        nonce,
+        deadline,
+        chainId: chainId ?? BASE_CHAIN_ID,
+        verifyingContract: gameCoreAddress as `0x${string}`,
+      });
+
+      addLog("Sending startMiningWithSig...");
+      writeContract({
+        address: gameCoreAddress as `0x${string}`,
+        abi: gameCoreABI as any,
+        functionName: "startMiningWithSig",
+        args: [address, nonce, deadline, relayerSig],
+        account: address as `0x${string}`,
+        chain: baseSepolia,
+        chainId: BASE_CHAIN_ID,
+      });
+    } catch (e: any) {
+      setLastAction(null);
+      const m = e?.message || "Failed to start";
+      setMsg(m);
+      addLog(`Error: ${m}`);
     }
-    if (prelaunch && goLiveOn) {
-      setMsg("Prelaunch aktif. Tunggu epoch 1.");
-      return;
-    }
-    if (!canToggle) {
-      setMsg("Masih cooldown. Coba lagi nanti.");
-      return;
-    }
-    setMsg("");
-    setLastAction("start");
-    addLog("Sending start mining transaction...");
-    writeContract({
-      address: gameCoreAddress as `0x${string}`,
-      abi: gameCoreABI as any,
-      functionName: "startMining",
-      args: [],
-      account: address as `0x${string}`,
-      chain: baseSepolia,
-      chainId: BASE_CHAIN_ID,
-    });
   };
 
-  // NOTE: sesuai ABI → claim(uint256 epoch, address user)
-  const onClaim = () => {
-    if (!address) {
-      setMsg("Connect wallet dulu.");
-      return;
+  // Kamu minta stop mining dihapus; tinggal Claim
+  const onClaim = async () => {
+    if (!address) return setMsg("Connect wallet dulu.");
+    if (!canClaim) return setMsg("Belum ada pending reward untuk claim.");
+
+    try {
+      setMsg("");
+      setLastAction("claim");
+      addLog("Requesting relayer signature for CLAIM...");
+      const nonce = (userNonce.data as bigint | undefined) ?? 0n;
+      const deadline = BigInt(Math.floor(Date.now() / 1000) + 15 * 60);
+      const relayerSig = await getRelayerSig({
+        user: address as `0x${string}`,
+        action: "claim",
+        nonce,
+        deadline,
+        chainId: chainId ?? BASE_CHAIN_ID,
+        verifyingContract: gameCoreAddress as `0x${string}`,
+      });
+
+      addLog("Sending claimWithSig...");
+      writeContract({
+        address: gameCoreAddress as `0x${string}`,
+        abi: gameCoreABI as any,
+        functionName: "claimWithSig",
+        args: [address, nonce, deadline, relayerSig],
+        account: address as `0x${string}`,
+        chain: baseSepolia,
+        chainId: BASE_CHAIN_ID,
+      });
+    } catch (e: any) {
+      setLastAction(null);
+      const m = e?.message || "Failed to claim";
+      setMsg(m);
+      addLog(`Error: ${m}`);
     }
-    if (claimEpoch === undefined) {
-      setMsg("Epoch belum siap diklaim.");
-      return;
-    }
-    setMsg("");
-    setLastAction("claim");
-    addLog(`Claiming rewards for epoch #${String(claimEpoch)}...`);
-    writeContract({
-      address: gameCoreAddress as `0x${string}`,
-      abi: gameCoreABI as any,
-      functionName: "claim",
-      args: [claimEpoch, address],
-      account: address as `0x${string}`,
-      chain: baseSepolia,
-      chainId: BASE_CHAIN_ID,
-    });
   };
 
   const busy = isPending || waitingReceipt;
 
-  // ===== Reset budget saat epoch berubah / halaman dibuka di tengah epoch =====
+  // ===== Reset budget saat epoch berubah / atau buka di tengah epoch =====
   useEffect(() => {
     if (!eLen || !eNowBn) return;
     const totalSec = Number(eLen);
     const leftSec = epochProgress.leftSec || totalSec;
 
-    // Track epoch terlihat
     if (lastSeenEpoch === undefined || eNowBn !== lastSeenEpoch) {
       setLastSeenEpoch(eNowBn);
     }
 
-    // Budget sisa proporsional waktu sisa
     const proportion = totalSec > 0 ? leftSec / totalSec : 0;
     const initAmt = baseUnitPerEpoch * proportion;
-
     setEpochBudget({ amt: initAmt, sec: leftSec });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [eNowBn, eLen, baseUnitPerEpoch, epochProgress.leftSec]);
 
-  // ===== Stream tepat 1x per detik (random, terbudget) =====
+  // ===== Stream tepat 1x per detik (randomized namun total pas) =====
   useEffect(() => {
     if (!active || (prelaunch && goLiveOn)) return;
     if (epochBudget.sec <= 0 || epochBudget.amt <= 0) return;
@@ -409,7 +469,7 @@ export default function Monitoring() {
       if (prev.sec <= 0 || prev.amt <= 0) return prev;
 
       const baseline = prev.amt / prev.sec;
-      const jitter = 0.85 + Math.random() * 0.3; // 0.85..1.15 smooth
+      const jitter = 0.85 + Math.random() * 0.3; // 0.85..1.15
       let inc = baseline * jitter;
       if (inc > prev.amt) inc = prev.amt;
 
@@ -417,7 +477,6 @@ export default function Monitoring() {
       addLog(`+${inc.toFixed(6)} Base Unit (left: ${next.amt.toFixed(6)})`);
       return next;
     });
-    // 1 Hz via 'now'
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [now, active, prelaunch, goLiveOn]);
 
@@ -470,8 +529,7 @@ export default function Monitoring() {
             Cooldown: <span className="text-neutral-200">{String(cd ?? 0n)} epoch</span>
           </div>
 
-          {/* Tombol: saat ACTIVE → tampilkan CLAIM (abu-abu jika belum bisa).
-              Saat TIDAK ACTIVE → tampilkan START. Stop mining dihapus. */}
+          {/* Saat ACTIVE → tombol Claim (abu-abu jika pending=0). Saat tidak active → Start */}
           {active ? (
             <button
               onClick={onClaim}
@@ -481,11 +539,7 @@ export default function Monitoring() {
                   ? "bg-neutral-700 text-neutral-400"
                   : "bg-indigo-600 hover:bg-indigo-500"
               }`}
-              title={
-                canClaim
-                  ? "Claim rewards"
-                  : "Belum bisa claim (menunggu epoch finalize / belum eligible)"
-              }
+              title={canClaim ? "Claim rewards" : "Belum ada reward yang dapat diklaim"}
             >
               {busy && lastAction === "claim" ? "Claiming…" : "Claim"}
             </button>
