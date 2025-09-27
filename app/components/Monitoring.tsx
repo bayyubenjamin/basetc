@@ -7,6 +7,7 @@ import {
   useReadContract,
   useWriteContract,
   useWaitForTransactionReceipt,
+  useWatchContractEvent,
 } from "wagmi";
 import { baseSepolia } from "viem/chains";
 import {
@@ -331,6 +332,9 @@ export default function Monitoring() {
   const { writeContract, data: txHash, isPending, error } = useWriteContract();
   const { isLoading: waitingReceipt, isSuccess } = useWaitForTransactionReceipt({ hash: txHash });
 
+  // Busy indicator yang tidak ngegantung
+  const busy = Boolean((isPending || waitingReceipt) && lastAction !== null);
+
   // TX lifecycle
   useEffect(() => {
     if (isSuccess) {
@@ -364,10 +368,46 @@ export default function Monitoring() {
   }, [msg]);
 
   // ======================
+  // Watch on-chain Claim event → auto-update UI
+  // ======================
+  useWatchContractEvent({
+    address: gameCoreAddress as `0x${string}`,
+    abi: gameCoreABI as any,
+    eventName: "Claimed",
+    onLogs(logs) {
+      const mine = logs.find(
+        (l: any) =>
+          (l.args?.user as string)?.toLowerCase() ===
+          (address ?? "").toLowerCase()
+      );
+      if (!mine) return;
+
+      const amt = Number(formatUnits(mine.args?.amount as bigint, 18));
+      addLog(
+        `Claim success for epoch #${String(mine.args?.e)}: +${amt.toFixed(6)}`
+      );
+
+      refetchEpochNow?.();
+      refetchMiningActive?.();
+      refetchBaseUnit?.();
+      refetchBaseBal?.();
+      refetchHashrate?.();
+      refetchPending?.();
+      refetchSessionEnd?.();
+      refetchNonce?.();
+
+      setLastAction(null);
+      setMsg("Transaksi berhasil.");
+    },
+  });
+
+  // ======================
   // Actions (WithSig)
   // ======================
   const onStart = async () => {
     if (!address) return setMsg("Connect wallet dulu.");
+    if (chainId && chainId !== BASE_CHAIN_ID)
+      return setMsg("Please switch to Base Sepolia.");
     if (prelaunch && goLiveOn) return setMsg("Prelaunch aktif. Tunggu epoch 1.");
     if (!canToggle) return setMsg("Masih cooldown. Coba lagi nanti.");
 
@@ -407,6 +447,8 @@ export default function Monitoring() {
   // Kamu minta stop mining dihapus; tinggal Claim
   const onClaim = async () => {
     if (!address) return setMsg("Connect wallet dulu.");
+    if (chainId && chainId !== BASE_CHAIN_ID)
+      return setMsg("Please switch to Base Sepolia.");
     if (!canClaim) return setMsg("Belum ada pending reward untuk claim.");
 
     try {
@@ -441,8 +483,6 @@ export default function Monitoring() {
       addLog(`Error: ${m}`);
     }
   };
-
-  const busy = isPending || waitingReceipt;
 
   // ===== Reset budget saat epoch berubah / atau buka di tengah epoch =====
   useEffect(() => {
@@ -529,7 +569,7 @@ export default function Monitoring() {
             Cooldown: <span className="text-neutral-200">{String(cd ?? 0n)} epoch</span>
           </div>
 
-          {/* Saat ACTIVE → tombol Claim (abu-abu jika pending=0). Saat tidak active → Start */}
+        {/* Saat ACTIVE → tombol Claim (abu-abu jika pending=0). Saat tidak active → Start */}
           {active ? (
             <button
               onClick={onClaim}
