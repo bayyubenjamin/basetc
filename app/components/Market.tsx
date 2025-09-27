@@ -43,8 +43,8 @@ interface NFTTier {
 }
 const NFT_DATA: NFTTier[] = [
   { id: "basic",  name: "Basic Rig",  image: "/img/vga_basic.png",  hashrateHint: "~1.5 H/s",  description: "Claim your first rig for free to start mining." },
-  { id: "pro",    name: "Pro Rig",    image: "/img/vga_pro.png",    hashrateHint: "~5.0 H/s",  description: "Upgrade for a significant boost in hashrate." },
-  { id: "legend", name: "Legend Rig", image: "/img/vga_legend.png", hashrateHint: "~25.0 H/s", description: "The ultimate rig for professional miners." },
+  { id: "pro",    name: "Pro Rig",    image: "/img/vga_pro.gif",    hashrateHint: "~5.0 H/s",  description: "Upgrade for a significant boost in hashrate." },
+  { id: "legend", name: "Legend Rig", image: "/img/vga_legend.gif", hashrateHint: "~25.0 H/s", description: "The ultimate rig for professional miners." },
 ];
 
 export interface MarketProps { onTransactionSuccess?: () => void; }

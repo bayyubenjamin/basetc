@@ -38,8 +38,8 @@ async function getFarcasterFID(): Promise<bigint | null> {
 const NftSlot: FC<{ filled: boolean; tier: 'basic' | 'pro' | 'legend' }> = ({ filled, tier }) => {
   const tierImages = {
     basic: "/img/vga_basic.png",
-    pro: "/img/vga_pro.png",
-    legend: "/img/vga_legend.png",
+    pro: "/img/vga_pro.gif",
+    legend: "/img/vga_legend.gif",
   };
 
   return (
