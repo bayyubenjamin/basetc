@@ -92,11 +92,11 @@ export default function Monitoring() {
   }, [hashrate.data]);
 
   // ✅ Base Unit dari kontrak pakai 18 desimal
-const baseUnitHuman = useMemo(() => {
-  const v = baseUnit.data as bigint | undefined;
-  if (!v) return 0;
-  return Number(formatUnits(v, 18)); // ← dari 12 -> 18
-}, [baseUnit.data]);
+  const baseUnitPerEpoch = useMemo(() => {
+    const v = baseUnit.data as bigint | undefined;
+    if (!v) return 0;
+    return Number(formatUnits(v, 18)); // contoh: 1.665 (5 Basic)
+  }, [baseUnit.data]);
 
   const active = Boolean((miningActive.data as boolean | undefined) ?? false);
   const eNow = (epochNow.data as bigint | undefined) ?? undefined;
@@ -257,11 +257,11 @@ const baseUnitHuman = useMemo(() => {
       <div className="grid grid-cols-3 gap-2">
         <StatCard title="Hashrate" value={formatNumber(hrNum)} />
         {/* Base Unit: 2 angka + tooltip exact */}
-<StatCardWithTooltip
-  title="Base Unit"
-  valueShort={baseUnitHuman.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-  valueExact={baseUnitHuman.toLocaleString("en-US", { minimumFractionDigits: 12 })}
-/>
+        <StatCardWithTooltip
+          title="Base Unit"
+          valueShort={baseUnitPerEpoch.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          valueExact={baseUnitPerEpoch.toLocaleString("en-US", { minimumFractionDigits: 12 })}
+        />
         <StatCard title="$BaseTC" value={tokenReadable.toFixed(3)} />
       </div>
 
