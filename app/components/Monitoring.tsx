@@ -93,13 +93,11 @@ export default function Monitoring() {
   const hrNum = useMemo(() => { const v = hashrate.data as bigint | undefined; return v ? Number(v) : 0; }, [hashrate.data]);
 
   // NOTE: baseUnit original (mentah) tetap ada jika butuh, tapi kita pakai versi human-readable (12 desimal)
-  const baseUnitNum = useMemo(() => { const v = baseUnit.data as bigint | undefined; return v ? Number(v) : 0; }, [baseUnit.data]); // tidak dipakai render
-  const baseUnitHuman = useMemo(() => {
-    const v = baseUnit.data as bigint | undefined;
-    if (!v) return 0;
-    // Kontrak mengembalikan 12 desimal → konversi ke angka manusia
-    return Number(formatUnits(v, 12));
-  }, [baseUnit.data]);
+const baseUnitHuman = useMemo(() => {
+  const v = baseUnit.data as bigint | undefined;
+  if (!v) return 0;
+  return Number(formatUnits(v, 12)); // konversi dari 1665000000000 → 1.665
+}, [baseUnit.data]);
 
   const active = Boolean((miningActive.data as boolean | undefined) ?? false);
   const eNow = (epochNow.data as bigint | undefined) ?? undefined;
@@ -235,13 +233,16 @@ export default function Monitoring() {
       <div className="grid grid-cols-3 gap-2">
         <StatCard title="Hashrate" value={formatNumber(hrNum)} />
         {/* ONLY TOP: Base Unit pakai tooltip + 2 angka di UI */}
-        <StatCardWithTooltip
-          title="Base Unit"
-          valueShort={baseUnitHuman.toLocaleString("en-US", { maximumFractionDigits: 2 })}
-          valueExact={baseUnitHuman.toLocaleString("en-US", { maximumFractionDigits: 12 })}
-        />
-        <StatCard title="$BaseTC" value={tokenReadable.toFixed(3)} />
-      </div>
+<StatCardWithTooltip
+  title="Base Unit"
+  valueShort={baseUnitHuman.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}
+  valueExact={baseUnitHuman.toLocaleString("en-US", {
+    minimumFractionDigits: 12,
+  })}
+/>
 
       <div className="bg-neutral-900/60 border border-neutral-800 rounded-xl p-4 space-y-3">
         <h2 className="text-sm font-semibold">Your Rigs</h2>
