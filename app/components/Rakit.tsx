@@ -68,7 +68,13 @@ const MergeSection: FC<{
         <p className="text-sm text-neutral-400">Owned: {String(ownedCount)}</p>
       </div>
       <div className="w-16 h-16 relative">
-        <Image src={imageSrc} alt={`${tierName} rig`} layout="fill" objectFit="contain" />
+        <Image 
+          src={imageSrc} 
+          alt={`${tierName} rig`} 
+          width={64} 
+          height={64} 
+          className="object-contain" 
+        />
       </div>
     </div>
     <div className="grid grid-cols-5 gap-2">
@@ -181,7 +187,7 @@ const Rakit: FC = () => {
           onMerge={() => handleMerge("mergeProToLegend", needPL, "Pro", "Legend")}
           isMerging={merging}
           canMerge={!!address && proCount >= needPL}
-          imageSrc="/img/vga_pro.png"
+          imageSrc="/img/vga_pro.gif"
         />
 
         <MergeSection
@@ -192,7 +198,7 @@ const Rakit: FC = () => {
           onMerge={() => {}} // Tidak ada aksi merge
           isMerging={false}
           canMerge={false}
-          imageSrc="/img/vga_legend.png"
+          imageSrc="/img/vga_legend.gif"
         />
       </div>
 
