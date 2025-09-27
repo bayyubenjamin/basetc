@@ -91,11 +91,12 @@ export default function Monitoring() {
   }, [hashrate.data]);
 
   // ✅ FIX utama: konversi 12 desimal → angka manusia
-  const baseUnitHuman = useMemo(() => {
-    const v = baseUnit.data as bigint | undefined;
-    if (!v) return 0;
-    return Number(formatUnits(v, 12)); // 1665000000000 → 1.665
-  }, [baseUnit.data]);
+const baseUnitHuman = useMemo(() => {
+  const v = baseUnit.data as bigint | undefined;
+  if (!v) return 0;
+  return Number(formatUnits(v, 18)); // ← dari 12 -> 18
+}, [baseUnit.data]);
+
 
   const active = Boolean((miningActive.data as boolean | undefined) ?? false);
   const eNow = (epochNow.data as bigint | undefined) ?? undefined;
@@ -226,10 +227,10 @@ export default function Monitoring() {
         <StatCard title="Hashrate" value={formatNumber(hrNum)} />
         {/* Base Unit: 2 angka + tooltip exact */}
         <StatCardWithTooltip
-          title="Base Unit"
-          valueShort={baseUnitHuman.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          valueExact={baseUnitHuman.toLocaleString("en-US", { minimumFractionDigits: 12 })}
-        />
+  title="Base Unit"
+  valueShort={baseUnitHuman.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+  valueExact={baseUnitHuman.toLocaleString("en-US", { minimumFractionDigits: 12 })}
+/>
         <StatCard title="$BaseTC" value={tokenReadable.toFixed(3)} />
       </div>
 
