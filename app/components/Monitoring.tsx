@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import {
   useAccount,
@@ -30,11 +30,17 @@ const formatNumber = (num: number) => {
 export default function Monitoring() {
   const { address } = useAccount();
 
-  // State UI
+  // UI state
   const [msg, setMsg] = useState("");
   const [now, setNow] = useState(Math.floor(Date.now() / 1000));
   const [terminalLogs, setTerminalLogs] = useState<string[]>([]);
-  const [sessionEarning, setSessionEarning] = useState(0); // akumulasi display selama user buka halaman
+  const terminalRef = useRef<HTMLDivElement>(null);
+
+  // Mining stream state (per-epoch budgeting)
+  const [epochRemainAmt, setEpochRemainAmt] = useState(0);  // sisa Base Unit untuk epoch berjalan
+  const [epochRemainSec, setEpochRemainSec] = useState(0);  // sisa detik epoch berjalan
+  const [lastSeenEpoch, setLastSeenEpoch] = useState<bigint | undefined>(undefined);
+  const [showClaim, setShowClaim] = useState(false);        // tampilkan tombol Claim saat rollover
 
   // Ticker 1s
   useEffect(() => {
@@ -42,9 +48,17 @@ export default function Monitoring() {
     return () => clearInterval(t);
   }, []);
 
+  // Auto scroll ke log terbaru (bawah)
+  useEffect(() => {
+    if (terminalRef.current) {
+      terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
+    }
+  }, [terminalLogs]);
+
   const addLog = (message: string) => {
     const timestamp = new Date().toLocaleTimeString();
-    setTerminalLogs((prev) => [`[${timestamp}] ${message}`, ...prev].slice(0, 50));
+    // tambahkan ke bawah & jaga max 200 baris
+    setTerminalLogs((prev) => [...prev, `[${timestamp}] ${message}`].slice(-200));
   };
 
   // IDs
@@ -91,11 +105,11 @@ export default function Monitoring() {
     return v ? Number(v) : 0;
   }, [hashrate.data]);
 
-  // ✅ Base Unit dari kontrak pakai 18 desimal
+  // Base Unit dari kontrak pakai 18 desimal (reward per epoch/hari)
   const baseUnitPerEpoch = useMemo(() => {
     const v = baseUnit.data as bigint | undefined;
     if (!v) return 0;
-    return Number(formatUnits(v, 18)); // contoh: 1.665 (5 Basic)
+    return Number(formatUnits(v, 18)); // contoh: 1.665 untuk 5 Basic
   }, [baseUnit.data]);
 
   const active = Boolean((miningActive.data as boolean | undefined) ?? false);
@@ -156,6 +170,7 @@ export default function Monitoring() {
     return () => clearTimeout(t);
   }, [msg]);
 
+  // Actions
   const onStart = () => {
     if (!address) { setMsg("Connect wallet dulu."); return; }
     if (prelaunch && goLiveOn) { setMsg("Prelaunch aktif. Tunggu epoch 1."); return; }
@@ -174,38 +189,63 @@ export default function Monitoring() {
     writeContract({ address: gameCoreAddress as `0x${string}`, abi: gameCoreABI as any, functionName: "stopMining", args: [], account: address as `0x${string}`, chain: baseSepolia, chainId: BASE_CHAIN_ID });
   };
 
+  // NOTE: Ganti "claim" sesuai nama fungsi klaim di GameCore kamu (mis. claimDaily / claimEpoch / claimRewards)
+  const onClaim = () => {
+    if (!address) { setMsg("Connect wallet dulu."); return; }
+    setMsg("");
+    addLog("Claiming epoch rewards...");
+    writeContract({ address: gameCoreAddress as `0x${string}`, abi: gameCoreABI as any, functionName: "claim", args: [], account: address as `0x${string}`, chain: baseSepolia, chainId: BASE_CHAIN_ID });
+  };
+
   const busy = isPending || waitingReceipt;
 
-  // =========== 🔥 MINING STREAM (ala BTC) ===========
-  // Hitung reward per detik dari Base Unit per epoch
-  const perSecond = useMemo(() => {
-    const len = eLen ? Number(eLen) : 0;
-    if (!len || baseUnitPerEpoch <= 0) return 0;
-    return baseUnitPerEpoch / len; // contoh: 1.665 / 86400 ≈ 0.00001927
-  }, [eLen, baseUnitPerEpoch]);
-
-  // Ngetik log setiap detik saat mining aktif & bukan prelaunch
+  // ========== MINING STREAM (acak, ter-budget) ==========
+  // Reset budget saat:
+  // - ganti epoch, atau
+  // - Base Unit/epoch berubah, atau
+  // - belum pernah set
   useEffect(() => {
-    if (!perSecond || !active || (prelaunch && goLiveOn)) return;
-    // bikin line seperti: "+0.000019 Base Unit (total: 0.123456)"
-    const inc = perSecond;
-    setSessionEarning((prev) => {
-      const next = prev + inc;
-      addLog(`+${inc.toFixed(6)} Base Unit (total: ${next.toFixed(6)})`);
-      return next;
-    });
-    // note: efek jalan tiap "now" berubah (tiap 1 detik)
+    if (!eLen || !eNow) return;
+    const len = Number(eLen);
+    // Saat epoch berubah:
+    if (lastSeenEpoch === undefined || eNow !== lastSeenEpoch) {
+      setLastSeenEpoch(eNow);
+      setEpochRemainAmt(baseUnitPerEpoch); // reset sisa reward epoch
+      setEpochRemainSec(len);               // reset sisa detik
+      // Jika sedang aktif, munculkan tombol Claim untuk epoch sebelumnya
+      if (lastSeenEpoch !== undefined) setShowClaim(true);
+    }
+  }, [eNow, eLen, baseUnitPerEpoch, lastSeenEpoch]);
+
+  // Tiap detik: kalau aktif & bukan prelaunch & ada budget → emisi pecahan acak
+  useEffect(() => {
+    if (!active || (prelaunch && goLiveOn)) return;
+    if (epochRemainAmt <= 0 || epochRemainSec <= 0) return;
+    // baseline = rata-rata sisa/detik, lalu beri jitter (±40%)
+    const baseline = epochRemainAmt / epochRemainSec;
+    const jitter = 0.6 + Math.random() * 0.8; // 0.6 .. 1.4
+    let inc = baseline * jitter;
+    // jaga supaya sisa bisa habis tepat di akhir epoch:
+    if (inc > epochRemainAmt) inc = epochRemainAmt;
+    const nextAmt = +(epochRemainAmt - inc);
+    const nextSec = Math.max(0, epochRemainSec - 1);
+
+    setEpochRemainAmt(nextAmt);
+    setEpochRemainSec(nextSec);
+
+    // tulis log (6 desimal biar halus)
+    addLog(`+${inc.toFixed(6)} Base Unit (left: ${nextAmt.toFixed(6)})`);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [now, perSecond, active, prelaunch, goLiveOn]);
+  }, [now, active, prelaunch, goLiveOn, epochRemainAmt, epochRemainSec]);
 
-  // Reset tampilan saat user stop
+  // Setelah klaim sukses → sembunyikan tombol Claim
   useEffect(() => {
-    if (!active) {
-      setSessionEarning(0);
-      addLog("Miner paused.");
+    if (isSuccess && showClaim) {
+      setShowClaim(false);
+      addLog("Claim success. Ready for next epoch.");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active]);
+  }, [isSuccess]);
 
   // =========== UI ===========
   return (
@@ -222,7 +262,7 @@ export default function Monitoring() {
             <span className="text-lg font-semibold">{typeof eNow !== "undefined" ? String(eNow) : "—"}</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className={`px-2 py-1 rounded-md text-xs font-medium border ${prelaunch && goLiveOn ? "bg-yellow-500/10 text-yellow-300 border-yellow-500/30" : active ? "bg-green-500/10 text-green-400 border-green-500/30" : "bg-neutral-800 text-neutral-300 border-neutral-700"}`}>
+            <span className={`px-2 py-1 rounded-md text-xs font-medium border ${prelaunch && goLiveOn ? "bg-yellow-500/10 text-yellow-300 border-yellow-500/30" : (active ? "bg-green-500/10 text-green-400 border-green-500/30" : "bg-neutral-800 text-neutral-300 border-neutral-700")}`}>
               {prelaunch && goLiveOn ? "Prelaunch" : active ? "Active" : "Paused"}
             </span>
           </div>
@@ -239,19 +279,49 @@ export default function Monitoring() {
         </div>
 
         <div className="flex items-center justify-between pt-2">
-          <div className="text-xs text-neutral-400">Cooldown: <span className="text-neutral-200">{String(cd ?? 0n)} epoch</span></div>
-          {active ? (
-            <button onClick={onStop} disabled={!address || busy || !canToggle || (prelaunch && goLiveOn)} className={`px-4 py-2 rounded-lg text-sm font-medium text-white shadow ${!address || busy || !canToggle || (prelaunch && goLiveOn) ? "bg-neutral-700 text-neutral-400" : "bg-red-600 hover:bg-red-500"}`}>{busy ? "Stopping…" : "Stop Mining"}</button>
+          <div className="text-xs text-neutral-400">
+            Cooldown: <span className="text-neutral-200">{String(cd ?? 0n)} epoch</span>
+          </div>
+
+          {/* Tombol dinamis: Claim saat rollover, else Start/Stop */}
+          {showClaim ? (
+            <button
+              onClick={onClaim}
+              disabled={!address || busy}
+              className={`px-4 py-2 rounded-lg text-sm font-medium text-white shadow ${!address || busy ? "bg-neutral-700 text-neutral-400" : "bg-indigo-600 hover:bg-indigo-500"}`}
+            >
+              {busy ? "Claiming…" : "Claim"}
+            </button>
+          ) : active ? (
+            <button
+              onClick={onStop}
+              disabled={!address || busy || !canToggle || (prelaunch && goLiveOn)}
+              className={`px-4 py-2 rounded-lg text-sm font-medium text-white shadow ${!address || busy || !canToggle || (prelaunch && goLiveOn) ? "bg-neutral-700 text-neutral-400" : "bg-red-600 hover:bg-red-500"}`}
+            >
+              {busy ? "Stopping…" : "Stop Mining"}
+            </button>
           ) : (
-            <button onClick={onStart} disabled={!address || busy || !canToggle || (prelaunch && goLiveOn)} className={`px-4 py-2 rounded-lg text-sm font-medium text-white shadow ${!address || busy || !canToggle || (prelaunch && goLiveOn) ? "bg-neutral-700 text-neutral-400" : "bg-emerald-600 hover:bg-emerald-500"}`}>{busy ? "Starting…" : "Start Mining"}</button>
+            <button
+              onClick={onStart}
+              disabled={!address || busy || !canToggle || (prelaunch && goLiveOn)}
+              className={`px-4 py-2 rounded-lg text-sm font-medium text-white shadow ${!address || busy || !canToggle || (prelaunch && goLiveOn) ? "bg-neutral-700 text-neutral-400" : "bg-emerald-600 hover:bg-emerald-500"}`}
+            >
+              {busy ? "Starting…" : "Start Mining"}
+            </button>
           )}
         </div>
         {!!msg && <div className="text-xs text-emerald-400 pt-1">{msg}</div>}
       </div>
 
-      <div className="bg-black/50 border border-neutral-800 rounded-lg p-3 font-mono text-xs text-green-400 space-y-1 h-32 overflow-y-auto">
+      {/* Terminal: log terbaru di bawah + auto-scroll */}
+      <div
+        ref={terminalRef}
+        className="bg-black/50 border border-neutral-800 rounded-lg p-3 font-mono text-xs text-green-400 space-y-1 h-32 overflow-y-auto"
+      >
         <p>&gt; Terminal ready...</p>
-        {terminalLogs.map((log, i) => <p key={i}>&gt; {log}</p>)}
+        {terminalLogs.map((log, i) => (
+          <p key={i}>&gt; {log}</p>
+        ))}
       </div>
 
       <div className="grid grid-cols-3 gap-2">
@@ -291,19 +361,19 @@ function StatCard({ title, value }: { title: string; value: string }) {
 function StatCardWithTooltip({ title, valueShort, valueExact }: { title: string; valueShort: string; valueExact: string }) {
   return (
     <div className="bg-neutral-900/60 border border-neutral-800 rounded-xl p-4 text-center shadow">
-    <div className="relative inline-block group">
-      <div className="text-lg font-semibold cursor-help">{valueShort}</div>
-      {/* Tooltip di atas */}
-      <div className="absolute -top-2 left-1/2 -translate-x-1/2 -translate-y-full
-                      hidden group-hover:block bg-neutral-800 text-neutral-100 text-xs
-                      px-2 py-1 rounded shadow-lg whitespace-nowrap border border-neutral-700">
-        Exact: {valueExact}
-        <div className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-full
-                        w-0 h-0 border-l-4 border-r-4 border-t-4 border-l-transparent border-r-transparent border-t-neutral-800" />
+      <div className="relative inline-block group">
+        <div className="text-lg font-semibold cursor-help">{valueShort}</div>
+        {/* Tooltip di atas */}
+        <div className="absolute -top-2 left-1/2 -translate-x-1/2 -translate-y-full
+                        hidden group-hover:block bg-neutral-800 text-neutral-100 text-xs
+                        px-2 py-1 rounded shadow-lg whitespace-nowrap border border-neutral-700">
+          Exact: {valueExact}
+          <div className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-full
+                          w-0 h-0 border-l-4 border-r-4 border-t-4 border-l-transparent border-r-transparent border-t-neutral-800" />
+        </div>
       </div>
+      <div className="text-xs text-neutral-400 mt-1">{title}</div>
     </div>
-    <div className="text-xs text-neutral-400 mt-1">{title}</div>
-  </div>
   );
 }
 
