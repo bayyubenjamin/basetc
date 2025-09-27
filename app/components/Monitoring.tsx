@@ -18,6 +18,7 @@ import {
   gameCoreABI,
   chainId as BASE_CHAIN_ID,
 } from "../lib/web3Config";
+import { formatUnits } from "viem"; // ADD: untuk konversi base unit 12 desimal
 
 // Fungsi untuk meringkas angka besar
 const formatNumber = (num: number) => {
@@ -90,7 +91,16 @@ export default function Monitoring() {
 
   // Normalisasi nilai
   const hrNum = useMemo(() => { const v = hashrate.data as bigint | undefined; return v ? Number(v) : 0; }, [hashrate.data]);
-  const baseUnitNum = useMemo(() => { const v = baseUnit.data as bigint | undefined; return v ? Number(v) : 0; }, [baseUnit.data]);
+
+  // NOTE: baseUnit original (mentah) tetap ada jika butuh, tapi kita pakai versi human-readable (12 desimal)
+  const baseUnitNum = useMemo(() => { const v = baseUnit.data as bigint | undefined; return v ? Number(v) : 0; }, [baseUnit.data]); // tidak dipakai render
+  const baseUnitHuman = useMemo(() => {
+    const v = baseUnit.data as bigint | undefined;
+    if (!v) return 0;
+    // Kontrak mengembalikan 12 desimal → konversi ke angka manusia
+    return Number(formatUnits(v, 12));
+  }, [baseUnit.data]);
+
   const active = Boolean((miningActive.data as boolean | undefined) ?? false);
   const eNow = (epochNow.data as bigint | undefined) ?? undefined;
   const eLen = (epochLength.data as bigint | undefined) ?? undefined;
@@ -185,6 +195,7 @@ export default function Monitoring() {
             <span className="text-lg font-semibold">{typeof eNow !== "undefined" ? String(eNow) : "—"}</span>
           </div>
           <div className="flex items-center gap-2">
+            {/* Badge color tetap, fokus perubahan di progress bar */}
             <span className={`px-2 py-1 rounded-md text-xs font-medium border ${prelaunch && goLiveOn ? "bg-yellow-500/10 text-yellow-300 border-yellow-500/30" : active ? "bg-green-500/10 text-green-400 border-green-500/30" : "bg-neutral-800 text-neutral-300 border-neutral-700"}`}>
               {prelaunch && goLiveOn ? "Prelaunch" : active ? "Active" : "Paused"}
             </span>
@@ -197,7 +208,11 @@ export default function Monitoring() {
             <span>Next in {leftMMSS}</span>
           </div>
           <div className="h-2 w-full rounded-full bg-neutral-800 overflow-hidden">
-            <div className="h-full bg-gradient-to-r from-indigo-500 to-cyan-500 transition-all" style={{ width: `${epochProgress.pct}%` }}/>
+            {/* CHANGED: progress biru solid biar profesional */}
+            <div
+              className="h-full bg-blue-500 transition-all"
+              style={{ width: `${epochProgress.pct}%` }}
+            />
           </div>
         </div>
 
@@ -219,7 +234,12 @@ export default function Monitoring() {
 
       <div className="grid grid-cols-3 gap-2">
         <StatCard title="Hashrate" value={formatNumber(hrNum)} />
-        <StatCard title="Base Unit" value={formatNumber(baseUnitNum)} />
+        {/* ONLY TOP: Base Unit pakai tooltip + 2 angka di UI */}
+        <StatCardWithTooltip
+          title="Base Unit"
+          valueShort={baseUnitHuman.toLocaleString("en-US", { maximumFractionDigits: 2 })}
+          valueExact={baseUnitHuman.toLocaleString("en-US", { maximumFractionDigits: 12 })}
+        />
         <StatCard title="$BaseTC" value={tokenReadable.toFixed(3)} />
       </div>
 
@@ -246,6 +266,34 @@ function StatCard({ title, value }: { title: string; value: string }) {
   );
 }
 
+// ADD: tooltip hanya untuk stat atas (Base Unit)
+function StatCardWithTooltip({
+  title,
+  valueShort,
+  valueExact,
+}: {
+  title: string;
+  valueShort: string;
+  valueExact: string;
+}) {
+  return (
+    <div className="bg-neutral-900/60 border border-neutral-800 rounded-xl p-4 text-center shadow">
+      <div className="relative inline-block group">
+        <div className="text-lg font-semibold cursor-help">{valueShort}</div>
+        {/* Tooltip muncul di ATAS elemen */}
+        <div className="absolute -top-2 left-1/2 -translate-x-1/2 -translate-y-full
+                        hidden group-hover:block bg-neutral-800 text-neutral-100 text-xs
+                        px-2 py-1 rounded shadow-lg whitespace-nowrap border border-neutral-700">
+          Exact: {valueExact}
+          <div className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-full
+                          w-0 h-0 border-l-4 border-r-4 border-t-4 border-l-transparent border-r-transparent border-t-neutral-800" />
+        </div>
+      </div>
+      <div className="text-xs text-neutral-400 mt-1">{title}</div>
+    </div>
+  );
+}
+
 function RigCard({ tier, count, image, owned }: { tier: string, count: string, image: string, owned: boolean }) {
   return (
     <div className="bg-neutral-800 rounded-lg p-3 text-center space-y-2">
@@ -259,3 +307,4 @@ function RigCard({ tier, count, image, owned }: { tier: string, count: string, i
     </div>
   );
 }
+
