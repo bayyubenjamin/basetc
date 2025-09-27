@@ -18,40 +18,35 @@ import {
   gameCoreABI,
   chainId as BASE_CHAIN_ID,
 } from "../lib/web3Config";
-import { formatUnits } from "viem"; // ADD: untuk konversi base unit 12 desimal
+import { formatUnits } from "viem";
 
-// Fungsi untuk meringkas angka besar
+// Ringkas angka besar (biarin, dipakai untuk Hashrate)
 const formatNumber = (num: number) => {
-  if (num >= 1000000) {
-    return (num / 1000000).toFixed(1) + "M";
-  }
-  if (num >= 1000) {
-    return (num / 1000).toFixed(1) + "K";
-  }
+  if (num >= 1_000_000) return (num / 1_000_000).toFixed(1) + "M";
+  if (num >= 1_000) return (num / 1_000).toFixed(1) + "K";
   return num.toString();
 };
 
 export default function Monitoring() {
   const { address } = useAccount();
 
-  // State UI
-  const [msg, setMsg] = useState<string>("");
-  const [now, setNow] = useState<number>(Math.floor(Date.now() / 1000));
+  // UI state
+  const [msg, setMsg] = useState("");
+  const [now, setNow] = useState(Math.floor(Date.now() / 1000));
   const [terminalLogs, setTerminalLogs] = useState<string[]>([]);
 
-  // Realtime tick per 1s
+  // Ticker 1s
   useEffect(() => {
     const t = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 1000);
     return () => clearInterval(t);
   }, []);
-  
-  // Fungsi untuk menambahkan log ke terminal
+
   const addLog = (message: string) => {
     const timestamp = new Date().toLocaleTimeString();
-    setTerminalLogs(prev => [`[${timestamp}] ${message}`, ...prev].slice(0, 10)); // Batasi 10 log
+    setTerminalLogs((prev) => [`[${timestamp}] ${message}`, ...prev].slice(0, 10));
   };
 
-  // Ambil ID tier dari RigNFT
+  // IDs
   const basicId = useReadContract({ address: rigNftAddress as `0x${string}`, abi: rigNftABI as any, functionName: "BASIC" });
   const proId = useReadContract({ address: rigNftAddress as `0x${string}`, abi: rigNftABI as any, functionName: "PRO" });
   const legendId = useReadContract({ address: rigNftAddress as `0x${string}`, abi: rigNftABI as any, functionName: "LEGEND" });
@@ -60,7 +55,7 @@ export default function Monitoring() {
   const PRO = proId.data as bigint | undefined;
   const LEGEND = legendId.data as bigint | undefined;
 
-  // Saldo NFT per tier
+  // Balances
   const basicBal = useReadContract({ address: rigNftAddress as `0x${string}`, abi: rigNftABI as any, functionName: "balanceOf", args: address && BASIC !== undefined ? [address, BASIC] : undefined, query: { enabled: Boolean(address && BASIC !== undefined) } });
   const proBal = useReadContract({ address: rigNftAddress as `0x${string}`, abi: rigNftABI as any, functionName: "balanceOf", args: address && PRO !== undefined ? [address, PRO] : undefined, query: { enabled: Boolean(address && PRO !== undefined) } });
   const legendBal = useReadContract({ address: rigNftAddress as `0x${string}`, abi: rigNftABI as any, functionName: "balanceOf", args: address && LEGEND !== undefined ? [address, LEGEND] : undefined, query: { enabled: Boolean(address && LEGEND !== undefined) } });
@@ -69,7 +64,7 @@ export default function Monitoring() {
   const countPro = (proBal.data as bigint | undefined) ?? 0n;
   const countLegend = (legendBal.data as bigint | undefined) ?? 0n;
 
-  // Saldo $BaseTC
+  // $BaseTC
   const baseBal = useReadContract({ address: baseTcAddress as `0x${string}`, abi: baseTcABI as any, functionName: "balanceOf", args: address ? [address] : undefined, query: { enabled: Boolean(address) } });
   const tokenReadable = useMemo(() => {
     const v = baseBal.data as bigint | undefined;
@@ -89,15 +84,18 @@ export default function Monitoring() {
   const baseUnit = useReadContract({ address: gameCoreAddress as `0x${string}`, abi: gameCoreABI as any, functionName: "getBaseUnit", args: address ? [address] : undefined, query: { enabled: Boolean(address) } });
   const isSupreme = useReadContract({ address: gameCoreAddress as `0x${string}`, abi: gameCoreABI as any, functionName: "isSupreme", args: address ? [address] : undefined, query: { enabled: Boolean(address) } });
 
-  // Normalisasi nilai
-  const hrNum = useMemo(() => { const v = hashrate.data as bigint | undefined; return v ? Number(v) : 0; }, [hashrate.data]);
+  // Normalize
+  const hrNum = useMemo(() => {
+    const v = hashrate.data as bigint | undefined;
+    return v ? Number(v) : 0;
+  }, [hashrate.data]);
 
-  // NOTE: baseUnit original (mentah) tetap ada jika butuh, tapi kita pakai versi human-readable (12 desimal)
-const baseUnitHuman = useMemo(() => {
-  const v = baseUnit.data as bigint | undefined;
-  if (!v) return 0;
-  return Number(formatUnits(v, 12)); // konversi dari 1665000000000 → 1.665
-}, [baseUnit.data]);
+  // ✅ FIX utama: konversi 12 desimal → angka manusia
+  const baseUnitHuman = useMemo(() => {
+    const v = baseUnit.data as bigint | undefined;
+    if (!v) return 0;
+    return Number(formatUnits(v, 12)); // 1665000000000 → 1.665
+  }, [baseUnit.data]);
 
   const active = Boolean((miningActive.data as boolean | undefined) ?? false);
   const eNow = (epochNow.data as bigint | undefined) ?? undefined;
@@ -108,8 +106,7 @@ const baseUnitHuman = useMemo(() => {
   const prelaunch = Boolean((isPrelaunch.data as boolean | undefined) ?? false);
   const goLiveOn = Boolean((goLive.data as boolean | undefined) ?? false);
 
-  // Epoch progress & ETA
-  const targetEpoch1 = useMemo(() => { if (!sTime || !eLen) return undefined; return Number(sTime + eLen); }, [sTime, eLen]);
+  // Epoch progress
   const epochProgress = useMemo(() => {
     if (!sTime || !eLen) return { pct: 0, leftSec: 0 };
     const sinceStart = BigInt(now) - sTime;
@@ -119,6 +116,7 @@ const baseUnitHuman = useMemo(() => {
     const pct = Number((pos * 100n) / eLen);
     return { pct, leftSec: Number(left) };
   }, [now, sTime, eLen]);
+
   const leftMMSS = useMemo(() => {
     const s = epochProgress.leftSec;
     const h = Math.floor(s / 3600);
@@ -128,15 +126,13 @@ const baseUnitHuman = useMemo(() => {
     return `${m}:${r.toString().padStart(2, "0")}`;
   }, [epochProgress.leftSec]);
 
-  // Cooldown logic
   const canToggle = useMemo(() => {
     if (eNow === undefined) return false;
     if (prelaunch && goLiveOn) return false;
     return eNow >= lastE + cd;
   }, [eNow, lastE, cd, prelaunch, goLiveOn]);
-  const nextToggleEpoch = useMemo(() => { if (lastE === undefined) return undefined; return lastE + cd; }, [lastE, cd]);
 
-  // Start / Stop (tx)
+  // TX
   const { writeContract, data: txHash, isPending, error } = useWriteContract();
   const { isLoading: waitingReceipt, isSuccess } = useWaitForTransactionReceipt({ hash: txHash });
 
@@ -193,7 +189,6 @@ const baseUnitHuman = useMemo(() => {
             <span className="text-lg font-semibold">{typeof eNow !== "undefined" ? String(eNow) : "—"}</span>
           </div>
           <div className="flex items-center gap-2">
-            {/* Badge color tetap, fokus perubahan di progress bar */}
             <span className={`px-2 py-1 rounded-md text-xs font-medium border ${prelaunch && goLiveOn ? "bg-yellow-500/10 text-yellow-300 border-yellow-500/30" : active ? "bg-green-500/10 text-green-400 border-green-500/30" : "bg-neutral-800 text-neutral-300 border-neutral-700"}`}>
               {prelaunch && goLiveOn ? "Prelaunch" : active ? "Active" : "Paused"}
             </span>
@@ -206,11 +201,8 @@ const baseUnitHuman = useMemo(() => {
             <span>Next in {leftMMSS}</span>
           </div>
           <div className="h-2 w-full rounded-full bg-neutral-800 overflow-hidden">
-            {/* CHANGED: progress biru solid biar profesional */}
-            <div
-              className="h-full bg-blue-500 transition-all"
-              style={{ width: `${epochProgress.pct}%` }}
-            />
+            {/* Progress biru solid */}
+            <div className="h-full bg-blue-500 transition-all" style={{ width: `${epochProgress.pct}%` }}/>
           </div>
         </div>
 
@@ -232,17 +224,14 @@ const baseUnitHuman = useMemo(() => {
 
       <div className="grid grid-cols-3 gap-2">
         <StatCard title="Hashrate" value={formatNumber(hrNum)} />
-        {/* ONLY TOP: Base Unit pakai tooltip + 2 angka di UI */}
-<StatCardWithTooltip
-  title="Base Unit"
-  valueShort={baseUnitHuman.toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}
-  valueExact={baseUnitHuman.toLocaleString("en-US", {
-    minimumFractionDigits: 12,
-  })}
-/>
+        {/* Base Unit: 2 angka + tooltip exact */}
+        <StatCardWithTooltip
+          title="Base Unit"
+          valueShort={baseUnitHuman.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          valueExact={baseUnitHuman.toLocaleString("en-US", { minimumFractionDigits: 12 })}
+        />
+        <StatCard title="$BaseTC" value={tokenReadable.toFixed(3)} />
+      </div>
 
       <div className="bg-neutral-900/60 border border-neutral-800 rounded-xl p-4 space-y-3">
         <h2 className="text-sm font-semibold">Your Rigs</h2>
@@ -256,7 +245,7 @@ const baseUnitHuman = useMemo(() => {
   );
 }
 
-// --- Komponen-komponen Kecil ---
+// --- Components ---
 
 function StatCard({ title, value }: { title: string; value: string }) {
   return (
@@ -267,21 +256,12 @@ function StatCard({ title, value }: { title: string; value: string }) {
   );
 }
 
-// ADD: tooltip hanya untuk stat atas (Base Unit)
-function StatCardWithTooltip({
-  title,
-  valueShort,
-  valueExact,
-}: {
-  title: string;
-  valueShort: string;
-  valueExact: string;
-}) {
+function StatCardWithTooltip({ title, valueShort, valueExact }: { title: string; valueShort: string; valueExact: string }) {
   return (
     <div className="bg-neutral-900/60 border border-neutral-800 rounded-xl p-4 text-center shadow">
       <div className="relative inline-block group">
         <div className="text-lg font-semibold cursor-help">{valueShort}</div>
-        {/* Tooltip muncul di ATAS elemen */}
+        {/* Tooltip muncul di atas */}
         <div className="absolute -top-2 left-1/2 -translate-x-1/2 -translate-y-full
                         hidden group-hover:block bg-neutral-800 text-neutral-100 text-xs
                         px-2 py-1 rounded shadow-lg whitespace-nowrap border border-neutral-700">
@@ -295,11 +275,11 @@ function StatCardWithTooltip({
   );
 }
 
-function RigCard({ tier, count, image, owned }: { tier: string, count: string, image: string, owned: boolean }) {
+function RigCard({ tier, count, image, owned }: { tier: string; count: string; image: string; owned: boolean }) {
   return (
     <div className="bg-neutral-800 rounded-lg p-3 text-center space-y-2">
-      <div className={`relative aspect-square transition-all duration-300 ${!owned ? 'filter blur-sm opacity-50' : ''}`}>
-        <Image src={image} alt={`${tier} Rig`} layout="fill" objectFit="contain" />
+      <div className={`relative aspect-square transition-all duration-300 ${!owned ? "filter blur-sm opacity-50" : ""}`}>
+        <Image src={image} alt={`${tier} Rig`} fill style={{ objectFit: "contain" }} />
       </div>
       <div>
         <div className="text-sm text-neutral-400">{tier}</div>
