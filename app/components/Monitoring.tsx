@@ -20,7 +20,7 @@ import {
 } from "../lib/web3Config";
 import { formatUnits } from "viem";
 
-// Ringkas angka besar (biarin, dipakai untuk Hashrate)
+// Ringkas angka besar (untuk Hashrate)
 const formatNumber = (num: number) => {
   if (num >= 1_000_000) return (num / 1_000_000).toFixed(1) + "M";
   if (num >= 1_000) return (num / 1_000).toFixed(1) + "K";
@@ -30,10 +30,11 @@ const formatNumber = (num: number) => {
 export default function Monitoring() {
   const { address } = useAccount();
 
-  // UI state
+  // State UI
   const [msg, setMsg] = useState("");
   const [now, setNow] = useState(Math.floor(Date.now() / 1000));
   const [terminalLogs, setTerminalLogs] = useState<string[]>([]);
+  const [sessionEarning, setSessionEarning] = useState(0); // akumulasi display selama user buka halaman
 
   // Ticker 1s
   useEffect(() => {
@@ -43,7 +44,7 @@ export default function Monitoring() {
 
   const addLog = (message: string) => {
     const timestamp = new Date().toLocaleTimeString();
-    setTerminalLogs((prev) => [`[${timestamp}] ${message}`, ...prev].slice(0, 10));
+    setTerminalLogs((prev) => [`[${timestamp}] ${message}`, ...prev].slice(0, 50));
   };
 
   // IDs
@@ -90,24 +91,23 @@ export default function Monitoring() {
     return v ? Number(v) : 0;
   }, [hashrate.data]);
 
-  // ✅ FIX utama: konversi 12 desimal → angka manusia
+  // ✅ Base Unit dari kontrak pakai 18 desimal
 const baseUnitHuman = useMemo(() => {
   const v = baseUnit.data as bigint | undefined;
   if (!v) return 0;
   return Number(formatUnits(v, 18)); // ← dari 12 -> 18
 }, [baseUnit.data]);
 
-
   const active = Boolean((miningActive.data as boolean | undefined) ?? false);
   const eNow = (epochNow.data as bigint | undefined) ?? undefined;
-  const eLen = (epochLength.data as bigint | undefined) ?? undefined;
+  const eLen = (epochLength.data as bigint | undefined) ?? undefined; // detik per epoch (1 hari)
   const sTime = (startTime.data as bigint | undefined) ?? undefined;
   const lastE = (lastToggleEpoch.data as bigint | undefined) ?? 0n;
   const cd = (toggleCooldown.data as bigint | undefined) ?? 0n;
   const prelaunch = Boolean((isPrelaunch.data as boolean | undefined) ?? false);
   const goLiveOn = Boolean((goLive.data as boolean | undefined) ?? false);
 
-  // Epoch progress
+  // Epoch progress & ETA
   const epochProgress = useMemo(() => {
     if (!sTime || !eLen) return { pct: 0, leftSec: 0 };
     const sinceStart = BigInt(now) - sTime;
@@ -176,6 +176,38 @@ const baseUnitHuman = useMemo(() => {
 
   const busy = isPending || waitingReceipt;
 
+  // =========== 🔥 MINING STREAM (ala BTC) ===========
+  // Hitung reward per detik dari Base Unit per epoch
+  const perSecond = useMemo(() => {
+    const len = eLen ? Number(eLen) : 0;
+    if (!len || baseUnitPerEpoch <= 0) return 0;
+    return baseUnitPerEpoch / len; // contoh: 1.665 / 86400 ≈ 0.00001927
+  }, [eLen, baseUnitPerEpoch]);
+
+  // Ngetik log setiap detik saat mining aktif & bukan prelaunch
+  useEffect(() => {
+    if (!perSecond || !active || (prelaunch && goLiveOn)) return;
+    // bikin line seperti: "+0.000019 Base Unit (total: 0.123456)"
+    const inc = perSecond;
+    setSessionEarning((prev) => {
+      const next = prev + inc;
+      addLog(`+${inc.toFixed(6)} Base Unit (total: ${next.toFixed(6)})`);
+      return next;
+    });
+    // note: efek jalan tiap "now" berubah (tiap 1 detik)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [now, perSecond, active, prelaunch, goLiveOn]);
+
+  // Reset tampilan saat user stop
+  useEffect(() => {
+    if (!active) {
+      setSessionEarning(0);
+      addLog("Miner paused.");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active]);
+
+  // =========== UI ===========
   return (
     <div className="space-y-4 px-4 pt-4 pb-24">
       <header className="space-y-1">
@@ -202,7 +234,6 @@ const baseUnitHuman = useMemo(() => {
             <span>Next in {leftMMSS}</span>
           </div>
           <div className="h-2 w-full rounded-full bg-neutral-800 overflow-hidden">
-            {/* Progress biru solid */}
             <div className="h-full bg-blue-500 transition-all" style={{ width: `${epochProgress.pct}%` }}/>
           </div>
         </div>
@@ -226,7 +257,7 @@ const baseUnitHuman = useMemo(() => {
       <div className="grid grid-cols-3 gap-2">
         <StatCard title="Hashrate" value={formatNumber(hrNum)} />
         {/* Base Unit: 2 angka + tooltip exact */}
-        <StatCardWithTooltip
+<StatCardWithTooltip
   title="Base Unit"
   valueShort={baseUnitHuman.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
   valueExact={baseUnitHuman.toLocaleString("en-US", { minimumFractionDigits: 12 })}
@@ -260,19 +291,19 @@ function StatCard({ title, value }: { title: string; value: string }) {
 function StatCardWithTooltip({ title, valueShort, valueExact }: { title: string; valueShort: string; valueExact: string }) {
   return (
     <div className="bg-neutral-900/60 border border-neutral-800 rounded-xl p-4 text-center shadow">
-      <div className="relative inline-block group">
-        <div className="text-lg font-semibold cursor-help">{valueShort}</div>
-        {/* Tooltip muncul di atas */}
-        <div className="absolute -top-2 left-1/2 -translate-x-1/2 -translate-y-full
-                        hidden group-hover:block bg-neutral-800 text-neutral-100 text-xs
-                        px-2 py-1 rounded shadow-lg whitespace-nowrap border border-neutral-700">
-          Exact: {valueExact}
-          <div className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-full
-                          w-0 h-0 border-l-4 border-r-4 border-t-4 border-l-transparent border-r-transparent border-t-neutral-800" />
-        </div>
+    <div className="relative inline-block group">
+      <div className="text-lg font-semibold cursor-help">{valueShort}</div>
+      {/* Tooltip di atas */}
+      <div className="absolute -top-2 left-1/2 -translate-x-1/2 -translate-y-full
+                      hidden group-hover:block bg-neutral-800 text-neutral-100 text-xs
+                      px-2 py-1 rounded shadow-lg whitespace-nowrap border border-neutral-700">
+        Exact: {valueExact}
+        <div className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-full
+                        w-0 h-0 border-l-4 border-r-4 border-t-4 border-l-transparent border-r-transparent border-t-neutral-800" />
       </div>
-      <div className="text-xs text-neutral-400 mt-1">{title}</div>
     </div>
+    <div className="text-xs text-neutral-400 mt-1">{title}</div>
+  </div>
   );
 }
 
