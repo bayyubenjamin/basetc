@@ -36,11 +36,11 @@ async function getFarcasterFID(): Promise<bigint | null> {
 
 // Komponen untuk menampilkan slot NFT
 const NftSlot: FC<{ filled: boolean; tier: 'basic' | 'pro' | 'legend' }> = ({ filled, tier }) => {
-  const tierImages = {
-    basic: "/img/vga_basic.png",
-    pro: "/img/vga_pro.gif",
-    legend: "/img/vga_legend.gif",
-  };
+const tierImages = {
+  basic: "/img/vga_basic.png",
+  pro: "/img/vga_pro.gif",
+  legend: "/img/vga_legend.gif",
+};
 
   return (
     <div className={`w-12 h-12 md:w-16 md:h-16 rounded-md flex items-center justify-center 
