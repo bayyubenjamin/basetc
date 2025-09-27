@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { FC } from "react";
+import Image from "next/image"; // <-- Tambahkan impor ini
 import {
   useAccount,
   useReadContract,
@@ -242,8 +243,14 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
           const priceText = priceLabel(id, tier.id);
           return (
             <div key={tier.id} className="flex items-center bg-neutral-800 rounded-lg p-3 space-x-3">
-              <div className="w-16 h-16 bg-neutral-700 rounded-md flex items-center justify-center">
-                <span className="text-xs text-neutral-400">Img</span>
+              <div className="w-16 h-16 bg-neutral-700 rounded-md flex items-center justify-center relative overflow-hidden">
+                <Image
+                  src={tier.image}
+                  alt={tier.name}
+                  width={64}
+                  height={64}
+                  className="object-contain"
+                />
               </div>
               <div className="flex-1">
                 <div className="flex items-baseline justify-between">
@@ -274,4 +281,3 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
 };
 
 export default Market;
-
