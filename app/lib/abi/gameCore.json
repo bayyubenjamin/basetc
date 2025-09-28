@@ -2,17 +2,17 @@
 	{
 		"inputs": [
 			{
-				"internalType": "address",
-				"name": "user",
-				"type": "address"
+				"internalType": "bytes32",
+				"name": "role",
+				"type": "bytes32"
 			},
 			{
-				"internalType": "uint256",
-				"name": "fid",
-				"type": "uint256"
+				"internalType": "address",
+				"name": "account",
+				"type": "address"
 			}
 		],
-		"name": "mergeBasicToPro",
+		"name": "grantRole",
 		"outputs": [],
 		"stateMutability": "nonpayable",
 		"type": "function"
@@ -75,33 +75,6 @@
 		"type": "error"
 	},
 	{
-		"inputs": [],
-		"name": "ECDSAInvalidSignature",
-		"type": "error"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "uint256",
-				"name": "length",
-				"type": "uint256"
-			}
-		],
-		"name": "ECDSAInvalidSignatureLength",
-		"type": "error"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "bytes32",
-				"name": "s",
-				"type": "bytes32"
-			}
-		],
-		"name": "ECDSAInvalidSignatureS",
-		"type": "error"
-	},
-	{
 		"anonymous": false,
 		"inputs": [
 			{
@@ -127,47 +100,6 @@
 		"type": "event"
 	},
 	{
-		"inputs": [
-			{
-				"internalType": "address",
-				"name": "user",
-				"type": "address"
-			},
-			{
-				"internalType": "uint256",
-				"name": "nonce",
-				"type": "uint256"
-			},
-			{
-				"internalType": "uint256",
-				"name": "deadline",
-				"type": "uint256"
-			},
-			{
-				"internalType": "bytes",
-				"name": "relayerSig",
-				"type": "bytes"
-			}
-		],
-		"name": "claimWithSig",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "uint256",
-				"name": "dayEpoch",
-				"type": "uint256"
-			}
-		],
-		"name": "distributeLeftover",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
 		"anonymous": false,
 		"inputs": [
 			{
@@ -179,24 +111,6 @@
 		],
 		"name": "GoLiveSet",
 		"type": "event"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "bytes32",
-				"name": "role",
-				"type": "bytes32"
-			},
-			{
-				"internalType": "address",
-				"name": "account",
-				"type": "address"
-			}
-		],
-		"name": "grantRole",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
 	},
 	{
 		"anonymous": false,
@@ -239,6 +153,69 @@
 			}
 		],
 		"name": "LeftoverDistributed",
+		"type": "event"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "address",
+				"name": "user",
+				"type": "address"
+			},
+			{
+				"internalType": "uint256",
+				"name": "fid",
+				"type": "uint256"
+			}
+		],
+		"name": "mergeBasicToPro",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": false,
+				"internalType": "uint256",
+				"name": "feeBasicToPro",
+				"type": "uint256"
+			},
+			{
+				"indexed": false,
+				"internalType": "uint256",
+				"name": "feeProToLegend",
+				"type": "uint256"
+			}
+		],
+		"name": "MergeFeeSet",
+		"type": "event"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": false,
+				"internalType": "address",
+				"name": "token",
+				"type": "address"
+			}
+		],
+		"name": "MergeFeeTokenSet",
+		"type": "event"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": false,
+				"internalType": "address",
+				"name": "treasury",
+				"type": "address"
+			}
+		],
+		"name": "MergeFeeTreasurySet",
 		"type": "event"
 	},
 	{
@@ -333,19 +310,6 @@
 		],
 		"name": "MiningStopped",
 		"type": "event"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "address",
-				"name": "user",
-				"type": "address"
-			}
-		],
-		"name": "onRigBalanceWillChange",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
 	},
 	{
 		"inputs": [
@@ -487,21 +451,16 @@
 		"inputs": [
 			{
 				"internalType": "uint256",
-				"name": "b",
+				"name": "_feeBasicToPro",
 				"type": "uint256"
 			},
 			{
 				"internalType": "uint256",
-				"name": "p",
-				"type": "uint256"
-			},
-			{
-				"internalType": "uint256",
-				"name": "l",
+				"name": "_feeProToLegend",
 				"type": "uint256"
 			}
 		],
-		"name": "setBaseReward",
+		"name": "setMergeFees",
 		"outputs": [],
 		"stateMutability": "nonpayable",
 		"type": "function"
@@ -510,135 +469,11 @@
 		"inputs": [
 			{
 				"internalType": "address",
-				"name": "_staking",
-				"type": "address"
-			},
-			{
-				"internalType": "address",
-				"name": "_spin",
-				"type": "address"
-			},
-			{
-				"internalType": "address",
-				"name": "_board",
+				"name": "token",
 				"type": "address"
 			}
 		],
-		"name": "setDistributionVaults",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "uint256",
-				"name": "x",
-				"type": "uint256"
-			}
-		],
-		"name": "setEpochLength",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "bool",
-				"name": "value",
-				"type": "bool"
-			}
-		],
-		"name": "setGoLive",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "uint256",
-				"name": "x",
-				"type": "uint256"
-			}
-		],
-		"name": "setHalvingEvery",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "uint256",
-				"name": "x",
-				"type": "uint256"
-			}
-		],
-		"name": "setInitialReward",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "uint256",
-				"name": "capBasic",
-				"type": "uint256"
-			},
-			{
-				"internalType": "uint256",
-				"name": "capPro",
-				"type": "uint256"
-			},
-			{
-				"internalType": "uint256",
-				"name": "capLegend",
-				"type": "uint256"
-			}
-		],
-		"name": "setRigCaps",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "uint256",
-				"name": "sec",
-				"type": "uint256"
-			}
-		],
-		"name": "setSessionDuration",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "uint256",
-				"name": "x",
-				"type": "uint256"
-			}
-		],
-		"name": "setStartTime",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "uint256",
-				"name": "value",
-				"type": "uint256"
-			}
-		],
-		"name": "setToggleCooldown",
+		"name": "setMergeFeeToken",
 		"outputs": [],
 		"stateMutability": "nonpayable",
 		"type": "function"
@@ -647,54 +482,11 @@
 		"inputs": [
 			{
 				"internalType": "address",
-				"name": "user",
+				"name": "treasury",
 				"type": "address"
-			},
-			{
-				"internalType": "uint256",
-				"name": "nonce",
-				"type": "uint256"
-			},
-			{
-				"internalType": "uint256",
-				"name": "deadline",
-				"type": "uint256"
-			},
-			{
-				"internalType": "bytes",
-				"name": "relayerSig",
-				"type": "bytes"
 			}
 		],
-		"name": "startMiningWithSig",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "address",
-				"name": "user",
-				"type": "address"
-			},
-			{
-				"internalType": "uint256",
-				"name": "nonce",
-				"type": "uint256"
-			},
-			{
-				"internalType": "uint256",
-				"name": "deadline",
-				"type": "uint256"
-			},
-			{
-				"internalType": "bytes",
-				"name": "relayerSig",
-				"type": "bytes"
-			}
-		],
-		"name": "stopMiningWithSig",
+		"name": "setMergeFeeTreasury",
 		"outputs": [],
 		"stateMutability": "nonpayable",
 		"type": "function"
@@ -847,7 +639,7 @@
 	},
 	{
 		"inputs": [],
-		"name": "epochNow",
+		"name": "feeBasicToPro",
 		"outputs": [
 			{
 				"internalType": "uint256",
@@ -859,14 +651,8 @@
 		"type": "function"
 	},
 	{
-		"inputs": [
-			{
-				"internalType": "address",
-				"name": "u",
-				"type": "address"
-			}
-		],
-		"name": "getBaseUnit",
+		"inputs": [],
+		"name": "feeProToLegend",
 		"outputs": [
 			{
 				"internalType": "uint256",
@@ -875,25 +661,6 @@
 			}
 		],
 		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "address",
-				"name": "",
-				"type": "address"
-			}
-		],
-		"name": "getHashrate",
-		"outputs": [
-			{
-				"internalType": "uint256",
-				"name": "",
-				"type": "uint256"
-			}
-		],
-		"stateMutability": "pure",
 		"type": "function"
 	},
 	{
@@ -973,38 +740,6 @@
 				"internalType": "uint256",
 				"name": "",
 				"type": "uint256"
-			}
-		],
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"inputs": [],
-		"name": "isPrelaunch",
-		"outputs": [
-			{
-				"internalType": "bool",
-				"name": "",
-				"type": "bool"
-			}
-		],
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "address",
-				"name": "u",
-				"type": "address"
-			}
-		],
-		"name": "isSupreme",
-		"outputs": [
-			{
-				"internalType": "bool",
-				"name": "",
-				"type": "bool"
 			}
 		],
 		"stateMutability": "view",
@@ -1120,6 +855,32 @@
 		"type": "function"
 	},
 	{
+		"inputs": [],
+		"name": "mergeFeeToken",
+		"outputs": [
+			{
+				"internalType": "contract IERC20",
+				"name": "",
+				"type": "address"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "mergeFeeTreasury",
+		"outputs": [
+			{
+				"internalType": "address",
+				"name": "",
+				"type": "address"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
 		"inputs": [
 			{
 				"internalType": "address",
@@ -1133,65 +894,6 @@
 				"internalType": "bool",
 				"name": "",
 				"type": "bool"
-			}
-		],
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "address",
-				"name": "u",
-				"type": "address"
-			}
-		],
-		"name": "miningUsage",
-		"outputs": [
-			{
-				"internalType": "uint256",
-				"name": "bOwned",
-				"type": "uint256"
-			},
-			{
-				"internalType": "uint256",
-				"name": "bUsed",
-				"type": "uint256"
-			},
-			{
-				"internalType": "uint256",
-				"name": "bIdle",
-				"type": "uint256"
-			},
-			{
-				"internalType": "uint256",
-				"name": "pOwned",
-				"type": "uint256"
-			},
-			{
-				"internalType": "uint256",
-				"name": "pUsed",
-				"type": "uint256"
-			},
-			{
-				"internalType": "uint256",
-				"name": "pIdle",
-				"type": "uint256"
-			},
-			{
-				"internalType": "uint256",
-				"name": "lOwned",
-				"type": "uint256"
-			},
-			{
-				"internalType": "uint256",
-				"name": "lUsed",
-				"type": "uint256"
-			},
-			{
-				"internalType": "uint256",
-				"name": "lIdle",
-				"type": "uint256"
 			}
 		],
 		"stateMutability": "view",
@@ -1230,25 +932,6 @@
 		"type": "function"
 	},
 	{
-		"inputs": [
-			{
-				"internalType": "address",
-				"name": "u",
-				"type": "address"
-			}
-		],
-		"name": "pending",
-		"outputs": [
-			{
-				"internalType": "uint256",
-				"name": "",
-				"type": "uint256"
-			}
-		],
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
 		"inputs": [],
 		"name": "PRO_TO_LEGEND_NEED",
 		"outputs": [
@@ -1269,25 +952,6 @@
 				"internalType": "bytes32",
 				"name": "",
 				"type": "bytes32"
-			}
-		],
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "uint256",
-				"name": "e",
-				"type": "uint256"
-			}
-		],
-		"name": "rewardPerEpoch",
-		"outputs": [
-			{
-				"internalType": "uint256",
-				"name": "",
-				"type": "uint256"
 			}
 		],
 		"stateMutability": "view",
