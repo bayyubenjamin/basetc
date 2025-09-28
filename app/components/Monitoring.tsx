@@ -19,27 +19,13 @@ import {
   gameCoreABI,
   chainId as BASE_CHAIN_ID,
 } from "../lib/web3Config";
-import { formatUnits, isAddress } from "viem";
+import { formatUnits } from "viem";
 
 // ======================
 // Utils & Constants
 // ======================
-const RELAYER_ENDPOINT = "/api/sign-user-action"; // backend returns { signature }
+const RELAYER_ENDPOINT = "/api/sign-user-action"; // backend expects user/action/nonce/deadline/chainId/verifyingContract
 type ActionType = "start" | "claim" | null;
-
-type MiningStatsPayload = {
-  address: `0x${string}`;
-  contract: `0x${string}`;
-  usage: {
-    basic: { owned: number; used: number; idle: number };
-    pro: { owned: number; used: number; idle: number };
-    legend: { owned: number; used: number; idle: number };
-  };
-  baseRw: { basicPerDay: number; proPerDay: number; legendPerDay: number };
-  baseUnitEpoch: number;
-  effectiveHashrate: number;
-  warning?: string;
-}
 
 // Compact large numbers
 const formatNumber = (num: number) => {
@@ -48,24 +34,32 @@ const formatNumber = (num: number) => {
   return num.toString();
 };
 
-// Ask relayer to sign (user pays gas; relayer only authorizes)
+// === Relayer signer (SESUIAI server kamu: perlu nonce & deadline dari client)
 async function getRelayerSig(params: {
   user: `0x${string}`;
   action: "start" | "stop" | "claim";
-}): Promise<{ signature: `0x${string}`; nonce: bigint; deadline: bigint }> {
-  const resp = await fetch("/api/sign-user-action", {
+  nonce: bigint;
+  deadline: bigint;
+}): Promise<{ signature: `0x${string}` }> {
+  const resp = await fetch(RELAYER_ENDPOINT, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ user: params.user, action: params.action }),
+    body: JSON.stringify({
+      user: params.user,
+      action: params.action,
+      nonce: params.nonce.toString(),
+      deadline: params.deadline.toString(),
+      chainId: BASE_CHAIN_ID,
+      verifyingContract: gameCoreAddress,
+    }),
   });
   const json = await resp.json();
-  if (!resp.ok) throw new Error(json?.error || "Relayer refused");
-  const { signature, nonce, deadline } = json;
-  return {
-    signature: signature as `0x${string}`,
-    nonce: BigInt(nonce),
-    deadline: BigInt(deadline),
-  };
+  if (!resp.ok) {
+    throw new Error(json?.error || "bad_request from relayer");
+  }
+  const { signature } = json || {};
+  if (!signature) throw new Error("relayer: no signature");
+  return { signature: signature as `0x${string}` };
 }
 
 export default function Monitoring() {
@@ -87,38 +81,6 @@ export default function Monitoring() {
   // Track last action
   const [lastAction, setLastAction] = useState<ActionType>(null);
 
-  // ====== Mining Stats via API route ======
- const [stats, setStats] = useState<MiningStatsPayload | null>(null);
-const [statsLoading, setStatsLoading] = useState(false);
-const [statsError, setStatsError] = useState<string | null>(null);
-
-const fetchStats = async (addr?: `0x${string}`) => {
-  if (!addr || !isAddress(addr)) {
-    setStats(null);
-    return;
-  }
-  try {
-    setStatsLoading(true);
-    setStatsError(null);
-    const res = await fetch(`/api/useMiningStats?address=${addr}`, { cache: "no-store" });
-    const data = await res.json();
-    if (!res.ok) {
-      throw new Error(data?.error || `API ${res.status}`);
-    }
-    setStats(data as MiningStatsPayload);
-  } catch (e: any) {
-    setStatsError(e?.message || "Failed to load stats");
-    setStats(null);
-  } finally {
-    setStatsLoading(false);
-  }
-};
-
-  // initial + poll on address change
-  useEffect(() => {
-    fetchStats(address as `0x${string}`);
-  }, [address]);
-
   // 1s ticker
   useEffect(() => {
     const t = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 1000);
@@ -138,7 +100,7 @@ const fetchStats = async (addr?: `0x${string}`) => {
   };
 
   // ======================
-  // NFT IDs & Balances (hanya buat tampilan jumlah kepemilikan)
+  // NFT IDs & Balances
   // ======================
   const basicId = useReadContract({
     address: rigNftAddress as `0x${string}`,
@@ -202,7 +164,7 @@ const fetchStats = async (addr?: `0x${string}`) => {
   }, [baseBal.data]);
 
   // ======================
-  // GameCore Reads (tanpa miningUsage/getBaseUnit; itu lewat API)
+  // GameCore Reads (latest ABI)
   // ======================
   const epochNow = useReadContract({
     address: gameCoreAddress as `0x${string}`,
@@ -252,6 +214,23 @@ const fetchStats = async (addr?: `0x${string}`) => {
     functionName: "toggleCooldown",
   });
 
+  // legacy hashrate (always 0 in new contract)
+  const hashrate = useReadContract({
+    address: gameCoreAddress as `0x${string}`,
+    abi: gameCoreABI as any,
+    functionName: "getHashrate",
+    args: address ? [address] : undefined,
+    query: { enabled: Boolean(address) },
+  });
+
+  const baseUnit = useReadContract({
+    address: gameCoreAddress as `0x${string}`,
+    abi: gameCoreABI as any,
+    functionName: "getBaseUnit",
+    args: address ? [address] : undefined,
+    query: { enabled: Boolean(address) },
+  });
+
   // NEW: pending reward (accumulator ROI)
   const pendingRw = useReadContract({
     address: gameCoreAddress as `0x${string}`,
@@ -279,15 +258,27 @@ const fetchStats = async (addr?: `0x${string}`) => {
     query: { enabled: Boolean(address) },
   });
 
-  // Refs to refetch after tx (on-chain reads)
+  // NEW: miningUsage (to compute effective hashrate & badges)
+  const miningUsage = useReadContract({
+    address: gameCoreAddress as `0x${string}`,
+    abi: gameCoreABI as any,
+    functionName: "miningUsage",
+    args: address ? [address] : undefined,
+    query: { enabled: Boolean(address) },
+  });
+
+  // Refs to refetch after tx
   const { refetch: refetchEpochNow } = epochNow as any;
   const { refetch: refetchMiningActive } = miningActive as any;
+  const { refetch: refetchBaseUnit } = baseUnit as any;
   const { refetch: refetchBaseBal } = baseBal as any;
+  const { refetch: refetchHashrate } = hashrate as any;
   const { refetch: refetchPending } = pendingRw as any;
   const { refetch: refetchSessionEnd } = sessionEndAt as any;
   const { refetch: refetchNonce } = userNonce as any;
+  const { refetch: refetchUsage } = miningUsage as any;
 
-  // Normalize & derived (on-chain)
+  // Normalize & derived
   const eNowBn = epochNow.data as bigint | undefined;
   const eLen = (epochLength.data as bigint | undefined) ?? undefined;
   const sTime = (startTime.data as bigint | undefined) ?? undefined;
@@ -297,16 +288,18 @@ const fetchStats = async (addr?: `0x${string}`) => {
   const goLiveOn = Boolean((goLive.data as boolean | undefined) ?? false);
   const active = Boolean((miningActive.data as boolean | undefined) ?? false);
 
-  // === Angka dari API stats ===
-  const baseUnitPerEpoch = stats?.baseUnitEpoch ?? 0;
-const effectiveHashrate = stats?.effectiveHashrate ?? 0;
+  // legacy hashrate (contract returns 0)
+  const hrLegacy = useMemo(() => {
+    const v = hashrate.data as bigint | undefined;
+    return v ? Number(v) : 0;
+  }, [hashrate.data]);
 
-const usedBasic  = stats?.usage.basic.used   ?? 0;
-const idleBasic  = stats?.usage.basic.idle   ?? 0;
-const usedPro    = stats?.usage.pro.used     ?? 0;
-const idlePro    = stats?.usage.pro.idle     ?? 0;
-const usedLegend = stats?.usage.legend.used  ?? 0;
-const idleLegend = stats?.usage.legend.idle  ?? 0;
+  // Base Unit per epoch (18 decimals)
+  const baseUnitPerEpoch = useMemo(() => {
+    const v = baseUnit.data as bigint | undefined;
+    if (!v) return 0;
+    return Number(formatUnits(v, 18));
+  }, [baseUnit.data]);
 
   // Pending amount (enable claim if > 0)
   const pendingAmt = useMemo(() => {
@@ -315,6 +308,39 @@ const idleLegend = stats?.usage.legend.idle  ?? 0;
   }, [pendingRw.data]);
 
   const canClaim = pendingAmt > 0;
+
+  // Parse miningUsage -> used/idle & effective hashrate (display only; true reward pakai Base Unit)
+  const {
+    usedBasic,
+    idleBasic,
+    usedPro,
+    idlePro,
+    usedLegend,
+    idleLegend,
+    effectiveHashrate,
+  } = useMemo(() => {
+    const mu = miningUsage.data as
+      | readonly [bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint]
+      | undefined;
+    // mu layout: bOwned, bUsed, bIdle, pOwned, pUsed, pIdle, lOwned, lUsed, lIdle
+    const uB = mu ? Number(mu[1]) : 0;
+    const iB = mu ? Number(mu[2]) : 0;
+    const uP = mu ? Number(mu[4]) : 0;
+    const iP = mu ? Number(mu[5]) : 0;
+    const uL = mu ? Number(mu[7]) : 0;
+    const iL = mu ? Number(mu[8]) : 0;
+    // Display convention lama: 1 / 5 / 25
+    const eff = uB * 1 + uP * 5 + uL * 25;
+    return {
+      usedBasic: uB,
+      idleBasic: iB,
+      usedPro: uP,
+      idlePro: iP,
+      usedLegend: uL,
+      idleLegend: iL,
+      effectiveHashrate: eff,
+    };
+  }, [miningUsage.data]);
 
   // Epoch progress & ETA
   const epochProgress = useMemo(() => {
@@ -366,15 +392,16 @@ const idleLegend = stats?.usage.legend.idle  ?? 0;
     if (isSuccess) {
       setMsg("Transaction confirmed.");
       addLog("Success: Transaction confirmed.");
-      // Refresh on-chain reads
+      // Refresh important reads
       refetchEpochNow?.();
       refetchMiningActive?.();
+      refetchBaseUnit?.();
       refetchBaseBal?.();
+      refetchHashrate?.();
       refetchPending?.();
       refetchSessionEnd?.();
       refetchNonce?.();
-      // Refresh API stats
-      fetchStats(address as `0x${string}`);
+      refetchUsage?.();
       setLastAction(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -424,13 +451,13 @@ const idleLegend = stats?.usage.legend.idle  ?? 0;
 
       refetchEpochNow?.();
       refetchMiningActive?.();
+      refetchBaseUnit?.();
       refetchBaseBal?.();
+      refetchHashrate?.();
       refetchPending?.();
       refetchSessionEnd?.();
       refetchNonce?.();
-
-      // refresh API stats juga
-      fetchStats(address as `0x${string}`);
+      refetchUsage?.();
 
       setLastAction(null);
       setMsg("Transaction confirmed.");
@@ -438,129 +465,133 @@ const idleLegend = stats?.usage.legend.idle  ?? 0;
   });
 
   // ======================
-  // Actions (WithSig)
+  // Actions (WithSig) — versi stabil
   // ======================
   const onStart = async () => {
-  if (!address) return setMsg("Please connect your wallet.");
-  if (chainId && chainId !== BASE_CHAIN_ID)
-    return setMsg("Please switch to Base Sepolia.");
-  if (prelaunch && goLiveOn) return setMsg("Prelaunch is active. Wait for epoch 1.");
-  if (!canToggle) return setMsg("Cooldown. Please try again later.");
+    if (!address) return setMsg("Please connect your wallet.");
+    if (chainId && chainId !== BASE_CHAIN_ID)
+      return setMsg("Please switch to Base Sepolia.");
+    if (prelaunch && goLiveOn) return setMsg("Prelaunch is active. Wait for epoch 1.");
+    if (!canToggle) return setMsg("Cooldown. Please try again later.");
 
-  try {
-    setMsg("");
-    setLastAction("start");
-    addLog("Requesting relayer signature for START (server)…");
+    try {
+      setMsg("");
+      setLastAction("start");
+      addLog("Requesting relayer signature for START...");
 
-    // 🚀 ambil nonce & deadline fresh dari server signer
-    const { signature, nonce, deadline } = await getRelayerSig({
-      user: address as `0x${string}`,
-      action: "start",
-    });
+      // nonce FRESH dari chain (gunakan view hook terbaru)
+      const nonce =
+        (await (refetchNonce?.() || Promise.resolve({ data: userNonce.data })))?.data ??
+        (userNonce.data as bigint | undefined) ??
+        0n;
 
-    addLog("Sending startMiningWithSig…");
-    writeContract({
-      address: gameCoreAddress as `0x${string}`,
-      abi: gameCoreABI as any,
-      functionName: "startMiningWithSig",
-      args: [address, nonce, deadline, signature],
-      account: address as `0x${string}`,
-      chain: baseSepolia,
-      chainId: BASE_CHAIN_ID,
-    });
-  } catch (e: any) {
-    setLastAction(null);
-    const m = e?.message || "Failed to start";
-    setMsg(m);
-    addLog(`Error: ${m}`);
-  }
-};
+      // deadline 1 jam (lebih aman dari 15 menit)
+      const deadline = BigInt(Math.floor(Date.now() / 1000) + 60 * 60);
 
-const onClaim = async () => {
-  if (!address) return setMsg("Please connect your wallet.");
-  if (chainId && chainId !== BASE_CHAIN_ID)
-    return setMsg("Please switch to Base Sepolia.");
-  if (!canClaim) return setMsg("No pending rewards to claim.");
+      const { signature } = await getRelayerSig({
+        user: address as `0x${string}`,
+        action: "start",
+        nonce,
+        deadline,
+      });
 
-  try {
-    setMsg("");
-    setLastAction("claim");
-    addLog("Requesting relayer signature for CLAIM (server)…");
-
-    // 🚀 ambil nonce & deadline dari server signer
-    let { signature, nonce, deadline } = await getRelayerSig({
-      user: address as `0x${string}`,
-      action: "claim",
-    });
-
-    addLog("Sending claimWithSig…");
-    writeContract({
-      address: gameCoreAddress as `0x${string}`,
-      abi: gameCoreABI as any,
-      functionName: "claimWithSig",
-      args: [address, nonce, deadline, signature],
-      account: address as `0x${string}`,
-      chain: baseSepolia,
-      chainId: BASE_CHAIN_ID,
-    });
-  } catch (e: any) {
-    // 🔁 Auto-retry sekali kalau terdeteksi expired/nonce
-    const msg = (e?.message || "").toLowerCase();
-    const shouldRetry =
-      msg.includes("expired") ||
-      msg.includes("deadline") ||
-      msg.includes("bad_nonce") ||
-      msg.includes("bad nonce") ||
-      msg.includes("nonce");
-    if (shouldRetry) {
-      try {
-        addLog("Retry: refresh signature (nonce/deadline) from server…");
-        const { signature, nonce, deadline } = await getRelayerSig({
-          user: address as `0x${string}`,
-          action: "claim",
-        });
-        writeContract({
-          address: gameCoreAddress as `0x${string}`,
-          abi: gameCoreABI as any,
-          functionName: "claimWithSig",
-          args: [address, nonce, deadline, signature],
-          account: address as `0x${string}`,
-          chain: baseSepolia,
-          chainId: BASE_CHAIN_ID,
-        });
-        return; // biar lifecycle sukses yang handle refresh UI
-      } catch (e2: any) {
-        setLastAction(null);
-        const em = e2?.message || "Failed to claim (retry)";
-        setMsg(em);
-        addLog(`Error (retry): ${em}`);
-        return;
-      }
+      addLog("Sending startMiningWithSig...");
+      writeContract({
+        address: gameCoreAddress as `0x${string}`,
+        abi: gameCoreABI as any,
+        functionName: "startMiningWithSig",
+        args: [address, nonce, deadline, signature],
+        account: address as `0x${string}`,
+        chain: baseSepolia,
+        chainId: BASE_CHAIN_ID,
+      });
+    } catch (e: any) {
+      setLastAction(null);
+      const m = e?.message || "Failed to start";
+      setMsg(m);
+      addLog(`Error: ${m}`);
     }
+  };
 
-    setLastAction(null);
-    const m = e?.message || "Failed to claim";
-    setMsg(m);
-    addLog(`Error: ${m}`);
-  }
-};
+  const onClaim = async () => {
+    if (!address) return setMsg("Please connect your wallet.");
+    if (chainId && chainId !== BASE_CHAIN_ID)
+      return setMsg("Please switch to Base Sepolia.");
+    if (!canClaim) return setMsg("No pending rewards to claim.");
+
+    const trySend = async () => {
+      const freshNonce =
+        (await (refetchNonce?.() || Promise.resolve({ data: userNonce.data })))?.data ??
+        (userNonce.data as bigint | undefined) ??
+        0n;
+      const deadline = BigInt(Math.floor(Date.now() / 1000) + 60 * 60);
+
+      const { signature } = await getRelayerSig({
+        user: address as `0x${string}`,
+        action: "claim",
+        nonce: freshNonce,
+        deadline,
+      });
+
+      writeContract({
+        address: gameCoreAddress as `0x${string}`,
+        abi: gameCoreABI as any,
+        functionName: "claimWithSig",
+        args: [address, freshNonce, deadline, signature],
+        account: address as `0x${string}`,
+        chain: baseSepolia,
+        chainId: BASE_CHAIN_ID,
+      });
+    };
+
+    try {
+      setMsg("");
+      setLastAction("claim");
+      addLog("Requesting relayer signature for CLAIM...");
+      await trySend();
+    } catch (e: any) {
+      const msg = (e?.message || "").toLowerCase();
+      const shouldRetry =
+        msg.includes("expired") ||
+        msg.includes("deadline") ||
+        msg.includes("bad_nonce") ||
+        msg.includes("bad nonce") ||
+        msg.includes("nonce");
+      if (shouldRetry) {
+        try {
+          addLog("Retry: refresh nonce/deadline/signature from server...");
+          await trySend();
+          return;
+        } catch (e2: any) {
+          setLastAction(null);
+          const em = e2?.message || "Failed to claim (retry)";
+          setMsg(em);
+          addLog(`Error (retry): ${em}`);
+          return;
+        }
+      }
+      setLastAction(null);
+      const m = e?.message || "Failed to claim";
+      setMsg(m);
+      addLog(`Error: ${m}`);
+    }
+  };
 
   // ===== Reset cosmetic budget when epoch changes / mid-epoch open =====
   useEffect(() => {
-    if (!stats) return; // butuh baseUnitPerEpoch dari API
-    const totalSec = Number(epochLength.data as bigint | 0n);
-    if (!totalSec) return;
-
+    if (!eLen || !eNowBn) return;
+    const totalSec = Number(eLen);
     const leftSec = epochProgress.leftSec || totalSec;
+
     if (lastSeenEpoch === undefined || eNowBn !== lastSeenEpoch) {
       setLastSeenEpoch(eNowBn);
     }
 
     const proportion = totalSec > 0 ? leftSec / totalSec : 0;
-    const initAmt = (stats.baseUnitEpoch ?? 0) * proportion;
+    const initAmt = baseUnitPerEpoch * proportion;
     setEpochBudget({ amt: initAmt, sec: leftSec });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [eNowBn, epochLength.data, stats?.baseUnitEpoch, epochProgress.leftSec]);
+  }, [eNowBn, eLen, baseUnitPerEpoch, epochProgress.leftSec]);
 
   // ===== Cosmetic per-second stream (randomized but totals match budget) =====
   useEffect(() => {
@@ -583,21 +614,12 @@ const onClaim = async () => {
   }, [now, active, prelaunch, goLiveOn]);
 
   // =========== UI ===========
-return (
-  <div className="space-y-4 px-4 pt-4 pb-24">
-    <header className="space-y-1">
-      <div className="flex items-center gap-2">
+  return (
+    <div className="space-y-4 px-4 pt-4 pb-24">
+      <header className="space-y-1">
         <h1 className="text-xl font-semibold">Mining Console</h1>
-        {statsLoading ? (
-          <span className="text-xs text-neutral-400">(sync...)</span>
-        ) : statsError ? (
-          <span className="text-xs text-red-400">(api error)</span>
-        ) : stats?.warning ? (
-          <span className="text-xs text-yellow-400">(partial data)</span>
-        ) : null}
-      </div>
-      <p className="text-sm text-neutral-400">Real-time on-chain monitoring</p>
-    </header>
+        <p className="text-sm text-neutral-400">Real-time on-chain monitoring</p>
+      </header>
 
       <div className="bg-neutral-900/60 border border-neutral-800 rounded-xl p-4 space-y-3 shadow-lg">
         <div className="flex items-center justify-between gap-3">
@@ -682,16 +704,16 @@ return (
       </div>
 
       <div className="grid grid-cols-3 gap-2">
-        {/* Effective Hashrate from API (dibulatkan) */}
+        {/* Effective Hashrate from miningUsage (display only) */}
         <StatCard title="Effective Hashrate" value={formatNumber(effectiveHashrate)} />
         {/* Base Unit: 2 decimals + tooltip exact */}
         <StatCardWithTooltip
           title="Base Unit / Epoch"
-          valueShort={(baseUnitPerEpoch ?? 0).toLocaleString("en-US", {
+          valueShort={baseUnitPerEpoch.toLocaleString("en-US", {
             minimumFractionDigits: 2,
             maximumFractionDigits: 2,
           })}
-          valueExact={(baseUnitPerEpoch ?? 0).toLocaleString("en-US", {
+          valueExact={baseUnitPerEpoch.toLocaleString("en-US", {
             minimumFractionDigits: 12,
           })}
         />
@@ -701,7 +723,7 @@ return (
       <div className="bg-neutral-900/60 border border-neutral-800 rounded-xl p-4 space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold">Your Rigs</h2>
-          {/* small usage badges (pakai API) */}
+          {/* small usage badges */}
           <div className="text-[11px] text-neutral-400 space-x-2">
             <span>
               Basic x{String(countBasic)}{" "}
@@ -743,10 +765,6 @@ return (
             badge={address ? `${usedLegend} used, ${idleLegend} idle` : undefined}
           />
         </div>
-
-        {statsError ? (
-          <div className="text-xs text-red-400">API error: {statsError}</div>
-        ) : null}
       </div>
     </div>
   );
