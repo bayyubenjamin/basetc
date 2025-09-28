@@ -22,19 +22,19 @@ import {
 import { formatUnits } from "viem";
 
 // ======================
-// Util & Constants
+// Utils & Constants
 // ======================
-const RELAYER_ENDPOINT = "/api/sign-user-action"; // backend harus mengembalikan { signature }
+const RELAYER_ENDPOINT = "/api/sign-user-action"; // backend returns { signature }
 type ActionType = "start" | "claim" | null;
 
-// Ringkas angka besar (untuk Hashrate)
+// Compact large numbers (for Hashrate)
 const formatNumber = (num: number) => {
   if (num >= 1_000_000) return (num / 1_000_000).toFixed(1) + "M";
   if (num >= 1_000) return (num / 1_000).toFixed(1) + "K";
   return num.toString();
 };
 
-// Minta signature dari relayer (user bayar gas, relayer hanya otorisasi)
+// Ask relayer to sign (user pays gas; relayer only authorizes)
 async function getRelayerSig(params: {
   user: `0x${string}`;
   action: "start" | "stop" | "claim";
@@ -73,23 +73,23 @@ export default function Monitoring() {
   const [terminalLogs, setTerminalLogs] = useState<string[]>([]);
   const terminalRef = useRef<HTMLDivElement>(null);
 
-  // Mining stream budget (atomik per detik; untuk animasi terminal)
+  // Mining stream budget (per-second animation; cosmetic only)
   const [epochBudget, setEpochBudget] = useState<{ amt: number; sec: number }>({
     amt: 0,
     sec: 0,
   });
   const [lastSeenEpoch, setLastSeenEpoch] = useState<bigint | undefined>(undefined);
 
-  // Track aksi terakhir buat auto-label tombol
+  // Track last action for button labels + busy state
   const [lastAction, setLastAction] = useState<ActionType>(null);
 
-  // Ticker 1s
+  // 1s ticker
   useEffect(() => {
     const t = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 1000);
     return () => clearInterval(t);
   }, []);
 
-  // Auto-scroll terminal ke bawah
+  // Auto-scroll terminal to bottom
   useEffect(() => {
     if (terminalRef.current) {
       terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
@@ -166,7 +166,7 @@ export default function Monitoring() {
   }, [baseBal.data]);
 
   // ======================
-  // GameCore Reads (ABI terbaru)
+  // GameCore Reads (latest ABI)
   // ======================
   const epochNow = useReadContract({
     address: gameCoreAddress as `0x${string}`,
@@ -241,7 +241,7 @@ export default function Monitoring() {
     query: { enabled: Boolean(address) },
   });
 
-  // NEW: sessionEndAt (untuk ritual harian auto-stop)
+  // NEW: sessionEndAt (daily ritual auto-stop)
   const sessionEndAt = useReadContract({
     address: gameCoreAddress as `0x${string}`,
     abi: gameCoreABI as any,
@@ -250,7 +250,7 @@ export default function Monitoring() {
     query: { enabled: Boolean(address) },
   });
 
-  // NEW: nonces untuk WithSig (dibaca saat butuh)
+  // NEW: nonces for WithSig
   const userNonce = useReadContract({
     address: gameCoreAddress as `0x${string}`,
     abi: gameCoreABI as any,
@@ -259,7 +259,7 @@ export default function Monitoring() {
     query: { enabled: Boolean(address) },
   });
 
-  // Refs buat refetch setelah tx sukses
+  // Refs to refetch after tx
   const { refetch: refetchEpochNow } = epochNow as any;
   const { refetch: refetchMiningActive } = miningActive as any;
   const { refetch: refetchBaseUnit } = baseUnit as any;
@@ -284,14 +284,14 @@ export default function Monitoring() {
     return v ? Number(v) : 0;
   }, [hashrate.data]);
 
-  // Base Unit per epoch (18 desimal)
+  // Base Unit per epoch (18 decimals)
   const baseUnitPerEpoch = useMemo(() => {
     const v = baseUnit.data as bigint | undefined;
     if (!v) return 0;
-    return Number(formatUnits(v, 18)); // contoh: 1.665
+    return Number(formatUnits(v, 18)); // e.g., 1.665
   }, [baseUnit.data]);
 
-  // Pending amount (enable claim jika >0)
+  // Pending amount (enable claim if > 0)
   const pendingAmt = useMemo(() => {
     const v = pendingRw.data as bigint | undefined;
     return v ? Number(formatUnits(v, 18)) : 0;
@@ -332,15 +332,15 @@ export default function Monitoring() {
   const { writeContract, data: txHash, isPending, error } = useWriteContract();
   const { isLoading: waitingReceipt, isSuccess } = useWaitForTransactionReceipt({ hash: txHash });
 
-  // Busy indicator yang tidak ngegantung
+  // Busy indicator that won't hang
   const busy = Boolean((isPending || waitingReceipt) && lastAction !== null);
 
   // TX lifecycle
   useEffect(() => {
     if (isSuccess) {
-      setMsg("Transaksi berhasil.");
+      setMsg("Transaction confirmed.");
       addLog(`Success: Transaction confirmed.`);
-      // Refresh semua read penting
+      // Refresh important reads
       refetchEpochNow?.();
       refetchMiningActive?.();
       refetchBaseUnit?.();
@@ -368,23 +368,27 @@ export default function Monitoring() {
   }, [msg]);
 
   // ======================
-  // Watch on-chain Claim event → auto-update UI
+  // Watch on-chain Claim event → auto-update UI (TS-safe cast)
   // ======================
   useWatchContractEvent({
     address: gameCoreAddress as `0x${string}`,
     abi: gameCoreABI as any,
     eventName: "Claimed",
-    onLogs(logs) {
-      const mine = logs.find(
-        (l: any) =>
-          (l.args?.user as string)?.toLowerCase() ===
-          (address ?? "").toLowerCase()
-      );
-      if (!mine) return;
+    onLogs(logsRaw) {
+      // Cast to access args safely
+      const logs = logsRaw as Array<{
+        args?: { e?: bigint; user?: `0x${string}`; amount?: bigint };
+      }>;
 
-      const amt = Number(formatUnits(mine.args?.amount as bigint, 18));
+      const mine = logs.find(
+        (l) =>
+          (l?.args?.user ?? "").toLowerCase() === (address ?? "").toLowerCase()
+      );
+      if (!mine || !mine.args) return;
+
+      const amt = Number(formatUnits(mine.args.amount ?? 0n, 18));
       addLog(
-        `Claim success for epoch #${String(mine.args?.e)}: +${amt.toFixed(6)}`
+        `Claim success for epoch #${String(mine.args.e)}: +${amt.toFixed(6)}`
       );
 
       refetchEpochNow?.();
@@ -397,7 +401,7 @@ export default function Monitoring() {
       refetchNonce?.();
 
       setLastAction(null);
-      setMsg("Transaksi berhasil.");
+      setMsg("Transaction confirmed.");
     },
   });
 
@@ -405,18 +409,18 @@ export default function Monitoring() {
   // Actions (WithSig)
   // ======================
   const onStart = async () => {
-    if (!address) return setMsg("Connect wallet dulu.");
+    if (!address) return setMsg("Please connect your wallet.");
     if (chainId && chainId !== BASE_CHAIN_ID)
       return setMsg("Please switch to Base Sepolia.");
-    if (prelaunch && goLiveOn) return setMsg("Prelaunch aktif. Tunggu epoch 1.");
-    if (!canToggle) return setMsg("Masih cooldown. Coba lagi nanti.");
+    if (prelaunch && goLiveOn) return setMsg("Prelaunch is active. Wait for epoch 1.");
+    if (!canToggle) return setMsg("Cooldown. Please try again later.");
 
     try {
       setMsg("");
       setLastAction("start");
       addLog("Requesting relayer signature for START...");
       const nonce = (userNonce.data as bigint | undefined) ?? 0n;
-      const deadline = BigInt(Math.floor(Date.now() / 1000) + 15 * 60);
+      const deadline = BigInt(Math.floor(Date.now() / 1000) + 15 * 60); // now + 15 minutes
       const relayerSig = await getRelayerSig({
         user: address as `0x${string}`,
         action: "start",
@@ -444,19 +448,19 @@ export default function Monitoring() {
     }
   };
 
-  // Kamu minta stop mining dihapus; tinggal Claim
+  // Stop mining is removed; Claim only while active
   const onClaim = async () => {
-    if (!address) return setMsg("Connect wallet dulu.");
+    if (!address) return setMsg("Please connect your wallet.");
     if (chainId && chainId !== BASE_CHAIN_ID)
       return setMsg("Please switch to Base Sepolia.");
-    if (!canClaim) return setMsg("Belum ada pending reward untuk claim.");
+    if (!canClaim) return setMsg("No pending rewards to claim.");
 
     try {
       setMsg("");
       setLastAction("claim");
       addLog("Requesting relayer signature for CLAIM...");
       const nonce = (userNonce.data as bigint | undefined) ?? 0n;
-      const deadline = BigInt(Math.floor(Date.now() / 1000) + 15 * 60);
+      const deadline = BigInt(Math.floor(Date.now() / 1000) + 15 * 60); // now + 15 minutes
       const relayerSig = await getRelayerSig({
         user: address as `0x${string}`,
         action: "claim",
@@ -484,7 +488,7 @@ export default function Monitoring() {
     }
   };
 
-  // ===== Reset budget saat epoch berubah / atau buka di tengah epoch =====
+  // ===== Reset cosmetic budget when epoch changes / or when entering mid-epoch =====
   useEffect(() => {
     if (!eLen || !eNowBn) return;
     const totalSec = Number(eLen);
@@ -500,7 +504,7 @@ export default function Monitoring() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [eNowBn, eLen, baseUnitPerEpoch, epochProgress.leftSec]);
 
-  // ===== Stream tepat 1x per detik (randomized namun total pas) =====
+  // ===== Cosmetic per-second stream (randomized but totals match budget) =====
   useEffect(() => {
     if (!active || (prelaunch && goLiveOn)) return;
     if (epochBudget.sec <= 0 || epochBudget.amt <= 0) return;
@@ -569,7 +573,7 @@ export default function Monitoring() {
             Cooldown: <span className="text-neutral-200">{String(cd ?? 0n)} epoch</span>
           </div>
 
-        {/* Saat ACTIVE → tombol Claim (abu-abu jika pending=0). Saat tidak active → Start */}
+          {/* When ACTIVE → Claim (grey if pending=0). When NOT active → Start */}
           {active ? (
             <button
               onClick={onClaim}
@@ -579,7 +583,7 @@ export default function Monitoring() {
                   ? "bg-neutral-700 text-neutral-400"
                   : "bg-indigo-600 hover:bg-indigo-500"
               }`}
-              title={canClaim ? "Claim rewards" : "Belum ada reward yang dapat diklaim"}
+              title={canClaim ? "Claim rewards" : "No rewards available yet"}
             >
               {busy && lastAction === "claim" ? "Claiming…" : "Claim"}
             </button>
@@ -600,7 +604,7 @@ export default function Monitoring() {
         {!!msg && <div className="text-xs text-emerald-400 pt-1">{msg}</div>}
       </div>
 
-      {/* Terminal: terbaru di bawah + auto-scroll */}
+      {/* Terminal: latest at bottom + auto-scroll */}
       <div
         ref={terminalRef}
         className="bg-black/50 border border-neutral-800 rounded-lg p-3 font-mono text-xs text-green-400 space-y-1 h-32 overflow-y-auto"
@@ -613,7 +617,7 @@ export default function Monitoring() {
 
       <div className="grid grid-cols-3 gap-2">
         <StatCard title="Hashrate" value={formatNumber(hrNum)} />
-        {/* Base Unit: 2 angka + tooltip exact */}
+        {/* Base Unit: 2 decimals + tooltip exact */}
         <StatCardWithTooltip
           title="Base Unit"
           valueShort={baseUnitPerEpoch.toLocaleString("en-US", {
@@ -678,7 +682,7 @@ function StatCardWithTooltip({
     <div className="bg-neutral-900/60 border border-neutral-800 rounded-xl p-4 text-center shadow">
       <div className="relative inline-block group">
         <div className="text-lg font-semibold cursor-help">{valueShort}</div>
-        {/* Tooltip di atas */}
+        {/* Tooltip (top) */}
         <div
           className="absolute -top-2 left-1/2 -translate-x-1/2 -translate-y-full
                         hidden group-hover:block bg-neutral-800 text-neutral-100 text-xs
