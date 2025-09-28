@@ -93,14 +93,27 @@ export async function GET(req: Request) {
     ] = arr;
 
     // ----- parse baseRw struct -----
-    const baseRw = (baseRwRaw ??
-      { b: 0n, p: 0n, l: 0n }) as { b: bigint; p: bigint; l: bigint };
+    const baseRw = (baseRwRaw ?? { b: 0n, p: 0n, l: 0n }) as {
+      b: bigint; p: bigint; l: bigint;
+    };
 
-    // Effective hashrate sebagai indikator UI (dinormalisasi terhadap Basic)
-    const ratioP = Number(baseRw.b) === 0 ? 0 : Number(baseRw.p) / Number(baseRw.b);
-    const ratioL = Number(baseRw.b) === 0 ? 0 : Number(baseRw.l) / Number(baseRw.b);
-    const effectiveHashrate =
-      Number(bUsed) * 1 + Number(pUsed) * ratioP + Number(lUsed) * ratioL;
+    /* ✅ BIGINT-SAFE RATIO (hindari NaN/precision loss)
+       Efektif hashrate = usedBasic*1 + usedPro*(p/b) + usedLegend*(l/b)
+       Kita hitung (p/b) & (l/b) memakai skala integer agar stabil. */
+    const SCALE = 1_000_000n; // presisi 1e6 cukup untuk UI
+    let ratioPScaled = 0n;
+    let ratioLScaled = 0n;
+    if (baseRw.b > 0n) {
+      ratioPScaled = (baseRw.p * SCALE) / baseRw.b; // ≈ (p/b)*1e6
+      ratioLScaled = (baseRw.l * SCALE) / baseRw.b; // ≈ (l/b)*1e6
+    }
+
+    // effScaled = (bUsed*1 + pUsed*ratioP + lUsed*ratioL) * SCALE
+    const effScaled =
+      (bUsed * SCALE) + (pUsed * ratioPScaled) + (lUsed * ratioLScaled);
+
+    // angka untuk UI, dibulatkan ke bawah (stabil)
+    const effectiveHashrate = Number(effScaled / SCALE);
 
     const payload = {
       address: userAddr,
@@ -116,7 +129,7 @@ export async function GET(req: Request) {
         legendPerDay: toNum18(baseRw.l),
       },
       baseUnitEpoch: toNum18(baseUnitRaw as bigint),
-      effectiveHashrate: Math.round(effectiveHashrate),
+      effectiveHashrate,
       warning, // opsional, biar bisa ditampilkan kecil di UI
     };
 
