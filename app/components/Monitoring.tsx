@@ -567,19 +567,21 @@ const idleLegend = stats?.usage.legend.idle  ?? 0;
   }, [now, active, prelaunch, goLiveOn]);
 
   // =========== UI ===========
-<header className="space-y-1">
-  <div className="flex items-center gap-2">
-    <h1 className="text-xl font-semibold">Mining Console</h1>
-    {statsLoading ? (
-      <span className="text-xs text-neutral-400">(sync...)</span>
-    ) : statsError ? (
-      <span className="text-xs text-red-400">(api error)</span>
-    ) : stats?.warning ? (
-      <span className="text-xs text-yellow-400">(partial data)</span>
-    ) : null}
-  </div>
-  <p className="text-sm text-neutral-400">Real-time on-chain monitoring</p>
-</header>
+return (
+  <div className="space-y-4 px-4 pt-4 pb-24">
+    <header className="space-y-1">
+      <div className="flex items-center gap-2">
+        <h1 className="text-xl font-semibold">Mining Console</h1>
+        {statsLoading ? (
+          <span className="text-xs text-neutral-400">(sync...)</span>
+        ) : statsError ? (
+          <span className="text-xs text-red-400">(api error)</span>
+        ) : stats?.warning ? (
+          <span className="text-xs text-yellow-400">(partial data)</span>
+        ) : null}
+      </div>
+      <p className="text-sm text-neutral-400">Real-time on-chain monitoring</p>
+    </header>
 
       <div className="bg-neutral-900/60 border border-neutral-800 rounded-xl p-4 space-y-3 shadow-lg">
         <div className="flex items-center justify-between gap-3">
