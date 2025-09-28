@@ -1,17 +1,14 @@
 // app/api/useMiningStats/route.ts
 import { NextResponse } from "next/server";
 import { createPublicClient, http, isAddress, formatEther } from "viem";
-// 🔧 PAKAI ABI dari lib yang sudah ada (hindari import JSON & alias @)
 import { gameCoreABI } from "../../lib/web3Config";
 
-// ENV
 const RPC_URL = process.env.RPC_URL || "https://sepolia.base.org";
 const CHAIN_ID = Number(process.env.CHAIN_ID || 84532);
 const GAMECORE =
   (process.env.NEXT_PUBLIC_CONTRACT_GAMECORE ||
     process.env.CONTRACT_GAMECORE) as `0x${string}`;
 
-// Chain minimal (biar viem jalan di server)
 const baseLike = {
   id: CHAIN_ID,
   name: "base-like",
@@ -28,7 +25,7 @@ export async function GET(req: Request) {
   try {
     if (!GAMECORE) {
       return NextResponse.json(
-        { error: "CONTRACT_GAMECORE/NEXT_PUBLIC_CONTRACT_GAMECORE env belum diset" },
+        { error: "CONTRACT_GAMECORE env belum diset" },
         { status: 500 }
       );
     }
@@ -43,37 +40,35 @@ export async function GET(req: Request) {
       );
     }
 
-    // parallel reads
+    // 👇 cast ke any biar gak strict
     const [usageRaw, baseUnitRaw, baseRwRaw] = await Promise.all([
-      client.readContract({
+      (client as any).readContract({
         address: GAMECORE,
-        abi: gameCoreABI as any,
+        abi: gameCoreABI,
         functionName: "miningUsage",
-        args: [user as `0x${string}`],
+        args: [user],
       }),
-      client.readContract({
+      (client as any).readContract({
         address: GAMECORE,
-        abi: gameCoreABI as any,
+        abi: gameCoreABI,
         functionName: "getBaseUnit",
-        args: [user as `0x${string}`],
+        args: [user],
       }),
-      client.readContract({
+      (client as any).readContract({
         address: GAMECORE,
-        abi: gameCoreABI as any,
+        abi: gameCoreABI,
         functionName: "baseRw",
       }),
     ]);
 
-    // miningUsage returns 9 values (bOwned,bUsed,bIdle,pOwned,pUsed,pIdle,lOwned,lUsed,lIdle)
     const [
       bOwned, bUsed, bIdle,
       pOwned, pUsed, pIdle,
       lOwned, lUsed, lIdle,
-    ] = usageRaw as unknown as bigint[];
+    ] = usageRaw as bigint[];
 
-    const baseRw = baseRwRaw as unknown as { b: bigint; p: bigint; l: bigint };
+    const baseRw = baseRwRaw as { b: bigint; p: bigint; l: bigint };
 
-    // Effective Hashrate (indikator UI; reward sesungguhnya pakai getBaseUnit)
     const ratioP =
       Number(baseRw.b) === 0 ? 0 : Number(baseRw.p) / Number(baseRw.b);
     const ratioL =
@@ -101,9 +96,11 @@ export async function GET(req: Request) {
       effectiveHashrate: Math.round(effectiveHashrate),
     };
 
-    const res = NextResponse.json(payload);
-    res.headers.set("Cache-Control", "max-age=15, s-maxage=15, stale-while-revalidate=60");
-    return res;
+    return NextResponse.json(payload, {
+      headers: {
+        "Cache-Control": "max-age=15, s-maxage=15, stale-while-revalidate=60",
+      },
+    });
   } catch (err: any) {
     return NextResponse.json(
       { error: err?.message || "Internal error" },
