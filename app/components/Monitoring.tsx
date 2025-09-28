@@ -259,6 +259,15 @@ export default function Monitoring() {
     query: { enabled: Boolean(address) },
   });
 
+  // NEW: mining usage (used/idle caps per tier)
+  const miningUsage = useReadContract({
+    address: gameCoreAddress as `0x${string}`,
+    abi: gameCoreABI as any,
+    functionName: "miningUsage",
+    args: address ? [address] : undefined,
+    query: { enabled: Boolean(address) },
+  });
+
   // Refs to refetch after tx
   const { refetch: refetchEpochNow } = epochNow as any;
   const { refetch: refetchMiningActive } = miningActive as any;
@@ -268,6 +277,7 @@ export default function Monitoring() {
   const { refetch: refetchPending } = pendingRw as any;
   const { refetch: refetchSessionEnd } = sessionEndAt as any;
   const { refetch: refetchNonce } = userNonce as any;
+  const { refetch: refetchUsage } = miningUsage as any;
 
   // Normalize & derived states
   const eNowBn = epochNow.data as bigint | undefined;
@@ -298,6 +308,25 @@ export default function Monitoring() {
   }, [pendingRw.data]);
 
   const canClaim = pendingAmt > 0;
+
+  // Parse miningUsage → badges per tier
+  const usageParsed = useMemo(() => {
+    const d = miningUsage.data as
+      | readonly [bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint]
+      | undefined;
+    if (!d) {
+      return {
+        basicBadge: undefined,
+        proBadge: undefined,
+        legendBadge: undefined,
+      };
+    }
+    const [bOwned, bUsed, bIdle, pOwned, pUsed, pIdle, lOwned, lUsed, lIdle] = d;
+    const bb = `Basic x${Number(bOwned)} (${Number(bUsed)} used, ${Number(bIdle)} idle)`;
+    const pb = `Pro x${Number(pOwned)} (${Number(pUsed)} used, ${Number(pIdle)} idle)`;
+    const lb = `Legend x${Number(lOwned)} (${Number(lUsed)} used, ${Number(lIdle)} idle)`;
+    return { basicBadge: bb, proBadge: pb, legendBadge: lb };
+  }, [miningUsage.data]);
 
   // Epoch progress & ETA
   const epochProgress = useMemo(() => {
@@ -349,6 +378,7 @@ export default function Monitoring() {
       refetchPending?.();
       refetchSessionEnd?.();
       refetchNonce?.();
+      refetchUsage?.();
       setLastAction(null);
     }
     if (error) {
@@ -375,21 +405,16 @@ export default function Monitoring() {
     abi: gameCoreABI as any,
     eventName: "Claimed",
     onLogs(logsRaw) {
-      // Cast to access args safely
       const logs = logsRaw as Array<{
         args?: { e?: bigint; user?: `0x${string}`; amount?: bigint };
       }>;
-
       const mine = logs.find(
-        (l) =>
-          (l?.args?.user ?? "").toLowerCase() === (address ?? "").toLowerCase()
+        (l) => (l?.args?.user ?? "").toLowerCase() === (address ?? "").toLowerCase()
       );
       if (!mine || !mine.args) return;
 
       const amt = Number(formatUnits(mine.args.amount ?? 0n, 18));
-      addLog(
-        `Claim success for epoch #${String(mine.args.e)}: +${amt.toFixed(6)}`
-      );
+      addLog(`Claim success for epoch #${String(mine.args.e)}: +${amt.toFixed(6)}`);
 
       refetchEpochNow?.();
       refetchMiningActive?.();
@@ -399,6 +424,7 @@ export default function Monitoring() {
       refetchPending?.();
       refetchSessionEnd?.();
       refetchNonce?.();
+      refetchUsage?.();
 
       setLastAction(null);
       setMsg("Transaction confirmed.");
@@ -410,8 +436,7 @@ export default function Monitoring() {
   // ======================
   const onStart = async () => {
     if (!address) return setMsg("Please connect your wallet.");
-    if (chainId && chainId !== BASE_CHAIN_ID)
-      return setMsg("Please switch to Base Sepolia.");
+    if (chainId && chainId !== BASE_CHAIN_ID) return setMsg("Please switch to Base Sepolia.");
     if (prelaunch && goLiveOn) return setMsg("Prelaunch is active. Wait for epoch 1.");
     if (!canToggle) return setMsg("Cooldown. Please try again later.");
 
@@ -448,11 +473,9 @@ export default function Monitoring() {
     }
   };
 
-  // Stop mining is removed; Claim only while active
   const onClaim = async () => {
     if (!address) return setMsg("Please connect your wallet.");
-    if (chainId && chainId !== BASE_CHAIN_ID)
-      return setMsg("Please switch to Base Sepolia.");
+    if (chainId && chainId !== BASE_CHAIN_ID) return setMsg("Please switch to Base Sepolia.");
     if (!canClaim) return setMsg("No pending rewards to claim.");
 
     try {
@@ -573,7 +596,7 @@ export default function Monitoring() {
             Cooldown: <span className="text-neutral-200">{String(cd ?? 0n)} epoch</span>
           </div>
 
-          {/* When ACTIVE → Claim (grey if pending=0). When NOT active → Start */}
+        {/* When ACTIVE → Claim (grey if pending=0). When NOT active → Start */}
           {active ? (
             <button
               onClick={onClaim}
@@ -639,18 +662,21 @@ export default function Monitoring() {
             count={String(countBasic)}
             image="/img/basic.png"
             owned={countBasic > 0n}
+            badge={usageParsed.basicBadge}
           />
           <RigCard
             tier="Pro"
             count={String(countPro)}
             image="/img/pro.png"
             owned={countPro > 0n}
+            badge={usageParsed.proBadge}
           />
           <RigCard
             tier="Legend"
             count={String(countLegend)}
             image="/img/legend.png"
             owned={countLegend > 0n}
+            badge={usageParsed.legendBadge}
           />
         </div>
       </div>
@@ -705,11 +731,13 @@ function RigCard({
   count,
   image,
   owned,
+  badge,
 }: {
   tier: string;
   count: string;
   image: string;
   owned: boolean;
+  badge?: string;
 }) {
   return (
     <div className="bg-neutral-800 rounded-lg p-3 text-center space-y-2">
@@ -723,6 +751,11 @@ function RigCard({
       <div>
         <div className="text-sm text-neutral-400">{tier}</div>
         <div className="text-lg font-semibold">x{count}</div>
+        {badge && (
+          <div className="mt-1 text-[11px] text-neutral-400">
+            {badge}
+          </div>
+        )}
       </div>
     </div>
   );
