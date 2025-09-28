@@ -148,20 +148,53 @@ export default function Monitoring() {
   const countPro = (proBal.data as bigint | undefined) ?? 0n;
   const countLegend = (legendBal.data as bigint | undefined) ?? 0n;
 
-  // ======================
-  // $BaseTC Balance
-  // ======================
-  const baseBal = useReadContract({
-    address: baseTcAddress as `0x${string}`,
-    abi: baseTcABI as any,
-    functionName: "balanceOf",
-    args: address ? [address] : undefined,
-    query: { enabled: Boolean(address) },
-  });
-  const tokenReadable = useMemo(() => {
-    const v = baseBal.data as bigint | undefined;
-    return v ? Number(v) / 1e18 : 0;
-  }, [baseBal.data]);
+// ======================
+// $BaseTC Balance (with dynamic decimals)
+// ======================
+const tokenDecimalsRead = useReadContract({
+  address: baseTcAddress as `0x${string}`,
+  abi: baseTcABI as any,
+  functionName: "decimals",
+});
+
+const baseBal = useReadContract({
+  address: baseTcAddress as `0x${string}`,
+  abi: baseTcABI as any,
+  functionName: "balanceOf",
+  args: address ? [address] : undefined,
+  query: { enabled: Boolean(address) },
+});
+
+// Nilai numerik
+const tokenReadable = useMemo(() => {
+  const bal = baseBal.data as bigint | undefined;
+  const d = (tokenDecimalsRead.data as number | undefined) ?? 18;
+  if (!bal) return 0;
+  try {
+    return Number(formatUnits(bal, d));
+  } catch {
+    return 0;
+  }
+}, [baseBal.data, tokenDecimalsRead.data]);
+
+// Versi string untuk UI
+const tokenShort = useMemo(
+  () =>
+    tokenReadable.toLocaleString("en-US", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }),
+  [tokenReadable]
+);
+
+const tokenExact = useMemo(() => {
+  const bal = baseBal.data as bigint | undefined;
+  const d = (tokenDecimalsRead.data as number | undefined) ?? 18;
+  if (!bal) return "0";
+
+  // pakai formatUnits langsung biar 18 desimal
+  return formatUnits(bal, d); // string full dengan 18 angka di belakang koma
+}, [baseBal.data, tokenDecimalsRead.data]);
 
   // ======================
   // GameCore Reads (latest ABI)
@@ -717,9 +750,13 @@ export default function Monitoring() {
             minimumFractionDigits: 12,
           })}
         />
-        <StatCard title="$BaseTC" value={tokenReadable.toFixed(3)} />
+<StatCardWithTooltip
+  title="$BaseTC"
+  valueShort={tokenShort}
+  valueExact={tokenExact}
+/>
       </div>
-
+      
       <div className="bg-neutral-900/60 border border-neutral-800 rounded-xl p-4 space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold">Your Rigs</h2>
