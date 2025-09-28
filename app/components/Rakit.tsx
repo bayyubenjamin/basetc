@@ -19,7 +19,7 @@ import {
   chainId as BASE_CHAIN_ID,
 } from "../lib/web3Config";
 
-/* ---------- Minimal ERC20 ---------- */
+/* ---------------- ERC20 minimal ---------------- */
 const erc20Abi = [
   { type: "function", name: "decimals", stateMutability: "view", inputs: [], outputs: [{ type: "uint8" }] },
   { type: "function", name: "symbol",   stateMutability: "view", inputs: [], outputs: [{ type: "string" }] },
@@ -27,25 +27,7 @@ const erc20Abi = [
   { type: "function", name: "approve",  stateMutability: "nonpayable", inputs: [{type:"address"},{type:"uint256"}], outputs: [{ type: "bool" }] },
 ] as const;
 
-/* ---------- Farcaster FID (best effort) ---------- */
-async function getFarcasterFID(): Promise<bigint> {
-  try {
-    const mod = await import("@farcaster/miniapp-sdk");
-    const rawCtx: any = (mod as any)?.sdk?.context;
-    const ctx =
-      typeof rawCtx === "function"
-        ? await rawCtx.call((mod as any).sdk)
-        : rawCtx && typeof rawCtx.then === "function"
-        ? await rawCtx
-        : rawCtx ?? null;
-    const fid: number | null = ctx?.user?.fid ?? null;
-    return typeof fid === "number" && Number.isFinite(fid) ? BigInt(fid) : 0n;
-  } catch {
-    return 0n;
-  }
-}
-
-/* ---------- UI helpers ---------- */
+/* ---------------- helpers ---------------- */
 const fmt2 = (n: number) =>
   n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -62,49 +44,42 @@ const NftSlot: FC<{ filled: boolean; tier: "basic" | "pro" | "legend" }> = ({ fi
     }`}
   >
     {filled ? (
-      <Image
-        src={TierImg[tier]}
-        alt={`${tier} rig`}
-        width={48}
-        height={48}
-        className="object-contain"
-      />
+      <Image src={TierImg[tier]} alt={`${tier} rig`} width={48} height={48} className="object-contain" />
     ) : null}
   </div>
 );
 
-/* ===================================================== */
-
+/* ---------------- component ---------------- */
 export default function Rakit() {
   const { address, chainId } = useAccount();
-  const publicClient = usePublicClient();
   const user = address as `0x${string}` | undefined;
   const onBase = !chainId || chainId === BASE_CHAIN_ID;
+  const publicClient = usePublicClient();
 
-  const [msg, setMsg] = useState("");
+  const [status, setStatus] = useState<string>("");
 
-  /* --- NFT IDs --- */
-  const basicId = useReadContract({ address: rigNftAddress as `0x${string}`, abi: rigNftABI as any, functionName: "BASIC" });
-  const proId   = useReadContract({ address: rigNftAddress as `0x${string}`, abi: rigNftABI as any, functionName: "PRO" });
-  const legendId= useReadContract({ address: rigNftAddress as `0x${string}`, abi: rigNftABI as any, functionName: "LEGEND" });
-  const BASIC  = basicId.data as bigint | undefined;
-  const PRO    = proId.data as bigint | undefined;
+  /* IDs */
+  const basicId  = useReadContract({ address: rigNftAddress as `0x${string}`, abi: rigNftABI as any, functionName: "BASIC" });
+  const proId    = useReadContract({ address: rigNftAddress as `0x${string}`, abi: rigNftABI as any, functionName: "PRO" });
+  const legendId = useReadContract({ address: rigNftAddress as `0x${string}`, abi: rigNftABI as any, functionName: "LEGEND" });
+  const BASIC  = basicId.data  as bigint | undefined;
+  const PRO    = proId.data    as bigint | undefined;
   const LEGEND = legendId.data as bigint | undefined;
 
-  /* --- Owned balances (untuk “Owned: N”) --- */
+  /* Owned balances (untuk “Owned: N”) */
   const basicBal  = useReadContract({
     address: rigNftAddress as `0x${string}`,
     abi: rigNftABI as any,
     functionName: "balanceOf",
     args: user && BASIC  !== undefined ? [user, BASIC] : undefined,
-    query: { enabled: Boolean(user && BASIC  !== undefined) },
+    query: { enabled: Boolean(user && BASIC !== undefined) },
   });
   const proBal    = useReadContract({
     address: rigNftAddress as `0x${string}`,
     abi: rigNftABI as any,
     functionName: "balanceOf",
     args: user && PRO    !== undefined ? [user, PRO] : undefined,
-    query: { enabled: Boolean(user && PRO    !== undefined) },
+    query: { enabled: Boolean(user && PRO !== undefined) },
   });
   const legendBal = useReadContract({
     address: rigNftAddress as `0x${string}`,
@@ -118,7 +93,7 @@ export default function Rakit() {
   const ownedPro    = (proBal.data    as bigint | undefined) ?? 0n;
   const ownedLegend = (legendBal.data as bigint | undefined) ?? 0n;
 
-  /* --- Usage (used vs cap) untuk isi slot --- */
+  /* Usage (dipakai untuk hitung slot terisi) */
   const miningUsage = useReadContract({
     address: gameCoreAddress as `0x${string}`,
     abi: gameCoreABI as any,
@@ -127,33 +102,25 @@ export default function Rakit() {
     query: { enabled: Boolean(user) },
   });
   const [
-    /* bOwned */ , bUsed = 0n, /* bIdle */,
-    /* pOwned */ , pUsed = 0n, /* pIdle */,
-    /* lOwned */ , lUsed = 0n, /* lIdle */,
+    _bOwned, bUsed = 0n, _bIdle,
+    _pOwned, pUsed = 0n, _pIdle,
+    _lOwned, lUsed = 0n, _lIdle,
   ] = ((miningUsage.data as bigint[] | undefined) ?? []).concat([0n,0n,0n,0n,0n,0n,0n,0n,0n]) as bigint[];
 
-  /* --- rigCaps (jumlah slot per tier) --- */
-  const rigCaps = useReadContract({
-    address: gameCoreAddress as `0x${string}`,
-    abi: gameCoreABI as any,
-    functionName: "rigCaps",
-  });
+  /* Slot caps */
+  const rigCaps = useReadContract({ address: gameCoreAddress as `0x${string}`, abi: gameCoreABI as any, functionName: "rigCaps" });
   const caps = useMemo(() => {
     const rc = rigCaps.data as { b: bigint; p: bigint; l: bigint } | undefined;
     return { b: Number(rc?.b ?? 10n), p: Number(rc?.p ?? 5n), l: Number(rc?.l ?? 3n) };
   }, [rigCaps.data]);
 
-  /* --- need & fee token --- */
+  /* Need & fee token */
   const needB2P = useReadContract({ address: gameCoreAddress as `0x${string}`, abi: gameCoreABI as any, functionName: "BASIC_TO_PRO_NEED" });
   const needP2L = useReadContract({ address: gameCoreAddress as `0x${string}`, abi: gameCoreABI as any, functionName: "PRO_TO_LEGEND_NEED" });
   const needBP = (needB2P.data as bigint | undefined) ?? 10n;
   const needPL = (needP2L.data as bigint | undefined) ?? 5n;
 
-  const feeTokenRead = useReadContract({
-    address: gameCoreAddress as `0x${string}`,
-    abi: gameCoreABI as any,
-    functionName: "mergeFeeToken",
-  });
+  const feeTokenRead = useReadContract({ address: gameCoreAddress as `0x${string}`, abi: gameCoreABI as any, functionName: "mergeFeeToken" });
   const feeToken = (feeTokenRead.data as `0x${string}` | undefined) ?? undefined;
 
   const feeB2PRead = useReadContract({ address: gameCoreAddress as `0x${string}`, abi: gameCoreABI as any, functionName: "feeBasicToPro" });
@@ -186,12 +153,13 @@ export default function Rakit() {
   const feeP2LView = Number(formatUnits(feeP2L, feeDecimals));
   const allowance = (allowanceRead.data as bigint | undefined) ?? 0n;
 
-  /* --- TX writer --- */
+  /* writer */
   const { writeContractAsync } = useWriteContract();
 
   async function ensureApprove(amount: bigint) {
-    if (!user || !feeToken) return;
+    if (!user || !feeToken) throw new Error("Fee token not set / wallet not connected.");
     if (allowance >= amount) return;
+    setStatus(`Approving ${formatUnits(amount, feeDecimals)} ${feeSymbol}…`);
     const tx = await writeContractAsync({
       address: feeToken,
       abi: erc20Abi,
@@ -200,63 +168,63 @@ export default function Rakit() {
       account: user,
       chain: baseSepolia,
     });
+    setStatus(`Waiting approval receipt…`);
     await publicClient!.waitForTransactionReceipt({ hash: tx });
+    setStatus(`Approval confirmed.`);
   }
 
-  function firstFail(reasons: string[]) {
-    const r = reasons.find(Boolean as any);
-    if (r) alert(r);
-    return Boolean(r);
-  }
-
-  async function callMerge(kind: "BASIC_TO_PRO" | "PRO_TO_LEGEND") {
-    const fid = await getFarcasterFID();
+  async function runMerge(kind: "BASIC_TO_PRO" | "PRO_TO_LEGEND") {
+    setStatus(`Requesting server merge (${kind})…`);
     const res = await fetch("/api/merge", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ user, kind, fid: Number(fid) }),
+      body: JSON.stringify({ user, kind, fid: 0 }),
     });
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(text || "Server merge failed");
+    }
     const data = await res.json();
-    setMsg(`${kind} submitted: ${data.tx ?? ""}`);
-    // tak perlu await di sini—server sudah kirim tx dari signer ROLE
+    setStatus(`Merge submitted by server. Tx: ${data.tx ?? "—"}`);
   }
 
   async function onMergeBasicToPro() {
-    if (!user) return alert("Connect wallet dulu.");
-    if (firstFail([
-      onBase ? "" : "Please switch network to Base Sepolia.",
-      ownedBasic >= needBP ? "" : `Butuh ${String(needBP)} Basic untuk merge.`,
-      caps.p > 0 ? "" : "Kontrak rigCaps.p = 0 (slot Pro belum di-set).",
-      Number(pUsed) < caps.p ? "" : `Pro slot penuh (${Number(pUsed)}/${caps.p}).`,
-    ])) return;
+    if (!user) return setStatus("Connect wallet dulu.");
+    setStatus("");
+    // tampilkan alasan langsung di panel, tombol tetap klikable
+    if (!onBase) return setStatus("Please switch network to Base Sepolia.");
+    if (ownedBasic < needBP) return setStatus(`Butuh ${String(needBP)} Basic untuk merge.`);
+    if (caps.p <= 0) return setStatus("rigCaps.p = 0 (slot Pro belum di-set).");
+    if (Number(pUsed) >= caps.p) return setStatus(`Pro slot penuh (${Number(pUsed)}/${caps.p}).`);
 
     try {
       await ensureApprove(feeB2P);
-      await callMerge("BASIC_TO_PRO");
+      await runMerge("BASIC_TO_PRO");
+      // refresh owned/usage biar slot update
+      await Promise.all([basicBal.refetch?.(), proBal.refetch?.(), miningUsage.refetch?.()]);
     } catch (e: any) {
-      alert(e?.shortMessage || e?.message || "Merge failed");
+      setStatus(e?.shortMessage || e?.message || "Merge failed");
     }
   }
 
   async function onMergeProToLegend() {
-    if (!user) return alert("Connect wallet dulu.");
-    if (firstFail([
-      onBase ? "" : "Please switch network to Base Sepolia.",
-      ownedPro >= needPL ? "" : `Butuh ${String(needPL)} Pro untuk merge.`,
-      caps.l > 0 ? "" : "Kontrak rigCaps.l = 0 (slot Legend belum di-set).",
-      Number(lUsed) < caps.l ? "" : `Legend slot penuh (${Number(lUsed)}/${caps.l}).`,
-    ])) return;
+    if (!user) return setStatus("Connect wallet dulu.");
+    setStatus("");
+    if (!onBase) return setStatus("Please switch network to Base Sepolia.");
+    if (ownedPro < needPL) return setStatus(`Butuh ${String(needPL)} Pro untuk merge.`);
+    if (caps.l <= 0) return setStatus("rigCaps.l = 0 (slot Legend belum di-set).");
+    if (Number(lUsed) >= caps.l) return setStatus(`Legend slot penuh (${Number(lUsed)}/${caps.l}).`);
 
     try {
       await ensureApprove(feeP2L);
-      await callMerge("PRO_TO_LEGEND");
+      await runMerge("PRO_TO_LEGEND");
+      await Promise.all([proBal.refetch?.(), legendBal.refetch?.(), miningUsage.refetch?.()]);
     } catch (e: any) {
-      alert(e?.shortMessage || e?.message || "Merge failed");
+      setStatus(e?.shortMessage || e?.message || "Merge failed");
     }
   }
 
-  /* ---------- UI (slot grid gaya awal) ---------- */
+  /* ---------------- UI (desain grid slot seperti awal) ---------------- */
   return (
     <div className="space-y-4 px-4 pt-4 pb-8">
       <header className="space-y-1">
@@ -279,16 +247,15 @@ export default function Rakit() {
           ))}
         </div>
         <button
-          onClick={onMergeBasicToPro}
+          onClick={(e) => { e.preventDefault(); onMergeBasicToPro(); }}
           className={`w-full px-3 py-2 text-sm rounded-md transition-colors ${
-            ownedBasic >= needBP && caps.p > 0 && Number(pUsed) < caps.p && onBase
-              ? "bg-blue-600 hover:bg-blue-500 text-white"
-              : "bg-neutral-700 text-neutral-400"
+            user ? "bg-blue-600 hover:bg-blue-500 text-white" : "bg-neutral-700 text-neutral-400 cursor-not-allowed"
           }`}
+          disabled={!user} // cuma disabled saat belum connect
         >
           {`Merge ${String(needBP)} for Pro`}
           <span className="ml-2 text-xs text-neutral-300">
-            (fee {fmt2(feeB2PView)} {feeSymbol})
+            (fee {fmt2(Number(formatUnits(feeB2P, feeDecimals)))} {feeSymbol})
           </span>
         </button>
       </section>
@@ -300,7 +267,7 @@ export default function Rakit() {
             <h2 className="text-lg font-semibold">Pro Rigs</h2>
             <p className="text-sm text-neutral-400">Owned: {String(ownedPro)}</p>
           </div>
-        <Image src={TierImg.pro} alt="Pro rig" width={64} height={64} />
+          <Image src={TierImg.pro} alt="Pro rig" width={64} height={64} />
         </div>
         <div className="grid grid-cols-5 gap-2">
           {Array.from({ length: Math.max(1, caps.p) }).map((_, i) => (
@@ -308,16 +275,15 @@ export default function Rakit() {
           ))}
         </div>
         <button
-          onClick={onMergeProToLegend}
+          onClick={(e) => { e.preventDefault(); onMergeProToLegend(); }}
           className={`w-full px-3 py-2 text-sm rounded-md transition-colors ${
-            ownedPro >= needPL && caps.l > 0 && Number(lUsed) < caps.l && onBase
-              ? "bg-purple-600 hover:bg-purple-500 text-white"
-              : "bg-neutral-700 text-neutral-400"
+            user ? "bg-purple-600 hover:bg-purple-500 text-white" : "bg-neutral-700 text-neutral-400 cursor-not-allowed"
           }`}
+          disabled={!user}
         >
           {`Merge ${String(needPL)} for Legend`}
           <span className="ml-2 text-xs text-neutral-300">
-            (fee {fmt2(feeP2LView)} {feeSymbol})
+            (fee {fmt2(Number(formatUnits(feeP2L, feeDecimals)))} {feeSymbol})
           </span>
         </button>
       </section>
@@ -337,11 +303,13 @@ export default function Rakit() {
           ))}
         </div>
         <p className="text-xs text-neutral-400">
-          Per-wallet Legend limit mengikuti <code>rigCaps.l</code> (default 3). Jika sudah penuh, merge ke Legend akan dinonaktifkan.
+          Per-wallet Legend limit mengikuti <code>rigCaps.l</code> (default 3). Jika sudah penuh,
+          merge ke Legend akan dinonaktifkan oleh guard server.
         </p>
       </section>
 
-      {!!msg && <p className="text-xs text-emerald-400 pt-2 text-center break-words">{msg}</p>}
+      {/* Status panel (selalu kelihatan step-nya) */}
+      <div className="text-xs text-neutral-300 min-h-5">{status}</div>
     </div>
   );
 }
