@@ -1,131 +1,127 @@
 // app/api/merge/route.ts
 import { NextResponse } from "next/server";
-import { createPublicClient, http, isAddress } from "viem";
-import { gameCoreABI } from "../../lib/web3Config"; // pastikan path ini sesuai
-import { ADDR, CHAIN } from "../../lib/addresses";
+import { createPublicClient, createWalletClient, http } from "viem";
+import { privateKeyToAccount } from "viem/accounts";
+import { baseSepolia } from "viem/chains";
+import { gameCoreAddress, gameCoreABI } from "../../lib/web3Config";
 
-// === Setup client ===
-const client = createPublicClient({
-  chain: {
-    id: CHAIN.id,
-    name: "base-sepolia",
-    nativeCurrency: { name: "ETH", symbol: "ETH", decimals: 18 },
-    rpcUrls: { default: { http: [CHAIN.rpcUrl] } },
-  },
-  transport: http(CHAIN.rpcUrl),
+export const runtime = "nodejs"; // penting: viem wallet client butuh Node, bukan Edge
+
+const RPC_URL = process.env.RPC_URL || "https://sepolia.base.org";
+const RELAYER_PK = process.env.RELAYER_PRIVATE_KEY as `0x${string}`;
+
+// === clients ===
+const publicClient = createPublicClient({
+  chain: baseSepolia,
+  transport: http(RPC_URL),
 });
 
-export async function GET(req: Request) {
+function getWalletClient() {
+  if (!RELAYER_PK) throw new Error("RELAYER_PRIVATE_KEY is not set");
+  const account = privateKeyToAccount(RELAYER_PK);
+  return createWalletClient({
+    account,
+    chain: baseSepolia,
+    transport: http(RPC_URL),
+  });
+}
+
+/**
+ * Body:
+ * {
+ *   "user": "0x....",
+ *   "kind": "BASIC_TO_PRO" | "PRO_TO_LEGEND",
+ *   "fid": number // optional, default 0 (untuk log event)
+ * }
+ */
+export async function POST(req: Request) {
   try {
-    const url = new URL(req.url);
-    const user = url.searchParams.get("address");
+    const body = await req.json();
+    const user = body?.user as `0x${string}` | undefined;
+    const kind = body?.kind as "BASIC_TO_PRO" | "PRO_TO_LEGEND" | undefined;
+    const fid = Number.isFinite(body?.fid) ? Math.max(0, Math.floor(body.fid)) : 0;
 
-    if (!user || !isAddress(user)) {
-      return NextResponse.json(
-        { error: "Query ?address=0x... tidak valid" },
-        { status: 400 }
-      );
-    }
-    const userAddr = user as `0x${string}`;
-
-    // === Panggil kontrak paralel ===
-    let usageRaw: bigint[] = [];
-    let caps: { b: bigint; p: bigint; l: bigint } = { b: 0n, p: 0n, l: 0n };
-    let needB2P = 0;
-    let needP2L = 0;
-    let feeB2P = 0n;
-    let feeP2L = 0n;
-    let warning: string | undefined;
-
-    try {
-      [
-        usageRaw,
-        caps,
-        needB2P,
-        needP2L,
-        feeB2P,
-        feeP2L,
-      ] = await Promise.all([
-        (client as any).readContract({
-          address: ADDR.GAMECORE as `0x${string}`,
-          abi: gameCoreABI as any,
-          functionName: "miningUsage",
-          args: [userAddr],
-        }) as Promise<bigint[]>,
-        (client as any).readContract({
-          address: ADDR.GAMECORE as `0x${string}`,
-          abi: gameCoreABI as any,
-          functionName: "rigCaps",
-        }) as Promise<{ b: bigint; p: bigint; l: bigint }>,
-        (client as any).readContract({
-          address: ADDR.GAMECORE as `0x${string}`,
-          abi: gameCoreABI as any,
-          functionName: "BASIC_TO_PRO_NEED",
-        }) as Promise<bigint>,
-        (client as any).readContract({
-          address: ADDR.GAMECORE as `0x${string}`,
-          abi: gameCoreABI as any,
-          functionName: "PRO_TO_LEGEND_NEED",
-        }) as Promise<bigint>,
-        (client as any).readContract({
-          address: ADDR.GAMECORE as `0x${string}`,
-          abi: gameCoreABI as any,
-          functionName: "BASIC_TO_PRO_FEE",
-        }) as Promise<bigint>,
-        (client as any).readContract({
-          address: ADDR.GAMECORE as `0x${string}`,
-          abi: gameCoreABI as any,
-          functionName: "PRO_TO_LEGEND_FEE",
-        }) as Promise<bigint>,
-      ]);
-
-      needB2P = Number(needB2P);
-      needP2L = Number(needP2L);
-    } catch (e: any) {
-      warning = e?.message || "readContract failed";
+    if (!user || !kind) {
+      return NextResponse.json({ ok: false, error: "bad params" }, { status: 400 });
     }
 
-    // === Parse usage ===
-    const [
-      bOwned = 0n, bUsed = 0n, bIdle = 0n,
-      pOwned = 0n, pUsed = 0n, pIdle = 0n,
-      lOwned = 0n, lUsed = 0n, lIdle = 0n,
-    ] = usageRaw;
+    // ==== Read on-chain: usage & caps ====
+    const usage = (await (publicClient as any).readContract({
+      address: gameCoreAddress as `0x${string}`,
+      abi: gameCoreABI as any,
+      functionName: "miningUsage",
+      args: [user],
+    })) as bigint[];
 
-    // === Business logic ===
-    const canMergeBasicToPro = Number(bUsed) >= needB2P;
-    const canMergeProToLegend = Number(pUsed) >= needP2L;
+    const caps = (await (publicClient as any).readContract({
+      address: gameCoreAddress as `0x${string}`,
+      abi: gameCoreABI as any,
+      functionName: "rigCaps",
+    })) as { b: bigint; p: bigint; l: bigint };
 
-    const payload = {
-      address: userAddr,
-      contract: ADDR.GAMECORE,
-      usage: {
-        basic: { owned: Number(bOwned), used: Number(bUsed), idle: Number(bIdle) },
-        pro: { owned: Number(pOwned), used: Number(pUsed), idle: Number(pIdle) },
-        legend: { owned: Number(lOwned), used: Number(lUsed), idle: Number(lIdle) },
-      },
-      caps: {
-        basicSlot: Number(caps.b),
-        proSlot: Number(caps.p),
-        legendSlot: Number(caps.l),
-      },
-      mergeRules: {
-        basicToPro: { need: needB2P, fee: feeB2P.toString(), can: canMergeBasicToPro },
-        proToLegend: { need: needP2L, fee: feeP2L.toString(), can: canMergeProToLegend },
-      },
-      warning,
-    };
+    const bOwned = Number(usage?.[0] ?? 0n);
+    const pOwned = Number(usage?.[3] ?? 0n);
+    const lOwned = Number(usage?.[6] ?? 0n);
+    const pUsed  = Number(usage?.[4] ?? 0n);
+    const lUsed  = Number(usage?.[7] ?? 0n);
 
-    return NextResponse.json(payload, {
-      headers: {
-        "Cache-Control": "max-age=10, s-maxage=10, stale-while-revalidate=60",
-      },
-    });
-  } catch (err: any) {
-    return NextResponse.json(
-      { error: err?.message || "Internal server error" },
-      { status: 500 }
-    );
+    const capP = Number(caps?.p ?? 0n);
+    const capL = Number(caps?.l ?? 0n);
+
+    const walletClient = getWalletClient();
+
+    if (kind === "BASIC_TO_PRO") {
+      const needB2PBig = (await (publicClient as any).readContract({
+        address: gameCoreAddress as `0x${string}`,
+        abi: gameCoreABI as any,
+        functionName: "BASIC_TO_PRO_NEED",
+      })) as bigint;
+      const needB2P = Number(needB2PBig);
+
+      if (bOwned < needB2P) {
+        return NextResponse.json({ ok: false, error: "insufficient basic" }, { status: 400 });
+      }
+      if (pUsed >= capP) {
+        return NextResponse.json({ ok: false, error: "pro slot full" }, { status: 400 });
+      }
+
+      const tx = await walletClient.writeContract({
+        address: gameCoreAddress as `0x${string}`,
+        abi: gameCoreABI as any,
+        functionName: "mergeBasicToPro",
+        args: [user, BigInt(fid)],
+      });
+
+      return NextResponse.json({ ok: true, tx });
+    } else {
+      const needP2LBig = (await (publicClient as any).readContract({
+        address: gameCoreAddress as `0x${string}`,
+        abi: gameCoreABI as any,
+        functionName: "PRO_TO_LEGEND_NEED",
+      })) as bigint;
+      const needP2L = Number(needP2LBig);
+
+      if (pOwned < needP2L) {
+        return NextResponse.json({ ok: false, error: "insufficient pro" }, { status: 400 });
+      }
+      if (lUsed >= capL) {
+        return NextResponse.json({ ok: false, error: "legend slot full" }, { status: 400 });
+      }
+      if (lOwned >= capL) {
+        return NextResponse.json({ ok: false, error: "legend wallet limit" }, { status: 400 });
+      }
+
+      const tx = await walletClient.writeContract({
+        address: gameCoreAddress as `0x${string}`,
+        abi: gameCoreABI as any,
+        functionName: "mergeProToLegend",
+        args: [user, BigInt(fid)],
+      });
+
+      return NextResponse.json({ ok: true, tx });
+    }
+  } catch (e: any) {
+    return NextResponse.json({ ok: false, error: e?.message || "merge failed" }, { status: 500 });
   }
 }
 
