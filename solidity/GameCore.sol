@@ -25,16 +25,17 @@ interface IRewardsVault {
 }
 
 /**
- * @title BaseTC GameCore v3 (Accumulator ROI)
+ * @title BaseTC GameCore v3 (Accumulator ROI + Rig Caps)
  * @notice
  *  - Reward harian = FIXED per NFT (ROI-style), diakru per detik saat user aktif (miningActive).
  *  - Tidak ada pro-rata pool hashrate. Tidak ada accPerHash.
- *  - Sisa emisi harian yang tidak TERAKRU (karena user tidak aktif) → leftover, bisa didistribusi:
+ *  - Sisa emisi harian yang tidak TERAKRU (karena user tidak aktif) → leftover:
  *      50% burn / 30% staking / 10% spin / 10% leaderboard.
- *  - Atribusi payout harian: saat claim/stop/hook, akrual di-segmen per epoch (hari) dan
- *    menambah distributedAt[e] untuk epoch terkait. Ini menjaga leftover tetap benar meski klaim terlambat.
+ *  - Atribusi payout harian ke epoch yang benar (distributedAt[e]) saat settle (claim/stop/hook).
  *  - Start/Claim via EIP-712 WithSig (relayer otorisasi, user bayar gas).
  *  - Sesi 24h (ritual harian) + cooldown start/stop (dalam satuan epoch/hari).
+ *  - **Baru**: Batas NFT yang dihitung (cap): Basic=10, Pro=5, Legend=3 (configurable).
+ *  - **Baru**: `miningUsage(address)` → kembalikan owned/used/idle per tier untuk UI badge.
  */
 contract GameCore is AccessControl, ReentrancyGuard {
     using ECDSA for bytes32;
@@ -71,6 +72,11 @@ contract GameCore is AccessControl, ReentrancyGuard {
     // contoh default: 0.333 / 1.000 / 5.000 token per hari (18 desimal)
     BaseParams public baseRw = BaseParams(0.333 ether, 1 ether, 5 ether);
 
+    // ===== NEW: Rig caps (berapa NFT per tier yang dihitung) =====
+    struct RigCaps { uint256 b; uint256 p; uint256 l; }
+    RigCaps public rigCaps = RigCaps(10, 5, 3);
+    event RigCapsSet(uint256 basicCap, uint256 proCap, uint256 legendCap);
+
     // =======================
     // Session 24h + Cooldown + Prelaunch
     // =======================
@@ -87,7 +93,7 @@ contract GameCore is AccessControl, ReentrancyGuard {
     // =======================
     mapping(address => bool)    public miningActive;
     mapping(address => uint256) public lastAccrueTs; // timestamp terakhir disettle (dibayar atau diakru)
-    // Catatan: kita TIDAK menyimpan "accrued" terpisah — claim menghitung dari lastAccrueTs hingga now.
+    // Catatan: tidak menyimpan "accrued" — claim menghitung dari lastAccrueTs hingga now.
 
     // =======================
     // Leftover bookkeeping per-epoch (harian)
@@ -198,18 +204,53 @@ contract GameCore is AccessControl, ReentrancyGuard {
         return (e < 1);
     }
 
-    // ===== NFT balances =====
+    // ===== Raw NFT balances =====
     function _balances(address u) internal view returns (uint256 b, uint256 p, uint256 l) {
         b = rig.balanceOf(u, BASIC);
         p = rig.balanceOf(u, PRO);
         l = rig.balanceOf(u, LEGEND);
     }
 
-    // ===== Base per-day (fixed ROI) at epoch e (with halving) =====
+    // ===== NEW: capped usage =====
+    function _usage(address u)
+        internal
+        view
+        returns (
+            uint256 bOwned, uint256 pOwned, uint256 lOwned,
+            uint256 bUsed,  uint256 pUsed,  uint256 lUsed
+        )
+    {
+        (bOwned, pOwned, lOwned) = _balances(u);
+        bUsed = bOwned < rigCaps.b ? bOwned : rigCaps.b;
+        pUsed = pOwned < rigCaps.p ? pOwned : rigCaps.p;
+        lUsed = lOwned < rigCaps.l ? lOwned : rigCaps.l;
+    }
+
+    /// @notice UI helper untuk badge: mengembalikan owned/used/idle per tier.
+    function miningUsage(address u)
+        external
+        view
+        returns (
+            uint256 bOwned, uint256 bUsed, uint256 bIdle,
+            uint256 pOwned, uint256 pUsed, uint256 pIdle,
+            uint256 lOwned, uint256 lUsed, uint256 lIdle
+        )
+    {
+        (bOwned, pOwned, lOwned, bUsed, pUsed, lUsed) = _usage(u);
+        bIdle = bOwned > bUsed ? (bOwned - bUsed) : 0;
+        pIdle = pOwned > pUsed ? (pOwned - pUsed) : 0;
+        lIdle = lOwned > lUsed ? (lOwned - lUsed) : 0;
+    }
+
+    // ===== Base per-day (fixed ROI) at epoch e (with halving) — uses *used* counts =====
     function _basePerDayAtEpoch(address u, uint256 e) internal view returns (uint256) {
-        (uint256 b, uint256 p, uint256 l) = _balances(u);
+        (
+            , , ,
+            uint256 bUsed, uint256 pUsed, uint256 lUsed
+        ) = _usage(u);
+
         unchecked {
-            uint256 perDay = b * baseRw.b + p * baseRw.p + l * baseRw.l; // token/epoch
+            uint256 perDay = bUsed * baseRw.b + pUsed * baseRw.p + lUsed * baseRw.l; // token/epoch
             if (halvingEvery == 0) return perDay;
             uint256 halvings = e / halvingEvery;
             return perDay >> halvings; // / 2^halvings
@@ -218,17 +259,17 @@ contract GameCore is AccessControl, ReentrancyGuard {
 
     function _perSecAtEpoch(address u, uint256 e) internal view returns (uint256) {
         uint256 perDay = _basePerDayAtEpoch(u, e);
-        return epochLength == 0 ? 0 : perDay / epochLength; // flooring (wajar)
+        return epochLength == 0 ? 0 : perDay / epochLength; // flooring
     }
 
-    // ===== Display helpers (untuk UI agar konsisten) =====
+    // ===== Display helpers (untuk kompat UI lama) =====
     function getHashrate(address /*u*/) external pure returns (uint256) {
         // Tidak dipakai untuk reward lagi; kembalikan 0 agar UI lama tidak bingung.
         return 0;
     }
 
     function getBaseUnit(address u) external view returns (uint256) {
-        // Base per epoch (setelah halving hari INI) — untuk ditampilkan di UI.
+        // Base per epoch (setelah halving hari INI) berdasarkan *used* (sudah di-cap).
         return _basePerDayAtEpoch(u, epochNow());
     }
 
@@ -490,6 +531,12 @@ contract GameCore is AccessControl, ReentrancyGuard {
     // =======================
     function setBaseReward(uint256 b, uint256 p, uint256 l) external onlyRole(PARAM_ADMIN) {
         baseRw = BaseParams(b, p, l);
+    }
+
+    /// @notice Set limit NFT yang dihitung per tier (0 = tidak ada yang dihitung).
+    function setRigCaps(uint256 capBasic, uint256 capPro, uint256 capLegend) external onlyRole(PARAM_ADMIN) {
+        rigCaps = RigCaps(capBasic, capPro, capLegend);
+        emit RigCapsSet(capBasic, capPro, capLegend);
     }
 
     function setDistributionVaults(address _staking, address _spin, address _board) external onlyRole(PARAM_ADMIN) {

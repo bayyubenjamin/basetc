@@ -387,6 +387,31 @@
 		"anonymous": false,
 		"inputs": [
 			{
+				"indexed": false,
+				"internalType": "uint256",
+				"name": "basicCap",
+				"type": "uint256"
+			},
+			{
+				"indexed": false,
+				"internalType": "uint256",
+				"name": "proCap",
+				"type": "uint256"
+			},
+			{
+				"indexed": false,
+				"internalType": "uint256",
+				"name": "legendCap",
+				"type": "uint256"
+			}
+		],
+		"name": "RigCapsSet",
+		"type": "event"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
 				"indexed": true,
 				"internalType": "bytes32",
 				"name": "role",
@@ -552,6 +577,29 @@
 			}
 		],
 		"name": "setInitialReward",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "capBasic",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "capPro",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "capLegend",
+				"type": "uint256"
+			}
+		],
+		"name": "setRigCaps",
 		"outputs": [],
 		"stateMutability": "nonpayable",
 		"type": "function"
@@ -1094,6 +1142,65 @@
 		"inputs": [
 			{
 				"internalType": "address",
+				"name": "u",
+				"type": "address"
+			}
+		],
+		"name": "miningUsage",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "bOwned",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "bUsed",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "bIdle",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "pOwned",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "pUsed",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "pIdle",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "lOwned",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "lUsed",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "lIdle",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "address",
 				"name": "",
 				"type": "address"
 			}
@@ -1194,6 +1301,29 @@
 				"internalType": "contract IRigNFT",
 				"name": "",
 				"type": "address"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "rigCaps",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "b",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "p",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "l",
+				"type": "uint256"
 			}
 		],
 		"stateMutability": "view",
