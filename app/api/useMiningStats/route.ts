@@ -1,9 +1,8 @@
 // app/api/useMiningStats/route.ts
 import { NextResponse } from "next/server";
 import { createPublicClient, http, isAddress, formatEther } from "viem";
-
-// ⚠️ Pastikan ABI ada & include: miningUsage, getBaseUnit, baseRw
-import GAMECORE_ABI from "@/abi/GameCore.json";
+// 🔧 PAKAI ABI dari lib yang sudah ada (hindari import JSON & alias @)
+import { gameCoreABI } from "../../lib/web3Config";
 
 // ENV
 const RPC_URL = process.env.RPC_URL || "https://sepolia.base.org";
@@ -12,7 +11,7 @@ const GAMECORE =
   (process.env.NEXT_PUBLIC_CONTRACT_GAMECORE ||
     process.env.CONTRACT_GAMECORE) as `0x${string}`;
 
-// Chain minimal (biar viem happy)
+// Chain minimal (biar viem jalan di server)
 const baseLike = {
   id: CHAIN_ID,
   name: "base-like",
@@ -29,7 +28,7 @@ export async function GET(req: Request) {
   try {
     if (!GAMECORE) {
       return NextResponse.json(
-        { error: "CONTRACT_GAMECORE env belum diset" },
+        { error: "CONTRACT_GAMECORE/NEXT_PUBLIC_CONTRACT_GAMECORE env belum diset" },
         { status: 500 }
       );
     }
@@ -37,7 +36,7 @@ export async function GET(req: Request) {
     const url = new URL(req.url);
     const user = url.searchParams.get("address");
 
-    if (!user || !isAddress(user)) {
+    if (!user || !isAddress(user as `0x${string}`)) {
       return NextResponse.json(
         { error: "Query ?address=0x... tidak valid" },
         { status: 400 }
@@ -48,39 +47,33 @@ export async function GET(req: Request) {
     const [usageRaw, baseUnitRaw, baseRwRaw] = await Promise.all([
       client.readContract({
         address: GAMECORE,
-        abi: GAMECORE_ABI as any,
+        abi: gameCoreABI as any,
         functionName: "miningUsage",
         args: [user as `0x${string}`],
       }),
       client.readContract({
         address: GAMECORE,
-        abi: GAMECORE_ABI as any,
+        abi: gameCoreABI as any,
         functionName: "getBaseUnit",
         args: [user as `0x${string}`],
       }),
       client.readContract({
         address: GAMECORE,
-        abi: GAMECORE_ABI as any,
+        abi: gameCoreABI as any,
         functionName: "baseRw",
       }),
     ]);
 
-    // miningUsage returns 9 values
+    // miningUsage returns 9 values (bOwned,bUsed,bIdle,pOwned,pUsed,pIdle,lOwned,lUsed,lIdle)
     const [
-      bOwned,
-      bUsed,
-      bIdle,
-      pOwned,
-      pUsed,
-      pIdle,
-      lOwned,
-      lUsed,
-      lIdle,
+      bOwned, bUsed, bIdle,
+      pOwned, pUsed, pIdle,
+      lOwned, lUsed, lIdle,
     ] = usageRaw as unknown as bigint[];
 
     const baseRw = baseRwRaw as unknown as { b: bigint; p: bigint; l: bigint };
 
-    // Effective Hashrate (indikator UI; reward pakai getBaseUnit)
+    // Effective Hashrate (indikator UI; reward sesungguhnya pakai getBaseUnit)
     const ratioP =
       Number(baseRw.b) === 0 ? 0 : Number(baseRw.p) / Number(baseRw.b);
     const ratioL =
@@ -91,37 +84,23 @@ export async function GET(req: Request) {
 
     const baseUnitEpoch = Number(formatEther(baseUnitRaw as bigint));
 
-    // Response payload
     const payload = {
       address: user,
       contract: GAMECORE,
       usage: {
-        basic: {
-          owned: Number(bOwned),
-          used: Number(bUsed),
-          idle: Number(bIdle),
-        },
-        pro: {
-          owned: Number(pOwned),
-          used: Number(pUsed),
-          idle: Number(pIdle),
-        },
-        legend: {
-          owned: Number(lOwned),
-          used: Number(lUsed),
-          idle: Number(lIdle),
-        },
+        basic: { owned: Number(bOwned), used: Number(bUsed), idle: Number(bIdle) },
+        pro:   { owned: Number(pOwned), used: Number(pUsed), idle: Number(pIdle) },
+        legend:{ owned: Number(lOwned), used: Number(lUsed), idle: Number(lIdle) },
       },
       baseRw: {
         basicPerDay: Number(formatEther(baseRw.b)),
-        proPerDay: Number(formatEther(baseRw.p)),
+        proPerDay:    Number(formatEther(baseRw.p)),
         legendPerDay: Number(formatEther(baseRw.l)),
       },
-      baseUnitEpoch, // total token / hari (setelah halving) untuk user
-      effectiveHashrate: Math.round(effectiveHashrate), // angka bulat enak buat UI
+      baseUnitEpoch,
+      effectiveHashrate: Math.round(effectiveHashrate),
     };
 
-    // Optional cache ( pendek aja )
     const res = NextResponse.json(payload);
     res.headers.set("Cache-Control", "max-age=15, s-maxage=15, stale-while-revalidate=60");
     return res;
