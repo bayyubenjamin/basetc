@@ -31,6 +31,9 @@ contract RigNFT is ERC1155, ERC1155Supply, AccessControl, Pausable {
     uint256 public constant LEGEND_SALE_CAP  = 1500;
     uint256 public constant LEGEND_GAME_CAP  = 1500;
 
+    // --- NEW: Per-user holding cap for LEGEND ---
+    uint256 public constant LEGEND_MAX_PER_USER = 3;
+
     uint256 public legendSaleMinted;
     uint256 public legendGameMinted;
 
@@ -56,10 +59,11 @@ contract RigNFT is ERC1155, ERC1155Supply, AccessControl, Pausable {
     }
 
     // ---------- Admin ----------
-    function setImageURIs(string calldata newBasicURI, string calldata newProURI, string calldata newLegendURI)
-        external
-        onlyRole(DEFAULT_ADMIN_ROLE)
-    {
+    function setImageURIs(
+        string calldata newBasicURI,
+        string calldata newProURI,
+        string calldata newLegendURI
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
         basicImageURI  = newBasicURI;
         proImageURI    = newProURI;
         legendImageURI = newLegendURI;
@@ -77,8 +81,11 @@ contract RigNFT is ERC1155, ERC1155Supply, AccessControl, Pausable {
     // ---------- Minting ----------
     function mintBySale(address to, uint256 id, uint256 amount) external onlyRole(SALE_MINTER_ROLE) {
         if (id == LEGEND) {
+            // Global caps
             require(legendSaleMinted + amount <= LEGEND_SALE_CAP, "LEGEND sale cap exceeded");
             require(totalSupply(LEGEND) + amount <= LEGEND_TOTAL_CAP, "LEGEND total cap exceeded");
+            // Per-user holding cap
+            require(balanceOf(to, LEGEND) + amount <= LEGEND_MAX_PER_USER, "LEGEND_MAX_PER_USER_3");
             legendSaleMinted += amount;
         }
         _mint(to, id, amount, "");
@@ -87,8 +94,11 @@ contract RigNFT is ERC1155, ERC1155Supply, AccessControl, Pausable {
 
     function mintByGame(address to, uint256 id, uint256 amount) external onlyRole(GAME_MINTER_ROLE) {
         if (id == LEGEND) {
+            // Global caps
             require(legendGameMinted + amount <= LEGEND_GAME_CAP, "LEGEND game cap exceeded");
             require(totalSupply(LEGEND) + amount <= LEGEND_TOTAL_CAP, "LEGEND total cap exceeded");
+            // Per-user holding cap
+            require(balanceOf(to, LEGEND) + amount <= LEGEND_MAX_PER_USER, "LEGEND_MAX_PER_USER_3");
             legendGameMinted += amount;
         }
         _mint(to, id, amount, "");
@@ -138,9 +148,21 @@ contract RigNFT is ERC1155, ERC1155Supply, AccessControl, Pausable {
         override(ERC1155, ERC1155Supply)
         whenNotPaused
     {
-        // PANGGIL HOOK KE GameCore **SEBELUM** saldo berubah
-        // - from != address(0)  => transfer/burn: beritahu balance akan berkurang
-        // - to   != address(0)  => transfer/mint: beritahu balance akan bertambah
+        // === Per-user LEGEND cap check (on receiver) ===
+        if (to != address(0)) {
+            uint256 incomingLegend;
+            for (uint256 i = 0; i < ids.length; i++) {
+                if (ids[i] == LEGEND) {
+                    incomingLegend += amounts[i];
+                }
+            }
+            if (incomingLegend > 0) {
+                uint256 newBal = balanceOf(to, LEGEND) + incomingLegend;
+                require(newBal <= LEGEND_MAX_PER_USER, "LEGEND_MAX_PER_USER_3");
+            }
+        }
+
+        // === Call GameCore hook BEFORE balance changes (only if it won't revert by cap) ===
         if (gameCore != address(0) && from != to) {
             if (from != address(0)) {
                 IGameCoreHook(gameCore).onRigBalanceWillChange(from);
