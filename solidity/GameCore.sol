@@ -494,29 +494,32 @@ contract GameCore is AccessControl, ReentrancyGuard {
     }
 
     // =======================
-    // Merge + Fee (via RELAYER)
-    // =======================
-    function mergeBasicToPro(address user, uint256 fid) external onlyRole(RELAYER_ROLE) nonReentrant {
-        _chargeMergeFee(user, feeBasicToPro);
-        rig.burnFrom(user, BASIC, BASIC_TO_PRO_NEED);
-        rig.mintByGame(user, PRO, 1);
-        emit Merged(user, fid, BASIC, PRO, BASIC_TO_PRO_NEED);
-    }
+// Merge + Fee (via RELAYER)
+// =======================
+function mergeBasicToPro(address user, uint256 fid) external onlyRole(RELAYER_ROLE) {
+    _chargeMergeFee(user, feeBasicToPro);
+    // Rig akan memanggil balik GameCore.onRigBalanceWillChange(user) sebelum balance berubah.
+    // onRigBalanceWillChange tetap nonReentrant, jadi lock diambil di sana (bukan di sini).
+    rig.burnFrom(user, BASIC, BASIC_TO_PRO_NEED);
+    rig.mintByGame(user, PRO, 1);
+    emit Merged(user, fid, BASIC, PRO, BASIC_TO_PRO_NEED);
+}
 
-    function mergeProToLegend(address user, uint256 fid) external onlyRole(RELAYER_ROLE) nonReentrant {
-        _chargeMergeFee(user, feeProToLegend);
-        rig.burnFrom(user, PRO, PRO_TO_LEGEND_NEED);
-        rig.mintByGame(user, LEGEND, 1);
-        emit Merged(user, fid, PRO, LEGEND, PRO_TO_LEGEND_NEED);
-    }
+function mergeProToLegend(address user, uint256 fid) external onlyRole(RELAYER_ROLE) {
+    _chargeMergeFee(user, feeProToLegend);
+    // Pola sama: lock diambil di hook saat callback dari Rig.
+    rig.burnFrom(user, PRO, PRO_TO_LEGEND_NEED);
+    rig.mintByGame(user, LEGEND, 1);
+    emit Merged(user, fid, PRO, LEGEND, PRO_TO_LEGEND_NEED);
+}
 
-    function _chargeMergeFee(address user, uint256 amount) internal {
-        if (amount == 0) return;
-        require(address(mergeFeeToken) != address(0), "FEE_TOKEN_NOT_SET");
-        require(mergeFeeTreasury != address(0), "FEE_TREASURY_NOT_SET");
-        bool ok = mergeFeeToken.transferFrom(user, mergeFeeTreasury, amount);
-        require(ok, "FEE_TRANSFER_FAILED");
-    }
+function _chargeMergeFee(address user, uint256 amount) internal {
+    if (amount == 0) return;
+    require(address(mergeFeeToken) != address(0), "FEE_TOKEN_NOT_SET");
+    require(mergeFeeTreasury != address(0), "FEE_TREASURY_NOT_SET");
+    bool ok = mergeFeeToken.transferFrom(user, mergeFeeTreasury, amount);
+    require(ok, "FEE_TRANSFER_FAILED");
+}
 
     // =======================
     // View: pending rewards (untuk UI)
