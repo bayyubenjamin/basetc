@@ -35,14 +35,11 @@ type MiningStatsPayload = {
     pro: { owned: number; used: number; idle: number };
     legend: { owned: number; used: number; idle: number };
   };
-  baseRw: {
-    basicPerDay: number;
-    proPerDay: number;
-    legendPerDay: number;
-  };
-  baseUnitEpoch: number; // token/day setelah halving (user total)
-  effectiveHashrate: number; // indikator UI (dibulatkan)
-};
+  baseRw: { basicPerDay: number; proPerDay: number; legendPerDay: number };
+  baseUnitEpoch: number;
+  effectiveHashrate: number;
+  warning?: string;
+}
 
 // Compact large numbers
 const formatNumber = (num: number) => {
@@ -101,34 +98,31 @@ export default function Monitoring() {
   const [lastAction, setLastAction] = useState<ActionType>(null);
 
   // ====== Mining Stats via API route ======
-  const [stats, setStats] = useState<MiningStatsPayload | null>(null);
-  const [statsLoading, setStatsLoading] = useState(false);
-  const [statsError, setStatsError] = useState<string | null>(null);
+ const [stats, setStats] = useState<MiningStatsPayload | null>(null);
+const [statsLoading, setStatsLoading] = useState(false);
+const [statsError, setStatsError] = useState<string | null>(null);
 
-  const fetchStats = async (addr?: `0x${string}`) => {
-    if (!addr || !isAddress(addr)) {
-      setStats(null);
-      return;
+const fetchStats = async (addr?: `0x${string}`) => {
+  if (!addr || !isAddress(addr)) {
+    setStats(null);
+    return;
+  }
+  try {
+    setStatsLoading(true);
+    setStatsError(null);
+    const res = await fetch(`/api/useMiningStats?address=${addr}`, { cache: "no-store" });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data?.error || `API ${res.status}`);
     }
-    try {
-      setStatsLoading(true);
-      setStatsError(null);
-      const res = await fetch(`/api/useMiningStats?address=${addr}`, {
-        cache: "no-store",
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err?.error || `Failed to fetch stats (${res.status})`);
-      }
-      const data = (await res.json()) as MiningStatsPayload;
-      setStats(data);
-    } catch (e: any) {
-      setStatsError(e?.message || "Failed to load stats");
-      setStats(null);
-    } finally {
-      setStatsLoading(false);
-    }
-  };
+    setStats(data as MiningStatsPayload);
+  } catch (e: any) {
+    setStatsError(e?.message || "Failed to load stats");
+    setStats(null);
+  } finally {
+    setStatsLoading(false);
+  }
+};
 
   // initial + poll on address change
   useEffect(() => {
@@ -315,14 +309,14 @@ export default function Monitoring() {
 
   // === Angka dari API stats ===
   const baseUnitPerEpoch = stats?.baseUnitEpoch ?? 0;
-  const effectiveHashrate = stats?.effectiveHashrate ?? 0;
+const effectiveHashrate = stats?.effectiveHashrate ?? 0;
 
-  const usedBasic = stats?.usage.basic.used ?? 0;
-  const idleBasic = stats?.usage.basic.idle ?? 0;
-  const usedPro = stats?.usage.pro.used ?? 0;
-  const idlePro = stats?.usage.pro.idle ?? 0;
-  const usedLegend = stats?.usage.legend.used ?? 0;
-  const idleLegend = stats?.usage.legend.idle ?? 0;
+const usedBasic  = stats?.usage.basic.used   ?? 0;
+const idleBasic  = stats?.usage.basic.idle   ?? 0;
+const usedPro    = stats?.usage.pro.used     ?? 0;
+const idlePro    = stats?.usage.pro.idle     ?? 0;
+const usedLegend = stats?.usage.legend.used  ?? 0;
+const idleLegend = stats?.usage.legend.idle  ?? 0;
 
   // Pending amount (enable claim if > 0)
   const pendingAmt = useMemo(() => {
@@ -573,19 +567,19 @@ export default function Monitoring() {
   }, [now, active, prelaunch, goLiveOn]);
 
   // =========== UI ===========
-  return (
-    <div className="space-y-4 px-4 pt-4 pb-24">
-      <header className="space-y-1">
-        <div className="flex items-center gap-2">
-          <h1 className="text-xl font-semibold">Mining Console</h1>
-          {statsLoading ? (
-            <span className="text-xs text-neutral-400">(sync...)</span>
-          ) : statsError ? (
-            <span className="text-xs text-red-400">(api error)</span>
-          ) : null}
-        </div>
-        <p className="text-sm text-neutral-400">Real-time on-chain monitoring</p>
-      </header>
+<header className="space-y-1">
+  <div className="flex items-center gap-2">
+    <h1 className="text-xl font-semibold">Mining Console</h1>
+    {statsLoading ? (
+      <span className="text-xs text-neutral-400">(sync...)</span>
+    ) : statsError ? (
+      <span className="text-xs text-red-400">(api error)</span>
+    ) : stats?.warning ? (
+      <span className="text-xs text-yellow-400">(partial data)</span>
+    ) : null}
+  </div>
+  <p className="text-sm text-neutral-400">Real-time on-chain monitoring</p>
+</header>
 
       <div className="bg-neutral-900/60 border border-neutral-800 rounded-xl p-4 space-y-3 shadow-lg">
         <div className="flex items-center justify-between gap-3">
