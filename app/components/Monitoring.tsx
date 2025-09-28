@@ -27,7 +27,7 @@ import { formatUnits } from "viem";
 const RELAYER_ENDPOINT = "/api/sign-user-action"; // backend returns { signature }
 type ActionType = "start" | "claim" | null;
 
-// Compact large numbers (for Hashrate)
+// Compact large numbers
 const formatNumber = (num: number) => {
   if (num >= 1_000_000) return (num / 1_000_000).toFixed(1) + "M";
   if (num >= 1_000) return (num / 1_000).toFixed(1) + "K";
@@ -73,14 +73,14 @@ export default function Monitoring() {
   const [terminalLogs, setTerminalLogs] = useState<string[]>([]);
   const terminalRef = useRef<HTMLDivElement>(null);
 
-  // Mining stream budget (per-second animation; cosmetic only)
+  // Cosmetic mining stream (per-second animation)
   const [epochBudget, setEpochBudget] = useState<{ amt: number; sec: number }>({
     amt: 0,
     sec: 0,
   });
   const [lastSeenEpoch, setLastSeenEpoch] = useState<bigint | undefined>(undefined);
 
-  // Track last action for button labels + busy state
+  // Track last action
   const [lastAction, setLastAction] = useState<ActionType>(null);
 
   // 1s ticker
@@ -89,7 +89,7 @@ export default function Monitoring() {
     return () => clearInterval(t);
   }, []);
 
-  // Auto-scroll terminal to bottom
+  // Auto-scroll terminal
   useEffect(() => {
     if (terminalRef.current) {
       terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
@@ -216,6 +216,7 @@ export default function Monitoring() {
     functionName: "toggleCooldown",
   });
 
+  // legacy hashrate (always 0 in new contract)
   const hashrate = useReadContract({
     address: gameCoreAddress as `0x${string}`,
     abi: gameCoreABI as any,
@@ -232,7 +233,7 @@ export default function Monitoring() {
     query: { enabled: Boolean(address) },
   });
 
-  // NEW: pending reward (accumulator)
+  // NEW: pending reward (accumulator ROI)
   const pendingRw = useReadContract({
     address: gameCoreAddress as `0x${string}`,
     abi: gameCoreABI as any,
@@ -259,7 +260,7 @@ export default function Monitoring() {
     query: { enabled: Boolean(address) },
   });
 
-  // NEW: mining usage (used/idle caps per tier)
+  // NEW: miningUsage (to compute effective hashrate & badges)
   const miningUsage = useReadContract({
     address: gameCoreAddress as `0x${string}`,
     abi: gameCoreABI as any,
@@ -279,7 +280,7 @@ export default function Monitoring() {
   const { refetch: refetchNonce } = userNonce as any;
   const { refetch: refetchUsage } = miningUsage as any;
 
-  // Normalize & derived states
+  // Normalize & derived
   const eNowBn = epochNow.data as bigint | undefined;
   const eLen = (epochLength.data as bigint | undefined) ?? undefined;
   const sTime = (startTime.data as bigint | undefined) ?? undefined;
@@ -289,7 +290,8 @@ export default function Monitoring() {
   const goLiveOn = Boolean((goLive.data as boolean | undefined) ?? false);
   const active = Boolean((miningActive.data as boolean | undefined) ?? false);
 
-  const hrNum = useMemo(() => {
+  // legacy hashrate (contract returns 0)
+  const hrLegacy = useMemo(() => {
     const v = hashrate.data as bigint | undefined;
     return v ? Number(v) : 0;
   }, [hashrate.data]);
@@ -298,7 +300,7 @@ export default function Monitoring() {
   const baseUnitPerEpoch = useMemo(() => {
     const v = baseUnit.data as bigint | undefined;
     if (!v) return 0;
-    return Number(formatUnits(v, 18)); // e.g., 1.665
+    return Number(formatUnits(v, 18));
   }, [baseUnit.data]);
 
   // Pending amount (enable claim if > 0)
@@ -309,23 +311,36 @@ export default function Monitoring() {
 
   const canClaim = pendingAmt > 0;
 
-  // Parse miningUsage → badges per tier
-  const usageParsed = useMemo(() => {
-    const d = miningUsage.data as
-      | readonly [bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint]
+  // Parse miningUsage -> used/idle & effective hashrate
+  const {
+    usedBasic,
+    idleBasic,
+    usedPro,
+    idlePro,
+    usedLegend,
+    idleLegend,
+    effectiveHashrate,
+  } = useMemo(() => {
+    const mu = miningUsage.data as
+      | readonly [bigint, bigint, bigint, bigint, bigint, bigint]
       | undefined;
-    if (!d) {
-      return {
-        basicBadge: undefined,
-        proBadge: undefined,
-        legendBadge: undefined,
-      };
-    }
-    const [bOwned, bUsed, bIdle, pOwned, pUsed, pIdle, lOwned, lUsed, lIdle] = d;
-    const bb = `Basic x${Number(bOwned)} (${Number(bUsed)} used, ${Number(bIdle)} idle)`;
-    const pb = `Pro x${Number(pOwned)} (${Number(pUsed)} used, ${Number(pIdle)} idle)`;
-    const lb = `Legend x${Number(lOwned)} (${Number(lUsed)} used, ${Number(lIdle)} idle)`;
-    return { basicBadge: bb, proBadge: pb, legendBadge: lb };
+    const uB = mu ? Number(mu[0]) : 0;
+    const iB = mu ? Number(mu[1]) : 0;
+    const uP = mu ? Number(mu[2]) : 0;
+    const iP = mu ? Number(mu[3]) : 0;
+    const uL = mu ? Number(mu[4]) : 0;
+    const iL = mu ? Number(mu[5]) : 0;
+    // Weights: 1 / 5 / 25 (same display convention as old hashrate)
+    const eff = uB * 1 + uP * 5 + uL * 25;
+    return {
+      usedBasic: uB,
+      idleBasic: iB,
+      usedPro: uP,
+      idlePro: iP,
+      usedLegend: uL,
+      idleLegend: iL,
+      effectiveHashrate: eff,
+    };
   }, [miningUsage.data]);
 
   // Epoch progress & ETA
@@ -358,17 +373,26 @@ export default function Monitoring() {
   // ======================
   // TX (user pays gas)
   // ======================
-  const { writeContract, data: txHash, isPending, error } = useWriteContract();
-  const { isLoading: waitingReceipt, isSuccess } = useWaitForTransactionReceipt({ hash: txHash });
+  const {
+    writeContract,
+    data: txHash,
+    isPending: writePending,
+    error: writeError,
+  } = useWriteContract();
+  const {
+    isLoading: receiptLoading,
+    isSuccess,
+    isError: receiptError,
+  } = useWaitForTransactionReceipt({ hash: txHash });
 
   // Busy indicator that won't hang
-  const busy = Boolean((isPending || waitingReceipt) && lastAction !== null);
+  const busy = Boolean((writePending || receiptLoading) && lastAction !== null);
 
   // TX lifecycle
   useEffect(() => {
     if (isSuccess) {
       setMsg("Transaction confirmed.");
-      addLog(`Success: Transaction confirmed.`);
+      addLog("Success: Transaction confirmed.");
       // Refresh important reads
       refetchEpochNow?.();
       refetchMiningActive?.();
@@ -381,15 +405,26 @@ export default function Monitoring() {
       refetchUsage?.();
       setLastAction(null);
     }
-    if (error) {
-      const e: any = error;
-      const shortMsg = e?.shortMessage || e?.message || "Transaction failed";
-      setMsg(shortMsg);
-      addLog(`Error: ${shortMsg}`);
-      setLastAction(null);
-    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isSuccess, error]);
+  }, [isSuccess]);
+
+  useEffect(() => {
+    if (!writeError) return;
+    const shortMsg =
+      (writeError as any)?.shortMessage ||
+      (writeError as any)?.message ||
+      "Transaction failed to send";
+    setMsg(shortMsg);
+    addLog(`Error (write): ${shortMsg}`);
+    setLastAction(null);
+  }, [writeError]);
+
+  useEffect(() => {
+    if (!receiptError) return;
+    setMsg("Transaction reverted. Please check the explorer for details.");
+    addLog("Error: Transaction reverted at execution.");
+    setLastAction(null);
+  }, [receiptError]);
 
   useEffect(() => {
     if (!msg) return;
@@ -397,9 +432,7 @@ export default function Monitoring() {
     return () => clearTimeout(t);
   }, [msg]);
 
-  // ======================
-  // Watch on-chain Claim event → auto-update UI (TS-safe cast)
-  // ======================
+  // Watch Claim events to live-refresh
   useWatchContractEvent({
     address: gameCoreAddress as `0x${string}`,
     abi: gameCoreABI as any,
@@ -409,7 +442,8 @@ export default function Monitoring() {
         args?: { e?: bigint; user?: `0x${string}`; amount?: bigint };
       }>;
       const mine = logs.find(
-        (l) => (l?.args?.user ?? "").toLowerCase() === (address ?? "").toLowerCase()
+        (l) =>
+          (l?.args?.user ?? "").toLowerCase() === (address ?? "").toLowerCase()
       );
       if (!mine || !mine.args) return;
 
@@ -436,7 +470,8 @@ export default function Monitoring() {
   // ======================
   const onStart = async () => {
     if (!address) return setMsg("Please connect your wallet.");
-    if (chainId && chainId !== BASE_CHAIN_ID) return setMsg("Please switch to Base Sepolia.");
+    if (chainId && chainId !== BASE_CHAIN_ID)
+      return setMsg("Please switch to Base Sepolia.");
     if (prelaunch && goLiveOn) return setMsg("Prelaunch is active. Wait for epoch 1.");
     if (!canToggle) return setMsg("Cooldown. Please try again later.");
 
@@ -475,7 +510,8 @@ export default function Monitoring() {
 
   const onClaim = async () => {
     if (!address) return setMsg("Please connect your wallet.");
-    if (chainId && chainId !== BASE_CHAIN_ID) return setMsg("Please switch to Base Sepolia.");
+    if (chainId && chainId !== BASE_CHAIN_ID)
+      return setMsg("Please switch to Base Sepolia.");
     if (!canClaim) return setMsg("No pending rewards to claim.");
 
     try {
@@ -511,7 +547,7 @@ export default function Monitoring() {
     }
   };
 
-  // ===== Reset cosmetic budget when epoch changes / or when entering mid-epoch =====
+  // ===== Reset cosmetic budget when epoch changes / mid-epoch open =====
   useEffect(() => {
     if (!eLen || !eNowBn) return;
     const totalSec = Number(eLen);
@@ -596,7 +632,6 @@ export default function Monitoring() {
             Cooldown: <span className="text-neutral-200">{String(cd ?? 0n)} epoch</span>
           </div>
 
-        {/* When ACTIVE → Claim (grey if pending=0). When NOT active → Start */}
           {active ? (
             <button
               onClick={onClaim}
@@ -627,7 +662,7 @@ export default function Monitoring() {
         {!!msg && <div className="text-xs text-emerald-400 pt-1">{msg}</div>}
       </div>
 
-      {/* Terminal: latest at bottom + auto-scroll */}
+      {/* Terminal */}
       <div
         ref={terminalRef}
         className="bg-black/50 border border-neutral-800 rounded-lg p-3 font-mono text-xs text-green-400 space-y-1 h-32 overflow-y-auto"
@@ -639,10 +674,11 @@ export default function Monitoring() {
       </div>
 
       <div className="grid grid-cols-3 gap-2">
-        <StatCard title="Hashrate" value={formatNumber(hrNum)} />
+        {/* Effective Hashrate from miningUsage */}
+        <StatCard title="Effective Hashrate" value={formatNumber(effectiveHashrate)} />
         {/* Base Unit: 2 decimals + tooltip exact */}
         <StatCardWithTooltip
-          title="Base Unit"
+          title="Base Unit / Epoch"
           valueShort={baseUnitPerEpoch.toLocaleString("en-US", {
             minimumFractionDigits: 2,
             maximumFractionDigits: 2,
@@ -655,28 +691,48 @@ export default function Monitoring() {
       </div>
 
       <div className="bg-neutral-900/60 border border-neutral-800 rounded-xl p-4 space-y-3">
-        <h2 className="text-sm font-semibold">Your Rigs</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold">Your Rigs</h2>
+          {/* small usage badges */}
+          <div className="text-[11px] text-neutral-400 space-x-2">
+            <span>
+              Basic x{String(countBasic)}{" "}
+              {address ? `( ${usedBasic} used, ${idleBasic} idle )` : ""}
+            </span>
+            <span className="mx-1">•</span>
+            <span>
+              Pro x{String(countPro)}{" "}
+              {address ? `( ${usedPro} used, ${idlePro} idle )` : ""}
+            </span>
+            <span className="mx-1">•</span>
+            <span>
+              Legend x{String(countLegend)}{" "}
+              {address ? `( ${usedLegend} used, ${idleLegend} idle )` : ""}
+            </span>
+          </div>
+        </div>
+
         <div className="grid grid-cols-3 gap-3">
           <RigCard
             tier="Basic"
             count={String(countBasic)}
             image="/img/basic.png"
             owned={countBasic > 0n}
-            badge={usageParsed.basicBadge}
+            badge={address ? `${usedBasic} used, ${idleBasic} idle` : undefined}
           />
           <RigCard
             tier="Pro"
             count={String(countPro)}
             image="/img/pro.png"
             owned={countPro > 0n}
-            badge={usageParsed.proBadge}
+            badge={address ? `${usedPro} used, ${idlePro} idle` : undefined}
           />
           <RigCard
             tier="Legend"
             count={String(countLegend)}
             image="/img/legend.png"
             owned={countLegend > 0n}
-            badge={usageParsed.legendBadge}
+            badge={address ? `${usedLegend} used, ${idleLegend} idle` : undefined}
           />
         </div>
       </div>
@@ -751,11 +807,9 @@ function RigCard({
       <div>
         <div className="text-sm text-neutral-400">{tier}</div>
         <div className="text-lg font-semibold">x{count}</div>
-        {badge && (
-          <div className="mt-1 text-[11px] text-neutral-400">
-            {badge}
-          </div>
-        )}
+        {badge ? (
+          <div className="text-[11px] text-neutral-400 mt-0.5">{badge}</div>
+        ) : null}
       </div>
     </div>
   );
