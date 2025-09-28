@@ -140,7 +140,6 @@ export default function Rakit() {
   });
   const caps = useMemo(() => {
     const rc = rigCaps.data as { b: bigint; p: bigint; l: bigint } | undefined;
-    // fallback ke default desain 10/5/3 agar grid tidak kosong ketika fetch awal
     return { b: Number(rc?.b ?? 10n), p: Number(rc?.p ?? 5n), l: Number(rc?.l ?? 3n) };
   }, [rigCaps.data]);
 
@@ -190,8 +189,9 @@ export default function Rakit() {
   /* --- TX writer --- */
   const { writeContractAsync } = useWriteContract();
 
-  async function autoApprove(amount: bigint) {
+  async function ensureApprove(amount: bigint) {
     if (!user || !feeToken) return;
+    if (allowance >= amount) return;
     const tx = await writeContractAsync({
       address: feeToken,
       abi: erc20Abi,
@@ -209,32 +209,31 @@ export default function Rakit() {
     return Boolean(r);
   }
 
+  async function callMerge(kind: "BASIC_TO_PRO" | "PRO_TO_LEGEND") {
+    const fid = await getFarcasterFID();
+    const res = await fetch("/api/merge", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user, kind, fid: Number(fid) }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+    setMsg(`${kind} submitted: ${data.tx ?? ""}`);
+    // tak perlu await di sini—server sudah kirim tx dari signer ROLE
+  }
+
   async function onMergeBasicToPro() {
     if (!user) return alert("Connect wallet dulu.");
-    const reasons = [
+    if (firstFail([
       onBase ? "" : "Please switch network to Base Sepolia.",
       ownedBasic >= needBP ? "" : `Butuh ${String(needBP)} Basic untuk merge.`,
       caps.p > 0 ? "" : "Kontrak rigCaps.p = 0 (slot Pro belum di-set).",
       Number(pUsed) < caps.p ? "" : `Pro slot penuh (${Number(pUsed)}/${caps.p}).`,
-    ];
-    if (firstFail(reasons)) return;
+    ])) return;
 
     try {
-      // Approve kalau allowance kurang
-      if (allowance < feeB2P) await autoApprove(feeB2P);
-
-      const fid = await getFarcasterFID();
-      const h = await writeContractAsync({
-        address: gameCoreAddress as `0x${string}`,
-        abi: gameCoreABI as any,
-        functionName: "mergeBasicToPro",
-        args: [user, fid],
-        account: user,
-        chain: baseSepolia,
-      });
-      setMsg(`Merge B→P submitted: ${h}`);
-      await publicClient!.waitForTransactionReceipt({ hash: h });
-      setMsg("✅ Merge Basic → Pro success.");
+      await ensureApprove(feeB2P);
+      await callMerge("BASIC_TO_PRO");
     } catch (e: any) {
       alert(e?.shortMessage || e?.message || "Merge failed");
     }
@@ -242,29 +241,16 @@ export default function Rakit() {
 
   async function onMergeProToLegend() {
     if (!user) return alert("Connect wallet dulu.");
-    const reasons = [
+    if (firstFail([
       onBase ? "" : "Please switch network to Base Sepolia.",
       ownedPro >= needPL ? "" : `Butuh ${String(needPL)} Pro untuk merge.`,
       caps.l > 0 ? "" : "Kontrak rigCaps.l = 0 (slot Legend belum di-set).",
       Number(lUsed) < caps.l ? "" : `Legend slot penuh (${Number(lUsed)}/${caps.l}).`,
-    ];
-    if (firstFail(reasons)) return;
+    ])) return;
 
     try {
-      if (allowance < feeP2L) await autoApprove(feeP2L);
-
-      const fid = await getFarcasterFID();
-      const h = await writeContractAsync({
-        address: gameCoreAddress as `0x${string}`,
-        abi: gameCoreABI as any,
-        functionName: "mergeProToLegend",
-        args: [user, fid],
-        account: user,
-        chain: baseSepolia,
-      });
-      setMsg(`Merge P→L submitted: ${h}`);
-      await publicClient!.waitForTransactionReceipt({ hash: h });
-      setMsg("✅ Merge Pro → Legend success.");
+      await ensureApprove(feeP2L);
+      await callMerge("PRO_TO_LEGEND");
     } catch (e: any) {
       alert(e?.shortMessage || e?.message || "Merge failed");
     }
@@ -302,7 +288,7 @@ export default function Rakit() {
         >
           {`Merge ${String(needBP)} for Pro`}
           <span className="ml-2 text-xs text-neutral-300">
-            (fee {fmt2(Number(formatUnits(feeB2P, feeDecimals)))} {feeSymbol})
+            (fee {fmt2(feeB2PView)} {feeSymbol})
           </span>
         </button>
       </section>
@@ -314,7 +300,7 @@ export default function Rakit() {
             <h2 className="text-lg font-semibold">Pro Rigs</h2>
             <p className="text-sm text-neutral-400">Owned: {String(ownedPro)}</p>
           </div>
-          <Image src={TierImg.pro} alt="Pro rig" width={64} height={64} />
+        <Image src={TierImg.pro} alt="Pro rig" width={64} height={64} />
         </div>
         <div className="grid grid-cols-5 gap-2">
           {Array.from({ length: Math.max(1, caps.p) }).map((_, i) => (
@@ -331,7 +317,7 @@ export default function Rakit() {
         >
           {`Merge ${String(needPL)} for Legend`}
           <span className="ml-2 text-xs text-neutral-300">
-            (fee {fmt2(Number(formatUnits(feeP2L, feeDecimals)))} {feeSymbol})
+            (fee {fmt2(feeP2LView)} {feeSymbol})
           </span>
         </button>
       </section>
