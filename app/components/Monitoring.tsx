@@ -52,30 +52,20 @@ const formatNumber = (num: number) => {
 async function getRelayerSig(params: {
   user: `0x${string}`;
   action: "start" | "stop" | "claim";
-  nonce: bigint;
-  deadline: bigint;
-  chainId: number;
-  verifyingContract: `0x${string}`;
-}): Promise<string> {
-  const resp = await fetch(RELAYER_ENDPOINT, {
+}): Promise<{ signature: `0x${string}`; nonce: bigint; deadline: bigint }> {
+  const resp = await fetch("/api/sign-user-action", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      user: params.user,
-      action: params.action,
-      nonce: params.nonce.toString(),
-      deadline: params.deadline.toString(),
-      chainId: params.chainId,
-      verifyingContract: params.verifyingContract,
-    }),
+    body: JSON.stringify({ user: params.user, action: params.action }),
   });
-  if (!resp.ok) {
-    const text = await resp.text();
-    throw new Error(`Relayer refused: ${text}`);
-  }
-  const { signature } = await resp.json();
-  if (!signature) throw new Error("No signature returned by relayer");
-  return signature as string;
+  const json = await resp.json();
+  if (!resp.ok) throw new Error(json?.error || "Relayer refused");
+  const { signature, nonce, deadline } = json;
+  return {
+    signature: signature as `0x${string}`,
+    nonce: BigInt(nonce),
+    deadline: BigInt(deadline),
+  };
 }
 
 export default function Monitoring() {
@@ -451,83 +441,109 @@ const idleLegend = stats?.usage.legend.idle  ?? 0;
   // Actions (WithSig)
   // ======================
   const onStart = async () => {
-    if (!address) return setMsg("Please connect your wallet.");
-    if (chainId && chainId !== BASE_CHAIN_ID)
-      return setMsg("Please switch to Base Sepolia.");
-    if (prelaunch && goLiveOn) return setMsg("Prelaunch is active. Wait for epoch 1.");
-    if (!canToggle) return setMsg("Cooldown. Please try again later.");
+  if (!address) return setMsg("Please connect your wallet.");
+  if (chainId && chainId !== BASE_CHAIN_ID)
+    return setMsg("Please switch to Base Sepolia.");
+  if (prelaunch && goLiveOn) return setMsg("Prelaunch is active. Wait for epoch 1.");
+  if (!canToggle) return setMsg("Cooldown. Please try again later.");
 
-    try {
-      setMsg("");
-      setLastAction("start");
-      addLog("Requesting relayer signature for START...");
-      const nonce = (userNonce.data as bigint | undefined) ?? 0n;
-      const deadline = BigInt(Math.floor(Date.now() / 1000) + 15 * 60); // now + 15 minutes
-      const relayerSig = await getRelayerSig({
-        user: address as `0x${string}`,
-        action: "start",
-        nonce,
-        deadline,
-        chainId: chainId ?? BASE_CHAIN_ID,
-        verifyingContract: gameCoreAddress as `0x${string}`,
-      });
+  try {
+    setMsg("");
+    setLastAction("start");
+    addLog("Requesting relayer signature for START (server)…");
 
-      addLog("Sending startMiningWithSig...");
-      writeContract({
-        address: gameCoreAddress as `0x${string}`,
-        abi: gameCoreABI as any,
-        functionName: "startMiningWithSig",
-        args: [address, nonce, deadline, relayerSig],
-        account: address as `0x${string}`,
-        chain: baseSepolia,
-        chainId: BASE_CHAIN_ID,
-      });
-    } catch (e: any) {
-      setLastAction(null);
-      const m = e?.message || "Failed to start";
-      setMsg(m);
-      addLog(`Error: ${m}`);
+    // 🚀 ambil nonce & deadline fresh dari server signer
+    const { signature, nonce, deadline } = await getRelayerSig({
+      user: address as `0x${string}`,
+      action: "start",
+    });
+
+    addLog("Sending startMiningWithSig…");
+    writeContract({
+      address: gameCoreAddress as `0x${string}`,
+      abi: gameCoreABI as any,
+      functionName: "startMiningWithSig",
+      args: [address, nonce, deadline, signature],
+      account: address as `0x${string}`,
+      chain: baseSepolia,
+      chainId: BASE_CHAIN_ID,
+    });
+  } catch (e: any) {
+    setLastAction(null);
+    const m = e?.message || "Failed to start";
+    setMsg(m);
+    addLog(`Error: ${m}`);
+  }
+};
+
+const onClaim = async () => {
+  if (!address) return setMsg("Please connect your wallet.");
+  if (chainId && chainId !== BASE_CHAIN_ID)
+    return setMsg("Please switch to Base Sepolia.");
+  if (!canClaim) return setMsg("No pending rewards to claim.");
+
+  try {
+    setMsg("");
+    setLastAction("claim");
+    addLog("Requesting relayer signature for CLAIM (server)…");
+
+    // 🚀 ambil nonce & deadline dari server signer
+    let { signature, nonce, deadline } = await getRelayerSig({
+      user: address as `0x${string}`,
+      action: "claim",
+    });
+
+    addLog("Sending claimWithSig…");
+    writeContract({
+      address: gameCoreAddress as `0x${string}`,
+      abi: gameCoreABI as any,
+      functionName: "claimWithSig",
+      args: [address, nonce, deadline, signature],
+      account: address as `0x${string}`,
+      chain: baseSepolia,
+      chainId: BASE_CHAIN_ID,
+    });
+  } catch (e: any) {
+    // 🔁 Auto-retry sekali kalau terdeteksi expired/nonce
+    const msg = (e?.message || "").toLowerCase();
+    const shouldRetry =
+      msg.includes("expired") ||
+      msg.includes("deadline") ||
+      msg.includes("bad_nonce") ||
+      msg.includes("bad nonce") ||
+      msg.includes("nonce");
+    if (shouldRetry) {
+      try {
+        addLog("Retry: refresh signature (nonce/deadline) from server…");
+        const { signature, nonce, deadline } = await getRelayerSig({
+          user: address as `0x${string}`,
+          action: "claim",
+        });
+        writeContract({
+          address: gameCoreAddress as `0x${string}`,
+          abi: gameCoreABI as any,
+          functionName: "claimWithSig",
+          args: [address, nonce, deadline, signature],
+          account: address as `0x${string}`,
+          chain: baseSepolia,
+          chainId: BASE_CHAIN_ID,
+        });
+        return; // biar lifecycle sukses yang handle refresh UI
+      } catch (e2: any) {
+        setLastAction(null);
+        const em = e2?.message || "Failed to claim (retry)";
+        setMsg(em);
+        addLog(`Error (retry): ${em}`);
+        return;
+      }
     }
-  };
 
-  const onClaim = async () => {
-    if (!address) return setMsg("Please connect your wallet.");
-    if (chainId && chainId !== BASE_CHAIN_ID)
-      return setMsg("Please switch to Base Sepolia.");
-    if (!canClaim) return setMsg("No pending rewards to claim.");
-
-    try {
-      setMsg("");
-      setLastAction("claim");
-      addLog("Requesting relayer signature for CLAIM...");
-      const nonce = (userNonce.data as bigint | undefined) ?? 0n;
-      const deadline = BigInt(Math.floor(Date.now() / 1000) + 15 * 60); // now + 15 minutes
-      const relayerSig = await getRelayerSig({
-        user: address as `0x${string}`,
-        action: "claim",
-        nonce,
-        deadline,
-        chainId: chainId ?? BASE_CHAIN_ID,
-        verifyingContract: gameCoreAddress as `0x${string}`,
-      });
-
-      addLog("Sending claimWithSig...");
-      writeContract({
-        address: gameCoreAddress as `0x${string}`,
-        abi: gameCoreABI as any,
-        functionName: "claimWithSig",
-        args: [address, nonce, deadline, relayerSig],
-        account: address as `0x${string}`,
-        chain: baseSepolia,
-        chainId: BASE_CHAIN_ID,
-      });
-    } catch (e: any) {
-      setLastAction(null);
-      const m = e?.message || "Failed to claim";
-      setMsg(m);
-      addLog(`Error: ${m}`);
-    }
-  };
+    setLastAction(null);
+    const m = e?.message || "Failed to claim";
+    setMsg(m);
+    addLog(`Error: ${m}`);
+  }
+};
 
   // ===== Reset cosmetic budget when epoch changes / mid-epoch open =====
   useEffect(() => {
