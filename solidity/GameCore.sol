@@ -5,7 +5,7 @@ import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
-/// @dev Minimal interface dari RigNFT versi kamu (dengan role mint/burn khusus)
+/// @dev Minimal interface dari RigNFT (harus panggil onRigBalanceWillChange di GameCore sebelum balance berubah)
 interface IRigNFT {
     function BASIC() external view returns (uint256);
     function PRO() external view returns (uint256);
@@ -13,7 +13,7 @@ interface IRigNFT {
 
     function balanceOf(address account, uint256 id) external view returns (uint256);
 
-    // GameCore akan menggunakan ini (merge path)
+    // (opsional untuk fitur merge)
     function burnFrom(address account, uint256 id, uint256 amount) external;
     function mintByGame(address to, uint256 id, uint256 amount) external;
 }
@@ -24,9 +24,18 @@ interface IRewardsVault {
     function burn(uint256 amount) external;
 }
 
-/// @title BaseTC GameCore v2 (Accumulator)
-/// @notice Accumulator real-time (tanpa snapshot/finalize), session 24h, hook RigNFT, EIP-712 relayer-sign (user bayar gas),
-///         leftover harian 50% burn / 30% staking / 10% spin / 10% leaderboard.
+/**
+ * @title BaseTC GameCore v3 (Accumulator ROI)
+ * @notice
+ *  - Reward harian = FIXED per NFT (ROI-style), diakru per detik saat user aktif (miningActive).
+ *  - Tidak ada pro-rata pool hashrate. Tidak ada accPerHash.
+ *  - Sisa emisi harian yang tidak TERAKRU (karena user tidak aktif) → leftover, bisa didistribusi:
+ *      50% burn / 30% staking / 10% spin / 10% leaderboard.
+ *  - Atribusi payout harian: saat claim/stop/hook, akrual di-segmen per epoch (hari) dan
+ *    menambah distributedAt[e] untuk epoch terkait. Ini menjaga leftover tetap benar meski klaim terlambat.
+ *  - Start/Claim via EIP-712 WithSig (relayer otorisasi, user bayar gas).
+ *  - Sesi 24h (ritual harian) + cooldown start/stop (dalam satuan epoch/hari).
+ */
 contract GameCore is AccessControl, ReentrancyGuard {
     using ECDSA for bytes32;
 
@@ -52,39 +61,15 @@ contract GameCore is AccessControl, ReentrancyGuard {
     // =======================
     uint256 public startTime;             // unix start
     uint256 public epochLength;           // seconds; disarankan 86400
-    uint256 public initialRewardPerEpoch; // reward per HARI (bukan per 30 hari)
+    uint256 public initialRewardPerEpoch; // total EMISI per HARI (untuk perhitungan leftover/budget)
     uint256 public halvingEvery;          // jumlah epoch per halving; disarankan 30 (≈ 30 hari)
 
     // =======================
-    // Hashrate & Base reward (per NFT / per epoch)
+    // Base reward per NFT/epoch (sebelum halving)
     // =======================
-    struct HashrateParams { uint256 b; uint256 p; uint256 l; }   // bobot hashrate per tier
-    struct BaseParams     { uint256 b; uint256 p; uint256 l; }   // base reward per NFT/epoch (token unit)
-
-    // default: 1/5/25 dan 0.2 / 1 / 5 token per epoch
-    HashrateParams public hashrate = HashrateParams(1, 5, 25);
-    BaseParams     public baseRw   = BaseParams(0.2 ether, 1 ether, 5 ether);
-
-    // =======================
-    // Pool split (base vs pro-rata) dalam bps
-    // =======================
-    uint16 public basePortionBps = 1000;  // 10%
-    uint16 public proPortionBps  = 9000;  // 90%
-
-    // =======================
-    // Accumulator state (scaled 1e18)
-    // =======================
-    uint256 public lastUpdateTs;   // timestamp terakhir indeks diakumulasi
-    uint256 public accPerBase;     // indeks untuk base unit (1e18)
-    uint256 public accPerHash;     // indeks untuk hashrate  (1e18)
-
-    // Agregat bobot aktif
-    uint256 public globalBaseUnit; // total baseUnit aktif
-    uint256 public globalHashrate; // total hashrate aktif
-
-    // Per user
-    mapping(address => uint256) public rewardDebt; // checkpoint: base*accBase + hash*accHash (scaled down)
-    mapping(address => bool)    public miningActive;
+    struct BaseParams { uint256 b; uint256 p; uint256 l; } // token/epoch per NFT
+    // contoh default: 0.333 / 1.000 / 5.000 token per hari (18 desimal)
+    BaseParams public baseRw = BaseParams(0.333 ether, 1 ether, 5 ether);
 
     // =======================
     // Session 24h + Cooldown + Prelaunch
@@ -98,10 +83,17 @@ contract GameCore is AccessControl, ReentrancyGuard {
     bool public goLive; // jika true: prelaunch sampai masuk epoch 1
 
     // =======================
+    // State per user (accumulator ROI)
+    // =======================
+    mapping(address => bool)    public miningActive;
+    mapping(address => uint256) public lastAccrueTs; // timestamp terakhir disettle (dibayar atau diakru)
+    // Catatan: kita TIDAK menyimpan "accrued" terpisah — claim menghitung dari lastAccrueTs hingga now.
+
+    // =======================
     // Leftover bookkeeping per-epoch (harian)
     // =======================
-    mapping(uint256 => uint256) public distributedAt;    // total payout yang sudah dibayar pada epoch hari tsb
-    mapping(uint256 => bool)    public leftoverClosed;   // guard agar distribusi leftover sekali
+    mapping(uint256 => uint256) public distributedAt;  // total payout yg DIATRIBUSI ke epoch tsb (berdasarkan akrual waktu itu)
+    mapping(uint256 => bool)    public leftoverClosed; // guard: leftover hanya 1x/epoch
 
     // BPS leftover: 50% burn / 30% staking / 10% spin / 10% leaderboard
     uint16 public leftoverBurnBps  = 5000;
@@ -126,7 +118,7 @@ contract GameCore is AccessControl, ReentrancyGuard {
     enum Action { Start, Stop, Claim }
 
     // =======================
-    // Merge constants
+    // Merge constants (opsional)
     // =======================
     uint256 public constant BASIC_TO_PRO_NEED  = 10;
     uint256 public constant PRO_TO_LEGEND_NEED = 5;
@@ -166,7 +158,7 @@ contract GameCore is AccessControl, ReentrancyGuard {
 
         startTime             = _startTime;
         epochLength           = _epochLength;            // disarankan 86400
-        initialRewardPerEpoch = _initialRewardPerEpoch;  // per HARI
+        initialRewardPerEpoch = _initialRewardPerEpoch;  // per HARI (budget/leftover)
         halvingEvery          = _halvingEvery;           // disarankan 30
 
         _DOMAIN_SEPARATOR = keccak256(
@@ -178,17 +170,6 @@ contract GameCore is AccessControl, ReentrancyGuard {
                 address(this)
             )
         );
-
-        // inisialisasi akumulator
-        lastUpdateTs = block.timestamp < startTime ? startTime : block.timestamp;
-    }
-
-    // =======================
-    // Modifiers
-    // =======================
-    modifier onlyRig() {
-        require(msg.sender == address(rig), "ONLY_RIG");
-        _;
     }
 
     // =======================
@@ -210,10 +191,6 @@ contract GameCore is AccessControl, ReentrancyGuard {
         return initialRewardPerEpoch >> halvings; // / 2^halvings
     }
 
-    function _rewardPerSecAtEpoch(uint256 e) internal view returns (uint256) {
-        return rewardPerEpoch(e) / epochLength;
-    }
-
     function isPrelaunch() public view returns (bool) {
         if (!goLive) return false;
         if (block.timestamp < startTime) return true;
@@ -221,109 +198,87 @@ contract GameCore is AccessControl, ReentrancyGuard {
         return (e < 1);
     }
 
-    // ===== NFT-based measures (tanpa status) =====
+    // ===== NFT balances =====
     function _balances(address u) internal view returns (uint256 b, uint256 p, uint256 l) {
         b = rig.balanceOf(u, BASIC);
         p = rig.balanceOf(u, PRO);
         l = rig.balanceOf(u, LEGEND);
     }
 
-    function _baseHashrate(address u) internal view returns (uint256) {
+    // ===== Base per-day (fixed ROI) at epoch e (with halving) =====
+    function _basePerDayAtEpoch(address u, uint256 e) internal view returns (uint256) {
         (uint256 b, uint256 p, uint256 l) = _balances(u);
-        unchecked { return b * hashrate.b + p * hashrate.p + l * hashrate.l; }
+        unchecked {
+            uint256 perDay = b * baseRw.b + p * baseRw.p + l * baseRw.l; // token/epoch
+            if (halvingEvery == 0) return perDay;
+            uint256 halvings = e / halvingEvery;
+            return perDay >> halvings; // / 2^halvings
+        }
     }
 
-    function _baseUnitPerEpoch(address u) internal view returns (uint256) {
+    function _perSecAtEpoch(address u, uint256 e) internal view returns (uint256) {
+        uint256 perDay = _basePerDayAtEpoch(u, e);
+        return epochLength == 0 ? 0 : perDay / epochLength; // flooring (wajar)
+    }
+
+    // ===== Display helpers (untuk UI agar konsisten) =====
+    function getHashrate(address /*u*/) external pure returns (uint256) {
+        // Tidak dipakai untuk reward lagi; kembalikan 0 agar UI lama tidak bingung.
+        return 0;
+    }
+
+    function getBaseUnit(address u) external view returns (uint256) {
+        // Base per epoch (setelah halving hari INI) — untuk ditampilkan di UI.
+        return _basePerDayAtEpoch(u, epochNow());
+    }
+
+    function isSupreme(address u) external view returns (bool) {
         (uint256 b, uint256 p, uint256 l) = _balances(u);
-        unchecked { return b * baseRw.b + p * baseRw.p + l * baseRw.l; } // token/epoch (hari)
+        return (b >= 10 && p >= 5 && l >= 3);
     }
-
-    // ===== Active-only (dipakai untuk weight saat miningActive) =====
-    function _activeHashrate(address u) internal view returns (uint256) {
-        if (isPrelaunch() || !miningActive[u]) return 0;
-        return _baseHashrate(u);
-    }
-
-    function _activeBaseUnit(address u) internal view returns (uint256) {
-        if (!miningActive[u]) return 0;
-        return _baseUnitPerEpoch(u);
-    }
-
-    // User-facing getters
-    function getHashrate(address u) external view returns (uint256) { return _activeHashrate(u); }
-    function getBaseUnit(address u) external view returns (uint256)  { return _baseUnitPerEpoch(u); }
 
     // =======================
-    // Accumulator core
+    // Internal: settle accrual (segment per epoch)
     // =======================
-    function _updateGlobal() internal {
-        uint256 t0 = lastUpdateTs;
-        uint256 t1 = block.timestamp;
-        if (t1 <= t0) return;
+    /// @dev Settle akrual dari fromTs hingga toTs (capped ke sessionEndAt bila aktif), tulis distributedAt per-epoch.
+    function _settleAccrual(address u, uint256 fromTs, uint256 toTs) internal returns (uint256 paid, uint256 lastTs) {
+        if (toTs <= fromTs) return (0, fromTs);
 
-        // Akumulasi per segmen epoch (rate per detik konstan dalam 1 epoch)
-        uint256 cur = t0;
-        while (cur < t1) {
+        uint256 cur = fromTs;
+        uint256 endCap = toTs;
+
+        // Jika aktif, batasi ke akhir sesi
+        if (miningActive[u]) {
+            uint256 endSession = sessionEndAt[u];
+            if (endSession < endCap) endCap = endSession;
+        }
+
+        // Tidak ada accrual jika tidak aktif
+        if (!miningActive[u] || endCap <= cur) {
+            return (0, toTs);
+        }
+
+        while (cur < endCap) {
             uint256 e  = _epochAtTs(cur);
             uint256 endOfEpochTs = startTime + (e + 1) * epochLength;
-            uint256 segEnd = t1 < endOfEpochTs ? t1 : endOfEpochTs;
+            uint256 segEnd = endCap < endOfEpochTs ? endCap : endOfEpochTs;
             uint256 dt = segEnd - cur;
             if (dt > 0) {
-                uint256 rps = _rewardPerSecAtEpoch(e); // token/detik untuk epoch e
-                if (rps > 0) {
-                    uint256 proRps  = (rps * proPortionBps)  / 10_000;
-                    uint256 baseRps = (rps * basePortionBps) / 10_000;
-
-                    if (globalHashrate > 0 && proRps > 0) {
-                        accPerHash += (proRps * dt * 1e18) / globalHashrate;
-                    }
-                    if (globalBaseUnit > 0 && baseRps > 0) {
-                        accPerBase += (baseRps * dt * 1e18) / globalBaseUnit;
-                    }
+                uint256 perSec = _perSecAtEpoch(u, e);
+                uint256 segAmt = perSec * dt;          // token (18d)
+                if (segAmt > 0) {
+                    distributedAt[e] += segAmt;        // atribusi ke epoch segmen tsb
+                    paid += segAmt;
                 }
             }
             cur = segEnd;
-
-            // Safety: batasi iterasi (kalau lama tidak ada interaksi)
-            // maksimum 400 epoch (≈ > 1 tahun) per panggilan
-            // untuk menghindari gas berlebih, namun real case jarang melewati ini.
-            // (Jika melebihi, panggilan selanjutnya akan melanjutkan.)
-            unchecked {
-                // noop; loop akan break alami ketika cur == t1
-            }
         }
 
-        lastUpdateTs = t1;
-    }
-
-    function _checkpointValue(address u) internal view returns (uint256) {
-        uint256 h = _activeHashrate(u);
-        uint256 b = _activeBaseUnit(u);
-        // b adalah token/epoch; indeks accPerBase menambah token/epoch per detik,
-        // namun karena distribusi base dilakukan proporsional terhadap "b" (baseUnit),
-        // di sini cukup b * accPerBase / 1e18 (unit menjadi token).
-        uint256 fromHash = (h * accPerHash) / 1e18;
-        uint256 fromBase = (b * accPerBase) / 1e18;
-        return fromHash + fromBase;
-    }
-
-    function _harvest(address u) internal {
-        uint256 due = 0;
-        uint256 cv  = _checkpointValue(u);
-        uint256 rd  = rewardDebt[u];
-        if (cv > rd) {
-            unchecked { due = cv - rd; }
-        }
-        if (due > 0) {
-            uint256 e = epochNow();
-            distributedAt[e] += due;       // catat payout masuk ke akumulasi hari ini
-            vault.payout(u, due);
-            emit Claimed(e, u, due);
-        }
+        return (paid, endCap);
     }
 
     // =======================
-    // Session & Toggle
+    // Session & Toggle helpers
     // =======================
     function _currentEpoch() internal view returns (uint256) {
         if (block.timestamp < startTime) return 0;
@@ -332,25 +287,23 @@ contract GameCore is AccessControl, ReentrancyGuard {
 
     function _enforceSession(address u) internal {
         if (miningActive[u] && block.timestamp >= sessionEndAt[u]) {
-            _updateGlobal();
-            _harvest(u);
+            // settle sampai akhir sesi
+            (uint256 paid, uint256 lastTs) = _settleAccrual(u, lastAccrueTs[u], block.timestamp);
+            if (paid > 0) {
+                vault.payout(u, paid);
+                emit Claimed(_epochAtTs(lastTs), u, paid);
+            }
 
-            // turunkan agregat bobot
-            uint256 h = _activeHashrate(u);
-            uint256 b = _activeBaseUnit(u);
-            if (globalHashrate >= h) globalHashrate -= h;
-            if (globalBaseUnit >= b) globalBaseUnit -= b;
-
+            // stop
             miningActive[u] = false;
-            rewardDebt[u]   = _checkpointValue(u); // setelah inactive → 0 (karena bobot 0)
+            lastAccrueTs[u] = block.timestamp;
             lastToggleEpoch[u] = _currentEpoch();
-
             emit MiningStopped(u, lastToggleEpoch[u]);
         }
     }
 
     // =======================
-    // Start/Stop/Claim (user pays gas, but needs relayer signature)
+    // Start/Stop/Claim (WithSig; user bayar gas)
     // =======================
     function startMiningWithSig(
         address user,
@@ -368,22 +321,12 @@ contract GameCore is AccessControl, ReentrancyGuard {
         require(e >= lastToggleEpoch[user] + toggleCooldown, "COOLDOWN");
         require(!miningActive[user], "ALREADY_ACTIVE");
 
-        _updateGlobal();
-        _harvest(user);
-
-        // naikkan agregat bobot
-        uint256 h = _baseHashrate(user);
-        uint256 b = _baseUnitPerEpoch(user);
-        if (h > 0) globalHashrate += h;
-        if (b > 0) globalBaseUnit += b;
-
         miningActive[user] = true;
         sessionEndAt[user] = block.timestamp + sessionDuration;
-
-        rewardDebt[user] = _checkpointValue(user);
+        lastAccrueTs[user] = block.timestamp; // mulai accrual dari sekarang
         lastToggleEpoch[user] = e;
 
-        nonces[user]++; // konsumsi nonce setelah sukses
+        nonces[user]++; // konsumsi nonce
         emit MiningStarted(user, e);
     }
 
@@ -399,21 +342,19 @@ contract GameCore is AccessControl, ReentrancyGuard {
         require(!isPrelaunch(), "PRELAUNCH");
         require(miningActive[user], "NOT_ACTIVE");
 
-        _enforceSession(user); // bila sesi lewat, sudah auto-stop di dalam
+        _enforceSession(user); // mungkin sudah auto-stop di dalam bila sesi lewat
 
         if (miningActive[user]) {
-            _updateGlobal();
-            _harvest(user);
-
-            uint256 h = _activeHashrate(user);
-            uint256 b = _activeBaseUnit(user);
-            if (globalHashrate >= h) globalHashrate -= h;
-            if (globalBaseUnit >= b) globalBaseUnit -= b;
+            // settle sampai sekarang (cap ke session end)
+            (uint256 paid, uint256 lastTs) = _settleAccrual(user, lastAccrueTs[user], block.timestamp);
+            if (paid > 0) {
+                vault.payout(user, paid);
+                emit Claimed(_epochAtTs(lastTs), user, paid);
+            }
 
             miningActive[user] = false;
-            rewardDebt[user]   = _checkpointValue(user);
+            lastAccrueTs[user] = block.timestamp;
             lastToggleEpoch[user] = epochNow();
-
             emit MiningStopped(user, lastToggleEpoch[user]);
         }
 
@@ -429,47 +370,53 @@ contract GameCore is AccessControl, ReentrancyGuard {
         require(msg.sender == user, "ONLY_SELF");
         _checkRelayerAuth(user, Action.Claim, nonce, deadline, relayerSig);
 
-        _enforceSession(user);
-        _updateGlobal();
-        _harvest(user);
-        rewardDebt[user] = _checkpointValue(user);
+        _enforceSession(user); // kalau sesi lewat, disettle & stop
+
+        // settle (cap ke session end bila aktif)
+        (uint256 paid, uint256 lastTs) = _settleAccrual(user, lastAccrueTs[user], block.timestamp);
+        if (paid > 0) {
+            vault.payout(user, paid);
+            emit Claimed(_epochAtTs(lastTs), user, paid);
+        }
+        lastAccrueTs[user] = block.timestamp;
 
         nonces[user]++;
     }
 
     // =======================
-    // Hook dari RigNFT (dipanggil di _beforeTokenTransfer)
+    // Hook dari RigNFT: panggil sebelum balance berubah
     // =======================
-    function onRigBalanceWillChange(address user) external onlyRig nonReentrant {
+    function onRigBalanceWillChange(address user) external nonReentrant {
+        require(msg.sender == address(rig), "ONLY_RIG");
         _enforceSession(user);
-        _updateGlobal();
 
         if (miningActive[user]) {
-            // harvest lalu turunkan agregat
-            _harvest(user);
+            // settle sampai sekarang (cap ke session end)
+            (uint256 paid, uint256 lastTs) = _settleAccrual(user, lastAccrueTs[user], block.timestamp);
+            if (paid > 0) {
+                vault.payout(user, paid);
+                emit Claimed(_epochAtTs(lastTs), user, paid);
+            }
 
-            uint256 h = _activeHashrate(user);
-            uint256 b = _activeBaseUnit(user);
-            if (globalHashrate >= h) globalHashrate -= h;
-            if (globalBaseUnit >= b) globalBaseUnit -= b;
-
+            // stop karena NFT berubah
             miningActive[user] = false;
-            rewardDebt[user]   = _checkpointValue(user); // akan 0 karena bobot 0
+            lastAccrueTs[user] = block.timestamp;
             lastToggleEpoch[user] = epochNow();
-
             emit MiningStopped(user, lastToggleEpoch[user]);
         } else {
-            // sinkronkan checkpoint walau tidak aktif
-            rewardDebt[user] = _checkpointValue(user); // 0
+            // tidak aktif → cukup sinkronkan timestamp supaya pending view rapi
+            lastAccrueTs[user] = block.timestamp;
         }
     }
 
     // =======================
-    // Leftover harian (dipanggil sekali/hari oleh admin/keeper)
+    // Leftover harian (ADMIN): lakukan setelah hari berakhir
     // =======================
     function distributeLeftover(uint256 dayEpoch) external onlyRole(PARAM_ADMIN) nonReentrant {
         require(!leftoverClosed[dayEpoch], "ALREADY_DONE");
+        // total emisi budget hari itu (mengikuti halving)
         uint256 daily = rewardPerEpoch(dayEpoch);
+        // total yang "terakru" dan telah DIATRIBUSI ke hari tsb lewat settle (retroaktif di claim/stop/hook)
         uint256 paid  = distributedAt[dayEpoch];
         uint256 leftover = daily > paid ? (daily - paid) : 0;
 
@@ -479,6 +426,8 @@ contract GameCore is AccessControl, ReentrancyGuard {
             emit LeftoverDistributed(dayEpoch, 0, 0, 0, 0, 0);
             return;
         }
+
+        require(stakingVault != address(0) && spinVault != address(0) && boardVault != address(0), "VAULT_NOT_SET");
 
         uint256 burnAmt  = (leftover * leftoverBurnBps)  / 10_000;
         uint256 stakeAmt = (leftover * leftoverStakeBps) / 10_000;
@@ -494,7 +443,7 @@ contract GameCore is AccessControl, ReentrancyGuard {
     }
 
     // =======================
-    // Merge (RELAYER only, tetap seperti sebelumnya)
+    // Merge (opsional; via RELAYER)
     // =======================
     function mergeBasicToPro(address user, uint256 fid) external onlyRole(RELAYER_ROLE) nonReentrant {
         rig.burnFrom(user, BASIC, BASIC_TO_PRO_NEED);
@@ -512,69 +461,35 @@ contract GameCore is AccessControl, ReentrancyGuard {
     // View: pending rewards (untuk UI)
     // =======================
     function pending(address u) external view returns (uint256) {
-        if (block.timestamp <= lastUpdateTs) {
-            uint256 cv = _checkpointValue(u);
-            return cv > rewardDebt[u] ? (cv - rewardDebt[u]) : 0;
-        }
+        uint256 fromTs = lastAccrueTs[u];
+        if (!miningActive[u]) return 0;
 
-        // simulasi akumulator sementara tanpa modify state
-        uint256 t0 = lastUpdateTs;
-        uint256 t1 = block.timestamp;
-        uint256 tmpAccHash = accPerHash;
-        uint256 tmpAccBase = accPerBase;
+        uint256 toTs = block.timestamp;
+        uint256 endSession = sessionEndAt[u];
+        if (endSession < toTs) toTs = endSession;
+        if (toTs <= fromTs) return 0;
 
-        uint256 cur = t0;
-        while (cur < t1) {
+        uint256 cur = fromTs;
+        uint256 total;
+        while (cur < toTs) {
             uint256 e  = _epochAtTs(cur);
             uint256 endOfEpochTs = startTime + (e + 1) * epochLength;
-            uint256 segEnd = t1 < endOfEpochTs ? t1 : endOfEpochTs;
+            uint256 segEnd = toTs < endOfEpochTs ? toTs : endOfEpochTs;
             uint256 dt = segEnd - cur;
             if (dt > 0) {
-                uint256 rps = _rewardPerSecAtEpoch(e);
-                if (rps > 0) {
-                    uint256 proRps  = (rps * proPortionBps)  / 10_000;
-                    uint256 baseRps = (rps * basePortionBps) / 10_000;
-                    if (globalHashrate > 0 && proRps > 0) {
-                        tmpAccHash += (proRps * dt * 1e18) / globalHashrate;
-                    }
-                    if (globalBaseUnit > 0 && baseRps > 0) {
-                        tmpAccBase += (baseRps * dt * 1e18) / globalBaseUnit;
-                    }
-                }
+                uint256 perSec = _perSecAtEpoch(u, e);
+                total += perSec * dt;
             }
             cur = segEnd;
         }
-
-        uint256 h = miningActive[u] ? _baseHashrate(u)      : 0;
-        uint256 b = miningActive[u] ? _baseUnitPerEpoch(u)  : 0;
-        uint256 cv2 = (h * tmpAccHash) / 1e18 + (b * tmpAccBase) / 1e18;
-        return cv2 > rewardDebt[u] ? (cv2 - rewardDebt[u]) : 0;
+        return total;
     }
 
     // =======================
     // Admin setters
     // =======================
-    function setHashrate(uint256 b, uint256 p, uint256 l) external onlyRole(PARAM_ADMIN) {
-        // perubahan bobot hashrate hanya mempengaruhi interaksi berikutnya
-        hashrate = HashrateParams(b, p, l);
-    }
-
     function setBaseReward(uint256 b, uint256 p, uint256 l) external onlyRole(PARAM_ADMIN) {
         baseRw = BaseParams(b, p, l);
-    }
-
-    function setPortionBps(uint16 baseBps, uint16 proBps) external onlyRole(PARAM_ADMIN) {
-        require(uint256(baseBps) + proBps == 10_000, "BPS!=100%");
-        basePortionBps = baseBps;
-        proPortionBps  = proBps;
-    }
-
-    function setLeftoverBps(uint16 burnBps, uint16 stakeBps, uint16 spinBps, uint16 boardBps) external onlyRole(PARAM_ADMIN) {
-        require(uint256(burnBps) + stakeBps + spinBps + boardBps == 10_000, "BPS_SUM!=100%");
-        leftoverBurnBps  = burnBps;
-        leftoverStakeBps = stakeBps;
-        leftoverSpinBps  = spinBps;
-        leftoverBoardBps = boardBps;
     }
 
     function setDistributionVaults(address _staking, address _spin, address _board) external onlyRole(PARAM_ADMIN) {
@@ -585,7 +500,7 @@ contract GameCore is AccessControl, ReentrancyGuard {
     }
 
     function setInitialReward(uint256 x) external onlyRole(PARAM_ADMIN) { initialRewardPerEpoch = x; }
-    function setEpochLength(uint256 x) external onlyRole(PARAM_ADMIN)   { epochLength = x; }
+    function setEpochLength(uint256 x) external onlyRole(PARAM_ADMIN)   { require(x > 0, "BAD_LEN"); epochLength = x; }
     function setStartTime(uint256 x) external onlyRole(PARAM_ADMIN)     { startTime = x; }
     function setHalvingEvery(uint256 x) external onlyRole(PARAM_ADMIN)  { halvingEvery = x; }
 
