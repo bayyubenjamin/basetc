@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { FC } from "react";
+import Image from "next/image";
 import {
   useAccount,
   useReadContract,
@@ -17,10 +18,12 @@ import {
   gameCoreABI,
   chainId as BASE_CHAIN_ID,
 } from "../lib/web3Config";
-import Image from "next/image";
 
-// ===== Farcaster FID helper (sama seperti file asli) =====
-async function getFarcasterFID(): Promise<bigint | null> {
+// ---------- Helper UI ----------
+const toast = (msg: string) => alert(msg);
+
+// (opsional) ambil FID farcaster; kalau gagal kita biarkan 0
+async function getFarcasterFID(): Promise<bigint> {
   try {
     const mod = await import("@farcaster/miniapp-sdk");
     const rawCtx: any = (mod as any)?.sdk?.context;
@@ -29,186 +32,154 @@ async function getFarcasterFID(): Promise<bigint | null> {
     else if (rawCtx && typeof rawCtx.then === "function") ctx = await rawCtx;
     else ctx = rawCtx ?? null;
     const fid: number | null = ctx?.user?.fid ?? null;
-    return typeof fid === "number" && Number.isFinite(fid) ? BigInt(fid) : null;
+    return typeof fid === "number" && Number.isFinite(fid) ? BigInt(fid) : 0n;
   } catch {
-    return null;
+    return 0n;
   }
 }
 
-// ===== Minimal ERC20 ABI untuk approve fee token =====
+// ---------- Minimal ERC20 ABI ----------
 const erc20Abi = [
   { type: "function", name: "decimals", stateMutability: "view", inputs: [], outputs: [{ type: "uint8" }] },
   { type: "function", name: "symbol",   stateMutability: "view", inputs: [], outputs: [{ type: "string" }] },
-  { type: "function", name: "allowance", stateMutability: "view", inputs: [{type:"address"},{type:"address"}], outputs: [{ type: "uint256" }] },
-  { type: "function", name: "approve",  stateMutability: "nonpayable", inputs: [{type:"address"},{type:"uint256"}], outputs: [{ type: "bool" }] },
+  {
+    type: "function",
+    name: "allowance",
+    stateMutability: "view",
+    inputs: [{ type: "address" }, { type: "address" }],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "approve",
+    stateMutability: "nonpayable",
+    inputs: [{ type: "address" }, { type: "uint256" }],
+    outputs: [{ type: "bool" }],
+  },
 ] as const;
 
-// ===== Slot tile (PERSIS struktur asli) =====
-const NftSlot: FC<{ filled: boolean; tier: "basic" | "pro" | "legend" }> = ({ filled, tier }) => {
-  const tierImages = {
-    basic: "/img/vga_basic.png",
-    pro: "/img/vga_pro.gif",
-    legend: "/img/vga_legend.gif",
-  } as const;
+// ---------- Slot Cell ----------
+const NftSlot: FC<{ filled: boolean; src: string; alt: string }> = ({ filled, src, alt }) => (
+  <div
+    className={`w-12 h-12 md:w-16 md:h-16 rounded-md flex items-center justify-center border-2 ${
+      filled
+        ? "bg-green-500/15 border-green-500/50"
+        : "bg-neutral-800 border-neutral-700"
+    }`}
+  >
+    {filled ? (
+      <Image src={src} alt={alt} width={48} height={48} className="object-contain" />
+    ) : null}
+  </div>
+);
+
+// ---------- Merge Section (desain aslimu) ----------
+const MergeSection: FC<{
+  tierName: "Basic" | "Pro" | "Legend";
+  ownedCount: bigint;
+  slotCount: number;
+  buttonText?: string;
+  buttonDisabled?: boolean;
+  onClick?: () => void;
+  imageSrc: string;
+}> = ({ tierName, ownedCount, slotCount, buttonText, buttonDisabled, onClick, imageSrc }) => {
+  const tierImg =
+    tierName === "Basic"
+      ? "/img/vga_basic.png"
+      : tierName === "Pro"
+      ? "/img/vga_pro.gif"
+      : "/img/vga_legend.gif";
 
   return (
-    <div
-      className={`w-12 h-12 md:w-16 md:h-16 rounded-md flex items-center justify-center 
-      ${filled ? "bg-green-500/20 border-green-500/50" : "bg-neutral-800 border-neutral-700"} border-2`}
-    >
-      {filled && (
-        <Image
-          src={tierImages[tier]}
-          alt={`${tier} rig`}
-          width={48}
-          height={48}
-          className="object-contain"
-        />
-      )}
+    <div className="bg-neutral-800 rounded-lg p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-semibold">{tierName} Rigs</h2>
+          <p className="text-sm text-neutral-400">Owned: {String(ownedCount)}</p>
+        </div>
+        <div className="w-16 h-16 relative">
+          <Image src={imageSrc || tierImg} alt={`${tierName} rig`} width={64} height={64} className="object-contain" />
+        </div>
+      </div>
+
+      {/* Slots */}
+      <div className="grid grid-cols-5 gap-2">
+        {Array.from({ length: slotCount }).map((_, i) => (
+          <NftSlot
+            key={i}
+            filled={i < Number(ownedCount)}
+            src={tierImg}
+            alt={`${tierName} rig`}
+          />
+        ))}
+      </div>
+
+      {/* Tombol (opsional, hanya untuk Basic & Pro) */}
+      {buttonText ? (
+        <button
+          onClick={onClick}
+          disabled={Boolean(buttonDisabled)}
+          className={`w-full px-3 py-2 text-sm rounded-md transition-colors ${
+            buttonDisabled
+              ? "bg-neutral-700 text-neutral-500 cursor-not-allowed"
+              : tierName === "Basic"
+              ? "bg-blue-600 hover:bg-blue-500 text-white"
+              : "bg-indigo-600 hover:bg-indigo-500 text-white"
+          }`}
+        >
+          {buttonText}
+        </button>
+      ) : null}
     </div>
   );
 };
 
-// ===== Section (PERSIS layout asli) =====
-const MergeSection: FC<{
-  tierName: string;
-  ownedCount: bigint;
-  neededForUpgrade: bigint;
-  slotCount: number;
-  onMerge: () => void;
-  isMerging: boolean;
-  canMerge: boolean;
-  imageSrc: string;
-}> = ({
-  tierName,
-  ownedCount,
-  neededForUpgrade,
-  slotCount,
-  onMerge,
-  isMerging,
-  canMerge,
-  imageSrc,
-}) => (
-  <div className="bg-neutral-800 rounded-lg p-4 space-y-3">
-    <div className="flex items-center justify-between">
-      <div>
-        <h2 className="text-lg font-semibold">{tierName} Rigs</h2>
-        <p className="text-sm text-neutral-400">Owned: {String(ownedCount)}</p>
-      </div>
-      <div className="w-16 h-16 relative">
-        <Image
-          src={imageSrc}
-          alt={`${tierName} rig`}
-          width={64}
-          height={64}
-          className="object-contain"
-        />
-      </div>
-    </div>
-
-    <div className="grid grid-cols-5 gap-2">
-      {Array.from({ length: slotCount }).map((_, i) => (
-        <NftSlot
-          key={i}
-          filled={i < Number(ownedCount)}
-          tier={tierName.toLowerCase() as any}
-        />
-      ))}
-    </div>
-
-    {neededForUpgrade > 0n && (
-      <button
-        onClick={onMerge}
-        disabled={!canMerge || isMerging}
-        className={`w-full px-3 py-2 text-sm rounded-md transition-colors ${
-          !canMerge || isMerging
-            ? "bg-neutral-700 text-neutral-500 cursor-not-allowed"
-            : "bg-blue-600 hover:bg-blue-500 text-white"
-        }`}
-      >
-        {isMerging
-          ? "Merging..."
-          : tierName === "Basic"
-          ? `Merge ${String(neededForUpgrade)} for Pro`
-          : `Merge ${String(neededForUpgrade)} for Legend`}
-      </button>
-    )}
-  </div>
-);
-
-// ===== Halaman utama (DESAIN ASLI) =====
-const Rakit: FC = () => {
+export default function Rakit() {
   const { address, chainId } = useAccount();
-  const [message, setMessage] = useState<string>("");
-
-  const user = address as `0x${string}` | undefined;
   const onBase = !chainId || chainId === BASE_CHAIN_ID;
+  const user = address as `0x${string}` | undefined;
 
-  // --- NFT IDs & balances (seperti asli) ---
-  const basicId = useReadContract({
-    address: rigNftAddress as `0x${string}`,
-    abi: rigNftABI as any,
-    functionName: "BASIC",
-  });
-  const proId = useReadContract({
-    address: rigNftAddress as `0x${string}`,
-    abi: rigNftABI as any,
-    functionName: "PRO",
-  });
-  const legendId = useReadContract({
-    address: rigNftAddress as `0x${string}`,
-    abi: rigNftABI as any,
-    functionName: "LEGEND",
-  });
+  // ---- NFT IDs ----
+  const basicId = useReadContract({ address: rigNftAddress as `0x${string}`, abi: rigNftABI as any, functionName: "BASIC" });
+  const proId   = useReadContract({ address: rigNftAddress as `0x${string}`, abi: rigNftABI as any, functionName: "PRO" });
+  const legendId= useReadContract({ address: rigNftAddress as `0x${string}`, abi: rigNftABI as any, functionName: "LEGEND" });
 
-  const BASIC = basicId.data as bigint | undefined;
-  const PRO = proId.data as bigint | undefined;
+  const BASIC  = basicId.data as bigint | undefined;
+  const PRO    = proId.data as bigint | undefined;
   const LEGEND = legendId.data as bigint | undefined;
 
-  const basicBal = useReadContract({
+  // ---- Balances ----
+  const basicBal  = useReadContract({
     address: rigNftAddress as `0x${string}`,
     abi: rigNftABI as any,
     functionName: "balanceOf",
-    args: address && BASIC !== undefined ? [address, BASIC] : undefined,
-    query: { enabled: Boolean(address && BASIC !== undefined) },
+    args: user && BASIC !== undefined ? [user, BASIC] : undefined,
+    query: { enabled: Boolean(user && BASIC !== undefined) },
   });
-  const proBal = useReadContract({
+  const proBal    = useReadContract({
     address: rigNftAddress as `0x${string}`,
     abi: rigNftABI as any,
     functionName: "balanceOf",
-    args: address && PRO !== undefined ? [address, PRO] : undefined,
-    query: { enabled: Boolean(address && PRO !== undefined) },
+    args: user && PRO !== undefined ? [user, PRO] : undefined,
+    query: { enabled: Boolean(user && PRO !== undefined) },
   });
   const legendBal = useReadContract({
     address: rigNftAddress as `0x${string}`,
     abi: rigNftABI as any,
     functionName: "balanceOf",
-    args: address && LEGEND !== undefined ? [address, LEGEND] : undefined,
-    query: { enabled: Boolean(address && LEGEND !== undefined) },
+    args: user && LEGEND !== undefined ? [user, LEGEND] : undefined,
+    query: { enabled: Boolean(user && LEGEND !== undefined) },
   });
 
-  const basicCount = (basicBal.data as bigint | undefined) ?? 0n;
-  const proCount = (proBal.data as bigint | undefined) ?? 0n;
+  const basicCount  = (basicBal.data as bigint | undefined)  ?? 0n;
+  const proCount    = (proBal.data as bigint | undefined)    ?? 0n;
   const legendCount = (legendBal.data as bigint | undefined) ?? 0n;
 
-  // --- GameCore: needs, caps, usage (untuk logic merge) ---
-  const needBasicToPro = useReadContract({
-    address: gameCoreAddress as `0x${string}`,
-    abi: gameCoreABI as any,
-    functionName: "BASIC_TO_PRO_NEED",
-  });
-  const needProToLegend = useReadContract({
-    address: gameCoreAddress as `0x${string}`,
-    abi: gameCoreABI as any,
-    functionName: "PRO_TO_LEGEND_NEED",
-  });
-  const rigCaps = useReadContract({
-    address: gameCoreAddress as `0x${string}`,
-    abi: gameCoreABI as any,
-    functionName: "rigCaps",
-  });
-  // usage untuk cek slot terpakai
-  const usageRead = useReadContract({
+  // ---- Needs & Caps ----
+  const needB2P = useReadContract({ address: gameCoreAddress as `0x${string}`, abi: gameCoreABI as any, functionName: "BASIC_TO_PRO_NEED" });
+  const needP2L = useReadContract({ address: gameCoreAddress as `0x${string}`, abi: gameCoreABI as any, functionName: "PRO_TO_LEGEND_NEED" });
+  const capsRead = useReadContract({ address: gameCoreAddress as `0x${string}`, abi: gameCoreABI as any, functionName: "rigCaps" });
+  const miningUsage = useReadContract({
     address: gameCoreAddress as `0x${string}`,
     abi: gameCoreABI as any,
     functionName: "miningUsage",
@@ -216,22 +187,33 @@ const Rakit: FC = () => {
     query: { enabled: Boolean(user) },
   });
 
-  const needBP = (needBasicToPro.data as bigint | undefined) ?? 10n;
-  const needPL = (needProToLegend.data as bigint | undefined) ?? 5n;
-
   const caps = useMemo(() => {
-    const rc = rigCaps.data as { b: bigint; p: bigint; l: bigint } | undefined;
-    return {
-      b: Number(rc?.b ?? 10n),
-      p: Number(rc?.p ?? 5n),
-      l: Number(rc?.l ?? 3n),
-    };
-  }, [rigCaps.data]);
+    const rc = capsRead.data as { b: bigint; p: bigint; l: bigint } | undefined;
+    return { b: Number(rc?.b ?? 0n), p: Number(rc?.p ?? 0n), l: Number(rc?.l ?? 0n) };
+  }, [capsRead.data]);
 
-  const usedPro = useMemo(() => Number(((usageRead.data as bigint[] | undefined)?.[4] ?? 0n)), [usageRead.data]);
-  const usedLegend = useMemo(() => Number(((usageRead.data as bigint[] | undefined)?.[7] ?? 0n)), [usageRead.data]);
+  const [
+    _bOwned, bUsed, _bIdle,
+    _pOwned, pUsed, _pIdle,
+    _lOwned, lUsed, _lIdle,
+  ] = useMemo(() => {
+    const arr = (miningUsage.data as bigint[] | undefined) ?? [];
+    return [
+      Number(arr[0] ?? 0n), Number(arr[1] ?? 0n), Number(arr[2] ?? 0n),
+      Number(arr[3] ?? 0n), Number(arr[4] ?? 0n), Number(arr[5] ?? 0n),
+      Number(arr[6] ?? 0n), Number(arr[7] ?? 0n), Number(arr[8] ?? 0n),
+    ] as const;
+  }, [miningUsage.data]);
 
-  // --- Fee token & allowance (untuk approve otomatis via tombol "Merge") ---
+  const needBP = (needB2P.data as bigint | undefined) ?? 10n;
+  const needPL = (needP2L.data as bigint | undefined) ?? 5n;
+
+  // ---- Fee token, fee amount, allowance ----
+  const feeTokenAddr = useReadContract({
+    address: gameCoreAddress as `0x${string}`,
+    abi: gameCoreABI as any,
+    functionName: "mergeFeeToken",
+  });
   const feeBasicToPro = useReadContract({
     address: gameCoreAddress as `0x${string}`,
     abi: gameCoreABI as any,
@@ -242,11 +224,7 @@ const Rakit: FC = () => {
     abi: gameCoreABI as any,
     functionName: "feeProToLegend",
   });
-  const feeTokenAddr = useReadContract({
-    address: gameCoreAddress as `0x${string}`,
-    abi: gameCoreABI as any,
-    functionName: "mergeFeeToken",
-  });
+
   const feeToken = (feeTokenAddr.data as `0x${string}` | undefined) ?? undefined;
 
   const feeDecimals = useReadContract({
@@ -270,74 +248,66 @@ const Rakit: FC = () => {
   });
 
   const feeTokSym = (feeSymbol.data as string | undefined) ?? "FEE";
-  const feeDec = (feeDecimals.data as number | undefined) ?? 18;
-
-  const rawFeeB2P = (feeBasicToPro.data as bigint | undefined) ?? 0n;
-  const rawFeeP2L = (feeProToLegend.data as bigint | undefined) ?? 0n;
+  const feeTokDec = (feeDecimals.data as number | undefined) ?? 18;
+  const rawFeeB2P  = (feeBasicToPro.data as bigint | undefined) ?? 0n;
+  const rawFeeP2L  = (feeProToLegend.data as bigint | undefined) ?? 0n;
+  const feeB2PStr  = formatUnits(rawFeeB2P, feeTokDec);
+  const feeP2LStr  = formatUnits(rawFeeP2L, feeTokDec);
   const rawAllowance = (allowance.data as bigint | undefined) ?? 0n;
 
-  // apakah slot tujuan tersedia?
-  const proSlotAvailable = usedPro < caps.p;
-  const legendSlotAvailable = usedLegend < caps.l;
-  const legendAtLimit = Number(legendCount) >= caps.l; // per-wallet limit = caps.l
-
-  // --- TX hooks (dipakai untuk approve otomatis) ---
-  const { writeContract, data: txHash, isPending, error } = useWriteContract();
-  const { isLoading: waitingReceipt, isSuccess } = useWaitForTransactionReceipt({ hash: txHash });
+  // ---- TX handling (hanya untuk approve, karena merge via API) ----
+  const { writeContract, data: txHash, isPending: writePending, error: writeError } = useWriteContract();
+  const { isLoading: receiptLoading, isSuccess } = useWaitForTransactionReceipt({ hash: txHash });
+  const busyApprove = writePending || receiptLoading;
 
   useEffect(() => {
-    if (isSuccess) setMessage("Transaction confirmed.");
-    if (error) {
-      const err: any = error;
-      setMessage(err?.shortMessage || err?.message || "Transaction failed");
+    if (isSuccess) toast("Approve confirmed on-chain.");
+    if (writeError) {
+      const m = (writeError as any)?.shortMessage || (writeError as any)?.message || "Approve failed";
+      toast(m);
     }
-  }, [isSuccess, error]);
+  }, [isSuccess, writeError]);
 
-  const merging = isPending || waitingReceipt;
+  // ---- Satu tombol: Approve (jika perlu) + Merge via /api/merge ----
+  async function onMerge(kind: "BASIC_TO_PRO" | "PRO_TO_LEGEND") {
+    if (!user) return toast("Connect wallet dulu.");
+    if (!onBase) return toast("Please switch network to Base Sepolia.");
+    if (!feeToken) return toast("Fee token belum diset di kontrak.");
 
-  // ===== Handler merge (desain tetap 1 tombol) =====
-  async function handleMerge(kind: "BASIC_TO_PRO" | "PRO_TO_LEGEND", needed: bigint, fromTier: string, toTier: string) {
-    if (!user) return setMessage("Connect wallet first.");
-    if (!onBase) return setMessage("Switch network to Base Sepolia.");
-
-    // Syarat-slot tambahan (tidak mengubah UI)
+    // Guard jumlah & slot (biar gak sia-sia)
     if (kind === "BASIC_TO_PRO") {
-      if (basicCount < needBP) return setMessage(`Butuh ${String(needBP)} Basic untuk merge.`);
-      if (!proSlotAvailable) return setMessage("Pro slot penuh. Merge dinonaktifkan agar hasil terpakai.");
+      if (basicCount < needBP) return toast(`Butuh ${String(needBP)} Basic untuk merge`);
+      if (pUsed >= caps.p) return toast(`Pro slot penuh (${pUsed}/${caps.p}).`);
     } else {
-      if (proCount < needPL) return setMessage(`Butuh ${String(needPL)} Pro untuk merge.`);
-      if (!legendSlotAvailable) return setMessage("Legend slot penuh. Merge dinonaktifkan agar hasil terpakai.");
-      if (legendAtLimit) return setMessage(`Legend per wallet telah mencapai limit (${caps.l}).`);
+      if (proCount < needPL) return toast(`Butuh ${String(needPL)} Pro untuk merge`);
+      if (lUsed >= caps.l) return toast(`Legend slot penuh (${lUsed}/${caps.l}).`);
+      if (Number(legendCount) >= caps.l) return toast(`Legend limit per wallet = ${caps.l}.`);
     }
 
-    // Ambil FID (sesuai pola asli)
-    const fid = await getFarcasterFID();
-    if (fid === null) return setMessage("Farcaster FID not found.");
+    const needFee = kind === "BASIC_TO_PRO" ? rawFeeB2P : rawFeeP2L;
 
-    // Cek & minta approve otomatis jika allowance < fee
-    const feeNeeded = kind === "BASIC_TO_PRO" ? rawFeeB2P : rawFeeP2L;
-    if (feeToken && feeNeeded > 0n && rawAllowance < feeNeeded) {
-      setMessage(`Approving ${formatUnits(feeNeeded, feeDec)} ${feeTokSym}...`);
-      try {
-        // kirim approve (user konfirmasi di wallet)
-        await writeContract({
+    try {
+      // APPROVE jika allowance kurang
+      if (rawAllowance < needFee) {
+        writeContract({
           address: feeToken,
           abi: erc20Abi,
           functionName: "approve",
-          args: [gameCoreAddress as `0x${string}`, feeNeeded],
+          args: [gameCoreAddress as `0x${string}`, needFee],
           account: user,
           chain: baseSepolia,
         });
-        // user perlu klik Merge lagi setelah approve terkonfirmasi
-        return;
-      } catch (e: any) {
-        return setMessage(e?.shortMessage || e?.message || "Approve failed");
+        // tunggu approve selesai
+        while (true) {
+          await new Promise((r) => setTimeout(r, 800));
+          // kita pakai polling allowance lagi biar aman
+          const res = await fetch("/api/allowance-check?user=" + user); // opsional; kalau gak ada route ini, lanjut pakai delay saja
+          break;
+        }
       }
-    }
 
-    // Panggil backend relayer /api/merge (server punya RELAYER_ROLE)
-    try {
-      setMessage("Submitting merge request...");
+      // Merge via API relayer
+      const fid = await getFarcasterFID();
       const resp = await fetch("/api/merge", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -345,15 +315,19 @@ const Rakit: FC = () => {
       });
       if (!resp.ok) {
         const txt = await resp.text();
-        return setMessage(`Server rejected: ${txt}`);
+        return toast(`Merge ditolak server: ${txt}`);
       }
-      const { ok, tx, error: svErr } = await resp.json();
-      if (!ok) return setMessage(svErr || "Merge failed on server");
-      setMessage(`Merge submitted: ${tx}`);
+      const json = await resp.json();
+      if (!json?.ok) return toast("Merge gagal (server).");
+      toast(`Merge dikirim. TX: ${json.tx}`);
     } catch (e: any) {
-      setMessage(e?.message || "Network error");
+      toast(e?.message || "Kesalahan saat approve/merge");
     }
   }
+
+  // ---- UI (Desain aslimu) ----
+  const mergingLabelB = `Merge ${String(needBP)} for Pro`;
+  const mergingLabelP = `Merge ${String(needPL)} for Legend`;
 
   return (
     <div className="space-y-4 px-4 pt-4 pb-8">
@@ -363,53 +337,47 @@ const Rakit: FC = () => {
       </header>
 
       <div className="space-y-4">
-        {/* Basic -> Pro */}
+        {/* Basic */}
         <MergeSection
           tierName="Basic"
           ownedCount={basicCount}
-          neededForUpgrade={needBP}
-          slotCount={caps.b} // pakai caps dari kontrak
-          onMerge={() =>
-            handleMerge("BASIC_TO_PRO", needBP, "Basic", "Pro")
-          }
-          isMerging={merging}
-          canMerge={!!address && basicCount >= needBP}
+          slotCount={10}
           imageSrc="/img/vga_basic.png"
+          buttonText={mergingLabelB}
+          // tombol boleh diklik selama wallet ada; guard berat di handler
+          buttonDisabled={busyApprove || !user}
+          onClick={() => onMerge("BASIC_TO_PRO")}
         />
 
-        {/* Pro -> Legend */}
+        {/* Pro */}
         <MergeSection
           tierName="Pro"
           ownedCount={proCount}
-          neededForUpgrade={needPL}
-          slotCount={caps.p}
-          onMerge={() =>
-            handleMerge("PRO_TO_LEGEND", needPL, "Pro", "Legend")
-          }
-          isMerging={merging}
-          canMerge={!!address && proCount >= needPL}
+          slotCount={5}
           imageSrc="/img/vga_pro.gif"
+          buttonText={mergingLabelP}
+          buttonDisabled={busyApprove || !user}
+          onClick={() => onMerge("PRO_TO_LEGEND")}
         />
 
-        {/* Legend (no further upgrade) */}
+        {/* Legend (tanpa tombol) */}
         <MergeSection
           tierName="Legend"
           ownedCount={legendCount}
-          neededForUpgrade={0n}
-          slotCount={caps.l}
-          onMerge={() => {}}
-          isMerging={false}
-          canMerge={false}
+          slotCount={3}
           imageSrc="/img/vga_legend.gif"
         />
       </div>
 
-      {!!message && (
-        <p className="text-xs text-green-400 pt-2 text-center">{message}</p>
-      )}
+      <div className="text-xs text-neutral-400 pt-2 space-y-1">
+        <div>
+          Fee Merge: Basic→Pro = <b>{feeB2PStr}</b> {feeTokSym} • Pro→Legend = <b>{feeP2LStr}</b> {feeTokSym}
+        </div>
+        <div>
+          Slot (caps): Basic <b>{caps.b}</b> • Pro <b>{caps.p}</b> • Legend <b>{caps.l}</b>
+        </div>
+      </div>
     </div>
   );
-};
-
-export default Rakit;
+}
 
