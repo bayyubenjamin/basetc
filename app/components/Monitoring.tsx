@@ -19,13 +19,30 @@ import {
   gameCoreABI,
   chainId as BASE_CHAIN_ID,
 } from "../lib/web3Config";
-import { formatUnits } from "viem";
+import { formatUnits, isAddress } from "viem";
 
 // ======================
 // Utils & Constants
 // ======================
 const RELAYER_ENDPOINT = "/api/sign-user-action"; // backend returns { signature }
 type ActionType = "start" | "claim" | null;
+
+type MiningStatsPayload = {
+  address: `0x${string}`;
+  contract: `0x${string}`;
+  usage: {
+    basic: { owned: number; used: number; idle: number };
+    pro: { owned: number; used: number; idle: number };
+    legend: { owned: number; used: number; idle: number };
+  };
+  baseRw: {
+    basicPerDay: number;
+    proPerDay: number;
+    legendPerDay: number;
+  };
+  baseUnitEpoch: number; // token/day setelah halving (user total)
+  effectiveHashrate: number; // indikator UI (dibulatkan)
+};
 
 // Compact large numbers
 const formatNumber = (num: number) => {
@@ -83,6 +100,41 @@ export default function Monitoring() {
   // Track last action
   const [lastAction, setLastAction] = useState<ActionType>(null);
 
+  // ====== Mining Stats via API route ======
+  const [stats, setStats] = useState<MiningStatsPayload | null>(null);
+  const [statsLoading, setStatsLoading] = useState(false);
+  const [statsError, setStatsError] = useState<string | null>(null);
+
+  const fetchStats = async (addr?: `0x${string}`) => {
+    if (!addr || !isAddress(addr)) {
+      setStats(null);
+      return;
+    }
+    try {
+      setStatsLoading(true);
+      setStatsError(null);
+      const res = await fetch(`/api/useMiningStats?address=${addr}`, {
+        cache: "no-store",
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err?.error || `Failed to fetch stats (${res.status})`);
+      }
+      const data = (await res.json()) as MiningStatsPayload;
+      setStats(data);
+    } catch (e: any) {
+      setStatsError(e?.message || "Failed to load stats");
+      setStats(null);
+    } finally {
+      setStatsLoading(false);
+    }
+  };
+
+  // initial + poll on address change
+  useEffect(() => {
+    fetchStats(address as `0x${string}`);
+  }, [address]);
+
   // 1s ticker
   useEffect(() => {
     const t = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 1000);
@@ -102,7 +154,7 @@ export default function Monitoring() {
   };
 
   // ======================
-  // NFT IDs & Balances
+  // NFT IDs & Balances (hanya buat tampilan jumlah kepemilikan)
   // ======================
   const basicId = useReadContract({
     address: rigNftAddress as `0x${string}`,
@@ -166,7 +218,7 @@ export default function Monitoring() {
   }, [baseBal.data]);
 
   // ======================
-  // GameCore Reads (latest ABI)
+  // GameCore Reads (tanpa miningUsage/getBaseUnit; itu lewat API)
   // ======================
   const epochNow = useReadContract({
     address: gameCoreAddress as `0x${string}`,
@@ -216,23 +268,6 @@ export default function Monitoring() {
     functionName: "toggleCooldown",
   });
 
-  // legacy hashrate (always 0 in new contract)
-  const hashrate = useReadContract({
-    address: gameCoreAddress as `0x${string}`,
-    abi: gameCoreABI as any,
-    functionName: "getHashrate",
-    args: address ? [address] : undefined,
-    query: { enabled: Boolean(address) },
-  });
-
-  const baseUnit = useReadContract({
-    address: gameCoreAddress as `0x${string}`,
-    abi: gameCoreABI as any,
-    functionName: "getBaseUnit",
-    args: address ? [address] : undefined,
-    query: { enabled: Boolean(address) },
-  });
-
   // NEW: pending reward (accumulator ROI)
   const pendingRw = useReadContract({
     address: gameCoreAddress as `0x${string}`,
@@ -260,27 +295,15 @@ export default function Monitoring() {
     query: { enabled: Boolean(address) },
   });
 
-  // NEW: miningUsage (to compute effective hashrate & badges)
-  const miningUsage = useReadContract({
-    address: gameCoreAddress as `0x${string}`,
-    abi: gameCoreABI as any,
-    functionName: "miningUsage",
-    args: address ? [address] : undefined,
-    query: { enabled: Boolean(address) },
-  });
-
-  // Refs to refetch after tx
+  // Refs to refetch after tx (on-chain reads)
   const { refetch: refetchEpochNow } = epochNow as any;
   const { refetch: refetchMiningActive } = miningActive as any;
-  const { refetch: refetchBaseUnit } = baseUnit as any;
   const { refetch: refetchBaseBal } = baseBal as any;
-  const { refetch: refetchHashrate } = hashrate as any;
   const { refetch: refetchPending } = pendingRw as any;
   const { refetch: refetchSessionEnd } = sessionEndAt as any;
   const { refetch: refetchNonce } = userNonce as any;
-  const { refetch: refetchUsage } = miningUsage as any;
 
-  // Normalize & derived
+  // Normalize & derived (on-chain)
   const eNowBn = epochNow.data as bigint | undefined;
   const eLen = (epochLength.data as bigint | undefined) ?? undefined;
   const sTime = (startTime.data as bigint | undefined) ?? undefined;
@@ -290,18 +313,16 @@ export default function Monitoring() {
   const goLiveOn = Boolean((goLive.data as boolean | undefined) ?? false);
   const active = Boolean((miningActive.data as boolean | undefined) ?? false);
 
-  // legacy hashrate (contract returns 0)
-  const hrLegacy = useMemo(() => {
-    const v = hashrate.data as bigint | undefined;
-    return v ? Number(v) : 0;
-  }, [hashrate.data]);
+  // === Angka dari API stats ===
+  const baseUnitPerEpoch = stats?.baseUnitEpoch ?? 0;
+  const effectiveHashrate = stats?.effectiveHashrate ?? 0;
 
-  // Base Unit per epoch (18 decimals)
-  const baseUnitPerEpoch = useMemo(() => {
-    const v = baseUnit.data as bigint | undefined;
-    if (!v) return 0;
-    return Number(formatUnits(v, 18));
-  }, [baseUnit.data]);
+  const usedBasic = stats?.usage.basic.used ?? 0;
+  const idleBasic = stats?.usage.basic.idle ?? 0;
+  const usedPro = stats?.usage.pro.used ?? 0;
+  const idlePro = stats?.usage.pro.idle ?? 0;
+  const usedLegend = stats?.usage.legend.used ?? 0;
+  const idleLegend = stats?.usage.legend.idle ?? 0;
 
   // Pending amount (enable claim if > 0)
   const pendingAmt = useMemo(() => {
@@ -310,38 +331,6 @@ export default function Monitoring() {
   }, [pendingRw.data]);
 
   const canClaim = pendingAmt > 0;
-
-  // Parse miningUsage -> used/idle & effective hashrate
-  const {
-    usedBasic,
-    idleBasic,
-    usedPro,
-    idlePro,
-    usedLegend,
-    idleLegend,
-    effectiveHashrate,
-  } = useMemo(() => {
-    const mu = miningUsage.data as
-      | readonly [bigint, bigint, bigint, bigint, bigint, bigint]
-      | undefined;
-    const uB = mu ? Number(mu[0]) : 0;
-    const iB = mu ? Number(mu[1]) : 0;
-    const uP = mu ? Number(mu[2]) : 0;
-    const iP = mu ? Number(mu[3]) : 0;
-    const uL = mu ? Number(mu[4]) : 0;
-    const iL = mu ? Number(mu[5]) : 0;
-    // Weights: 1 / 5 / 25 (same display convention as old hashrate)
-    const eff = uB * 1 + uP * 5 + uL * 25;
-    return {
-      usedBasic: uB,
-      idleBasic: iB,
-      usedPro: uP,
-      idlePro: iP,
-      usedLegend: uL,
-      idleLegend: iL,
-      effectiveHashrate: eff,
-    };
-  }, [miningUsage.data]);
 
   // Epoch progress & ETA
   const epochProgress = useMemo(() => {
@@ -393,16 +382,15 @@ export default function Monitoring() {
     if (isSuccess) {
       setMsg("Transaction confirmed.");
       addLog("Success: Transaction confirmed.");
-      // Refresh important reads
+      // Refresh on-chain reads
       refetchEpochNow?.();
       refetchMiningActive?.();
-      refetchBaseUnit?.();
       refetchBaseBal?.();
-      refetchHashrate?.();
       refetchPending?.();
       refetchSessionEnd?.();
       refetchNonce?.();
-      refetchUsage?.();
+      // Refresh API stats
+      fetchStats(address as `0x${string}`);
       setLastAction(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -452,13 +440,13 @@ export default function Monitoring() {
 
       refetchEpochNow?.();
       refetchMiningActive?.();
-      refetchBaseUnit?.();
       refetchBaseBal?.();
-      refetchHashrate?.();
       refetchPending?.();
       refetchSessionEnd?.();
       refetchNonce?.();
-      refetchUsage?.();
+
+      // refresh API stats juga
+      fetchStats(address as `0x${string}`);
 
       setLastAction(null);
       setMsg("Transaction confirmed.");
@@ -549,19 +537,20 @@ export default function Monitoring() {
 
   // ===== Reset cosmetic budget when epoch changes / mid-epoch open =====
   useEffect(() => {
-    if (!eLen || !eNowBn) return;
-    const totalSec = Number(eLen);
-    const leftSec = epochProgress.leftSec || totalSec;
+    if (!stats) return; // butuh baseUnitPerEpoch dari API
+    const totalSec = Number(epochLength.data as bigint | 0n);
+    if (!totalSec) return;
 
+    const leftSec = epochProgress.leftSec || totalSec;
     if (lastSeenEpoch === undefined || eNowBn !== lastSeenEpoch) {
       setLastSeenEpoch(eNowBn);
     }
 
     const proportion = totalSec > 0 ? leftSec / totalSec : 0;
-    const initAmt = baseUnitPerEpoch * proportion;
+    const initAmt = (stats.baseUnitEpoch ?? 0) * proportion;
     setEpochBudget({ amt: initAmt, sec: leftSec });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [eNowBn, eLen, baseUnitPerEpoch, epochProgress.leftSec]);
+  }, [eNowBn, epochLength.data, stats?.baseUnitEpoch, epochProgress.leftSec]);
 
   // ===== Cosmetic per-second stream (randomized but totals match budget) =====
   useEffect(() => {
@@ -587,7 +576,14 @@ export default function Monitoring() {
   return (
     <div className="space-y-4 px-4 pt-4 pb-24">
       <header className="space-y-1">
-        <h1 className="text-xl font-semibold">Mining Console</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-xl font-semibold">Mining Console</h1>
+          {statsLoading ? (
+            <span className="text-xs text-neutral-400">(sync...)</span>
+          ) : statsError ? (
+            <span className="text-xs text-red-400">(api error)</span>
+          ) : null}
+        </div>
         <p className="text-sm text-neutral-400">Real-time on-chain monitoring</p>
       </header>
 
@@ -674,16 +670,16 @@ export default function Monitoring() {
       </div>
 
       <div className="grid grid-cols-3 gap-2">
-        {/* Effective Hashrate from miningUsage */}
+        {/* Effective Hashrate from API (dibulatkan) */}
         <StatCard title="Effective Hashrate" value={formatNumber(effectiveHashrate)} />
         {/* Base Unit: 2 decimals + tooltip exact */}
         <StatCardWithTooltip
           title="Base Unit / Epoch"
-          valueShort={baseUnitPerEpoch.toLocaleString("en-US", {
+          valueShort={(baseUnitPerEpoch ?? 0).toLocaleString("en-US", {
             minimumFractionDigits: 2,
             maximumFractionDigits: 2,
           })}
-          valueExact={baseUnitPerEpoch.toLocaleString("en-US", {
+          valueExact={(baseUnitPerEpoch ?? 0).toLocaleString("en-US", {
             minimumFractionDigits: 12,
           })}
         />
@@ -693,7 +689,7 @@ export default function Monitoring() {
       <div className="bg-neutral-900/60 border border-neutral-800 rounded-xl p-4 space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold">Your Rigs</h2>
-          {/* small usage badges */}
+          {/* small usage badges (pakai API) */}
           <div className="text-[11px] text-neutral-400 space-x-2">
             <span>
               Basic x{String(countBasic)}{" "}
@@ -735,6 +731,10 @@ export default function Monitoring() {
             badge={address ? `${usedLegend} used, ${idleLegend} idle` : undefined}
           />
         </div>
+
+        {statsError ? (
+          <div className="text-xs text-red-400">API error: {statsError}</div>
+        ) : null}
       </div>
     </div>
   );
