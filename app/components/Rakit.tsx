@@ -387,17 +387,23 @@ export default function Rakit() {
 
       {/* Info panel */}
       <section className="bg-neutral-900/60 border border-neutral-800 rounded-xl p-4 space-y-2 text-xs text-neutral-400">
-        <div>
-          Merge membutuhkan relayer (ROLE): server akan mengeksekusi <code>mergeBasicToPro(user, fid)</code> /
-          <code>mergeProToLegend(user, fid)</code> setelah kamu <b>Approve</b> fee token dan syarat terpenuhi. :contentReference[oaicite:2]{index=2}
-        </div>
-        <div>
-          Biaya merge dibaca dari kontrak: <code>feeBasicToPro</code>, <code>feeProToLegend</code>, dan tokennya dari <code>mergeFeeToken</code>. :contentReference[oaicite:3]{index=3}
-        </div>
-        <div>
-          Batas slot/caps dibaca via <code>rigCaps()</code>. Per-wallet Legend default {legendHardLimit}. :contentReference[oaicite:4]{index=4}
-        </div>
-      </section>
+  <div>
+    Merge membutuhkan relayer (ROLE): server akan mengeksekusi
+    <code className="mx-1">mergeBasicToPro(user, fid)</code> /
+    <code className="mx-1">mergeProToLegend(user, fid)</code>
+    setelah kamu <b>Approve</b> fee token dan syarat terpenuhi.
+  </div>
+  <div>
+    Biaya merge dibaca dari kontrak:
+    <code className="mx-1">feeBasicToPro</code>,
+    <code className="mx-1">feeProToLegend</code>,
+    dan tokennya dari <code className="mx-1">mergeFeeToken</code>.
+  </div>
+  <div>
+    Batas slot/caps dibaca via <code className="mx-1">rigCaps()</code>.
+    Batas Legend per wallet mengikuti <code className="mx-1">rigCaps.l</code> (default 3).
+  </div>
+</section>
     </div>
   );
 }
