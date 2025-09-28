@@ -1,7 +1,11 @@
 // app/api/useMiningStats/route.ts
 import { NextResponse } from "next/server";
 import { createPublicClient, http, isAddress, formatEther } from "viem";
-import { gameCoreABI } from "../../lib/web3Config"; // pastikan export ada
+import { gameCoreABI } from "../../lib/web3Config";
+
+// Pastikan route handler berjalan di Node (bukan Edge)
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 // --- ENV & client setup ---
 const RPC_URL = process.env.RPC_URL || "https://sepolia.base.org";
@@ -127,6 +131,11 @@ export async function GET(req: Request) {
         basicPerDay: toNum18(baseRw.b),
         proPerDay:    toNum18(baseRw.p),
         legendPerDay: toNum18(baseRw.l),
+      },
+      // Rasio (debug/insight): dalam "x Basic"
+      ratios: {
+        proVsBasic: Number(ratioPScaled) / Number(SCALE),     // ≈ p/b
+        legendVsBasic: Number(ratioLScaled) / Number(SCALE),  // ≈ l/b
       },
       baseUnitEpoch: toNum18(baseUnitRaw as bigint),
       effectiveHashrate,
