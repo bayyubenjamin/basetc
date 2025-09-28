@@ -373,11 +373,7 @@ const Rakit: FC = () => {
             handleMerge("BASIC_TO_PRO", needBP, "Basic", "Pro")
           }
           isMerging={merging}
-          canMerge={
-            !!address &&
-            basicCount >= needBP &&
-            proSlotAvailable // tujuan slot tersedia
-          }
+          canMerge={!!address && basicCount >= needBP}
           imageSrc="/img/vga_basic.png"
         />
 
@@ -391,12 +387,7 @@ const Rakit: FC = () => {
             handleMerge("PRO_TO_LEGEND", needPL, "Pro", "Legend")
           }
           isMerging={merging}
-          canMerge={
-            !!address &&
-            proCount >= needPL &&
-            legendSlotAvailable &&
-            !legendAtLimit
-          }
+          canMerge={!!address && proCount >= needPL}
           imageSrc="/img/vga_pro.gif"
         />
 
