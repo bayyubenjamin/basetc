@@ -1,8 +1,8 @@
 // app/context/FarcasterProvider.tsx
 //
-// Alasan Perbaikan: Memperbaiki build error "Property 'fid' does not exist on type 'Promise<MiniAppContext>'".
-// Logika diubah untuk melakukan `await sdk.context` karena properti tersebut adalah sebuah Promise,
-// bukan objek langsung. Ini memastikan kita mengakses data context yang sudah di-resolve.
+// Alasan Perbaikan: Memperbaiki build error "Property 'fid' does not exist on type 'MiniAppContext'".
+// Mengakses properti fid, username, dll dari `context.user` bukan `context` secara langsung,
+// sesuai dengan struktur data yang benar dari Farcaster Mini App SDK.
 "use client";
 
 import {
@@ -54,18 +54,18 @@ async function getFarcasterContext(): Promise<any> {
 
     // 3. Polling singkat untuk context, karena bisa jadi belum siap.
     for (let i = 0; i < 10; i++) { // Coba selama 2 detik (10 * 200ms)
-        // --- FIX DI SINI ---
-        // sdk.context adalah sebuah Promise, jadi kita harus `await`
         const context = await sdk.context;
-        if (context?.fid) {
+        // --- FIX DI SINI ---
+        // FID ada di dalam `context.user`, bukan `context`
+        if (context?.user?.fid) {
             if (DEBUG_MODE) console.log(`[FarcasterProvider] Context found on attempt ${i + 1}`, context);
-            // Normalisasi output agar konsisten
+            // Normalisasi output agar konsisten, ambil data dari `context.user`
             return {
                 user: {
-                    fid: context.fid,
-                    username: context.username,
-                    displayName: context.displayName,
-                    pfpUrl: context.pfpUrl,
+                    fid: context.user.fid,
+                    username: context.user.username,
+                    displayName: context.user.displayName,
+                    pfpUrl: context.user.pfpUrl,
                 }
             };
         }
