@@ -6,14 +6,14 @@
   },
   "frame": {
     "version": "1",
-    "name": "Example Frame",
-    "iconUrl": "https://basetc.vercel.app/icon.png",
+    "name": "BaseTC Mini App",
+    "iconUrl": "https://basetc.vercel.app/img/logo.png",
     "homeUrl": "https://basetc.vercel.app",
-    "imageUrl": "https://basetc.vercel.app/image.png",
-    "buttonTitle": "Check this out",
-    "splashImageUrl": "https://basetc.vercel.app/splash.png",
-    "splashBackgroundColor": "#eeccff",
-    "webhookUrl": "https://basetc.vercel.app/api/webhook"
+    "imageUrl": "https://basetc.vercel.app/img/basic.png",
+    "buttonTitle": "Start Mining",
+    "splashImageUrl": "https://basetc.vercel.app/img/pro.png",
+    "splashBackgroundColor": "#0b0e12",
+    "webhookUrl": "https://basetc.vercel.app/api/frame"
   }
 }
 

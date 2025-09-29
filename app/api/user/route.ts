@@ -1,135 +1,84 @@
 // app/api/user/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { supabaseAdmin as sb } from "../../lib/supabase/server";
+import { getSupabaseAdmin } from "../../lib/supabase/server";
 
-export const runtime = "nodejs";
+// Ensures the route is always dynamically rendered, reading the latest environment variables on Vercel.
 export const dynamic = "force-dynamic";
 
-// GET /api/user?wallet=0x...  atau  /api/user?fid=123
+// GET handler to fetch user data by wallet or FID. This remains unchanged.
 export async function GET(req: NextRequest) {
   try {
+    const sb = getSupabaseAdmin();
     const { searchParams } = new URL(req.url);
     const wallet = searchParams.get("wallet");
     const fid = searchParams.get("fid");
 
     if (!wallet && !fid) {
-      return NextResponse.json(
-        { error: "missing wallet or fid" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "missing wallet or fid" }, { status: 400 });
     }
 
+    let query = sb.from("users").select("*");
     if (wallet) {
-      const { data, error } = await sb
-        .from("users")
-        .select("*")
-        .eq("wallet", wallet.toLowerCase())
-        .maybeSingle();
-
-      if (error) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
-      }
-      return NextResponse.json({ user: data ?? null });
+      query = query.eq("wallet", wallet.toLowerCase());
+    } else if (fid) {
+      query = query.eq("fid", Number(fid));
     }
 
-    const { data, error } = await sb
-      .from("users")
-      .select("*")
-      .eq("fid", Number(fid))
-      .maybeSingle();
+    const { data, error } = await query.maybeSingle();
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
     return NextResponse.json({ user: data ?? null });
   } catch (e: any) {
-    return NextResponse.json(
-      { error: e?.message || "server error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: e?.message || "server error" }, { status: 500 });
   }
 }
 
-// POST /api/user
-// Body contoh:
-// { "fid": 123, "wallet": "0xabc...", "username": "alice", "display_name": "Alice", "pfp_url": "https://..." }
+/**
+ * POST handler to create or update a user (upsert).
+ * This is used for auto-saving Farcaster profiles on app load
+ * and for mapping wallets to FIDs when a user connects.
+ * It securely uses the Supabase admin client.
+ */
 export async function POST(req: NextRequest) {
   try {
+    const sb = getSupabaseAdmin();
     const body = await req.json().catch(() => ({}));
-    const payload: {
-      fid?: number;
-      wallet?: string | null;
-      username?: string | null;
-      display_name?: string | null;
-      pfp_url?: string | null;
-    } = {};
 
-    // normalisasi input
-    if (body.fid !== undefined && body.fid !== null && !Number.isNaN(Number(body.fid))) {
-      payload.fid = Number(body.fid);
-    }
-    if (typeof body.wallet === "string" && body.wallet) {
-      payload.wallet = body.wallet.toLowerCase();
-    }
-    if ("username" in body) payload.username = body.username ?? null;
-    if ("display_name" in body) payload.display_name = body.display_name ?? null;
-    if ("pfp_url" in body) payload.pfp_url = body.pfp_url ?? null;
+    // Only FID is required for an upsert. Other fields are optional.
+    const { fid, wallet, username, display_name, pfp_url } = body;
 
-    if (!payload.fid && !payload.wallet) {
-      return NextResponse.json(
-        { error: "missing fid or wallet" },
-        { status: 400 }
-      );
+    if (!fid || isNaN(Number(fid))) {
+      return NextResponse.json({ error: "fid is required and must be a number" }, { status: 400 });
     }
 
-    // Prioritas upsert by FID (unique constraint: users_fid_key)
-    if (payload.fid) {
-      const { data, error } = await sb
-        .from("users")
-        .upsert(
-          {
-            fid: payload.fid,
-            wallet: payload.wallet ?? null,
-            username: payload.username ?? null,
-            display_name: payload.display_name ?? null,
-            pfp_url: payload.pfp_url ?? null,
-          },
-          { onConflict: "fid" }
-        )
-        .select()
-        .maybeSingle();
+    const userData: { [key: string]: any } = { fid: Number(fid) };
 
-      if (error) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
-      }
-      return NextResponse.json({ ok: true, user: data });
-    }
+    // Build the user data object only with the fields that are present in the request.
+    // This allows for partial updates (e.g., just adding a wallet to an existing FID).
+    if (wallet !== undefined) userData.wallet = wallet ? String(wallet).toLowerCase() : null;
+    if (username !== undefined) userData.username = username;
+    if (display_name !== undefined) userData.display_name = display_name;
+    if (pfp_url !== undefined) userData.pfp_url = pfp_url;
 
-    // Fallback: upsert by wallet (kalau belum punya fid)
+    // Perform the upsert operation. If a user with the given FID exists, it will be updated.
+    // Otherwise, a new user will be created.
     const { data, error } = await sb
       .from("users")
-      .upsert(
-        {
-          wallet: payload.wallet as string,
-          username: payload.username ?? null,
-          display_name: payload.display_name ?? null,
-          pfp_url: payload.pfp_url ?? null,
-        },
-        // Catatan: kalau mau unique by wallet, tambahkan unique index di schema
-        // Di sini kita gunakan upsert tanpa onConflict eksplisit (Supabase pilih PK/unique yang ada)
-      )
+      .upsert(userData, { onConflict: "fid" })
       .select()
-      .maybeSingle();
+      .single();
 
     if (error) {
+      console.error('Supabase user upsert error:', error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
+
     return NextResponse.json({ ok: true, user: data });
   } catch (e: any) {
-    return NextResponse.json(
-      { error: e?.message || "server error" },
-      { status: 500 }
-    );
+    console.error('API user route error:', e);
+    return NextResponse.json({ error: e?.message || "server error" }, { status: 500 });
   }
 }
 
