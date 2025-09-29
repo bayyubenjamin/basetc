@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { privateKeyToAccount } from "viem/accounts";
-// [FIX 1] Mengimpor splitSignature dengan benar dari 'viem'
-import { splitSignature } from "viem"; 
+// [FIX] Mengimpor `splitSignature` dari path spesifik untuk mengatasi masalah build.
+import { splitSignature } from "viem/utils"; 
 import { rigSaleAddress } from "../../lib/web3Config";
 
 export const runtime = "nodejs";
@@ -29,7 +29,7 @@ const types = {
     { name: "fid", type: "uint256" },
     { name: "to", type: "address" },
     { name: "inviter", type: "address" },
-    { name: "deadline", type: "uint256" },
+    { name: "deadline", type: "uint264" },
   ],
 } as const;
 
@@ -40,14 +40,29 @@ export async function GET(req: NextRequest) {
     if (!inviter) return NextResponse.json({ error: "missing inviter" }, { status: 400 });
 
     const supabase = getSupabase();
-    const { data, error } = await supabase
+
+    // Ambil jumlah reward yang sudah diklaim
+    const { data: rewardsData, error: rewardsError } = await supabase
         .from('referral_claimed_rewards')
         .select('count')
         .eq('inviter', inviter.toLowerCase())
         .maybeSingle();
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    return NextResponse.json({ claimedRewards: data?.count ?? 0, validReferrals: 0 /* Placeholder, ganti jika perlu */ });
+    if (rewardsError) return NextResponse.json({ error: rewardsError.message }, { status: 500 });
+    
+    // Ambil jumlah referral yang valid
+    const { count: validReferrals, error: referralsError } = await supabase
+        .from('referrals')
+        .select('*', { count: 'exact', head: true })
+        .eq('inviter', inviter.toLowerCase())
+        .eq('status', 'valid');
+
+    if (referralsError) return NextResponse.json({ error: referralsError.message }, { status: 500 });
+
+    return NextResponse.json({ 
+        claimedRewards: rewardsData?.count ?? 0, 
+        validReferrals: validReferrals ?? 0 
+    });
 }
 
 // POST handler (diperbaiki)
@@ -81,7 +96,6 @@ export async function POST(req: NextRequest) {
         message,
       });
       
-      // [FIX 2] Menggunakan fungsi `splitSignature` yang sudah diimpor
       const { v, r, s } = splitSignature(signature);
 
       return NextResponse.json({ ...message, v: Number(v), r, s, deadline: deadline.toString() });
