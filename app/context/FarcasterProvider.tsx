@@ -1,9 +1,9 @@
 // app/context/FarcasterProvider.tsx
 //
-// Alasan Perbaikan Definitif: Memperbaiki build error "getContext does not exist"
-// dan masalah "stuck di splash screen". Menggunakan `await sdk.context` yang benar
-// dan memastikan flag `ready` selalu di-set ke `true` setelah inisialisasi selesai,
-// baik berhasil maupun gagal.
+// Alasan Perbaikan Definitif: Memperbaiki build error "Property 'theme' does not exist".
+// Menghapus properti `theme` dan `colorScheme` dari tipe dan logika karena
+// data tersebut tidak tersedia di objek context SDK seperti yang diasumsikan.
+// Provider ini sekarang hanya fokus pada data pengguna yang esensial.
 'use client';
 
 import {
@@ -24,8 +24,6 @@ type FarcasterUser = {
 
 type MiniAppContext = {
   user?: FarcasterUser;
-  theme?: 'light' | 'dark';
-  colorScheme?: 'light' | 'dark';
   ready: boolean; // Flag untuk menandakan proses inisialisasi selesai
 };
 
@@ -42,7 +40,6 @@ export function FarcasterProvider({ children }: { children: ReactNode }) {
         
         // Polling untuk mendapatkan konteks dengan cepat
         for (let i = 0; i < 20; i++) { // Coba selama 2 detik
-          // --- FIX DI SINI: Menggunakan `await sdk.context` yang benar ---
           const ctx = await sdk.context;
           if (ctx?.user?.fid) {
             if (!isCancelled) {
@@ -53,8 +50,6 @@ export function FarcasterProvider({ children }: { children: ReactNode }) {
                   displayName: ctx.user.displayName,
                   pfpUrl: ctx.user.pfpUrl,
                 },
-                theme: ctx.theme,
-                colorScheme: ctx.colorScheme,
                 ready: true,
               });
               // Beri sinyal ke host Farcaster bahwa app siap
@@ -99,5 +94,3 @@ export function useFarcaster() {
   }
   return context;
 }
-
-

@@ -1,9 +1,3 @@
-// app/components/Profil.tsx
-//
-// Alasan Perbaikan Final: Memperbaiki build error "Property 'loading' does not exist".
-// Mengubah cara komponen ini menggunakan hook `useFarcaster`. Karena state `loading`
-// telah dipindahkan ke `page.tsx`, komponen ini sekarang menggunakan flag `ready`
-// dari Farcaster context untuk menampilkan status loading dengan benar.
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -67,8 +61,6 @@ async function fetchLeaderboard(): Promise<LbRow[]> {
 
 export default function Profil() {
   const { address } = useAccount();
-  // --- FIX DI SINI ---
-  // Mengambil 'user' dan 'ready' dari context. Properti 'loading' sudah tidak ada.
   const { user: fcUser, ready: fcReady } = useFarcaster();
 
   const [copied, setCopied] = useState(false);
@@ -164,8 +156,6 @@ export default function Profil() {
               {fcUser?.username && <span className="text-xs text-neutral-400 ml-2">@{fcUser.username}</span>}
             </div>
             <div className="text-[11px] text-neutral-400">
-              {/* --- FIX DI SINI --- */}
-              {/* Menggunakan `!fcReady` untuk menampilkan status loading */}
               {!fcReady ? "Loading context..." : (fcUser?.fid ? <>FID: <b>{fcUser.fid}</b></> : "FID not available")}
             </div>
             {address && (
@@ -293,5 +283,3 @@ export default function Profil() {
     </div>
   );
 }
-
-
