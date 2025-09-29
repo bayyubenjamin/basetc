@@ -1,18 +1,19 @@
 {
-  "name": "BaseTC Mining",
-  "icon": "logo",
-  "description": "A Mini-App NFT Mining Game.",
-  "images": {
-    "logo": {
-      "url": "/img/logo.png",
-      "type": "image/png"
-    }
+  "accountAssociation": {
+    "header": "eyJmaWQiOjg2ODc2NywidHlwZSI6ImN1c3RvZHkiLCJrZXkiOiIweDJmNUU1RDc5MGQ3Mzg4N2Y2NjcxQ0Y4NmZhNGNkNzAxMkEzNUQ1NzQifQ",
+    "payload": "eyJkb21haW4iOiJiYXNldGMudmVyY2VsLmFwcCJ9",
+    "signature": "MHg2ZjkyM2M5NTlkZWRhMTIyNTQ3NTFjNmNmZWVkZDRkMjA4ZDA0ZmNiOGVmMDQ2ZWE1MzUzMDY2ODQwYzNkMTM2MWI3ZjI5ZjNlY2Q3ZDE4ODFiYjgxMmUzYTk0ZDFmY2E0NDFhNjkyMmI5N2MzNTQ5OTE1YTZiNTk3ZGFkNDkyYjFj"
   },
-  "dapps": [
-    {
-      "name": "BaseTC Mining",
-      "url": "https://basetc.vercel.app"
-    }
-  ]
+  "frame": {
+    "version": "1",
+    "name": "Example Frame",
+    "iconUrl": "https://basetc.vercel.app/icon.png",
+    "homeUrl": "https://basetc.vercel.app",
+    "imageUrl": "https://basetc.vercel.app/image.png",
+    "buttonTitle": "Check this out",
+    "splashImageUrl": "https://basetc.vercel.app/splash.png",
+    "splashBackgroundColor": "#eeccff",
+    "webhookUrl": "https://basetc.vercel.app/api/webhook"
+  }
 }
 
