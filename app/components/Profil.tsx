@@ -6,10 +6,7 @@ import Image from "next/image";
 import {
   useAccount,
   useReadContract,
-  useWriteContract,
-  useWaitForTransactionReceipt,
 } from "wagmi";
-import { baseSepolia } from "viem/chains";
 import {
   baseTcAddress,
   baseTcABI,
@@ -18,6 +15,8 @@ import {
   gameCoreAddress,
   gameCoreABI,
   chainId as BASE_CHAIN_ID,
+  rigSaleAddress,
+  rigSaleABI,
 } from "../lib/web3Config";
 
 type Achievement = { name: string; icon: string };
@@ -30,6 +29,15 @@ type LbRow = {
   total_rewards?: number | null;
   hashrate?: number | null;
   rank?: number | null;
+};
+
+type InvitedUser = {
+  fid: number | null;
+  wallet?: string | null;
+  username?: string | null;
+  display_name?: string | null;
+  pfp_url?: string | null;
+  status?: "valid" | "pending";
 };
 
 const Icon: FC<{ path: string; className?: string }> = ({ path, className = "w-5 h-5" }) => (
@@ -84,8 +92,9 @@ async function fetchLeaderboard(): Promise<LbRow[]> {
 
 export default function Profil() {
   const { address } = useAccount();
+
+  // ===== Farcaster profile (langsung dari Mini App SDK)
   const [fc, setFc] = useState<{ fid: number | null; username: string | null; displayName: string | null; pfpUrl: string | null; }>({ fid: null, username: null, displayName: null, pfpUrl: null });
-  const [msg, setMsg] = useState<string>("");
   const [copied, setCopied] = useState(false);
   const [refFid, setRefFid] = useState<number | null>(null);
   const [lb, setLb] = useState<LbRow[]>([]);
@@ -103,6 +112,7 @@ export default function Profil() {
     })();
   }, []);
 
+  // ====== On-chain reads untuk achievements (tidak diubah)
   const basicId = useReadContract({ address: rigNftAddress as `0x${string}`, abi: rigNftABI as any, functionName: "BASIC" });
   const proId   = useReadContract({ address: rigNftAddress as `0x${string}`, abi: rigNftABI as any, functionName: "PRO" });
   const legId   = useReadContract({ address: rigNftAddress as `0x${string}`, abi: rigNftABI as any, functionName: "LEGEND" });
@@ -126,57 +136,8 @@ export default function Profil() {
     args: address ? [address] : undefined, query: { enabled: Boolean(address) }});
   const baseReadable = useMemo(() => { const v = baseBal.data as bigint | undefined; return v ? (Number(v) / 1e18).toFixed(3) : "0.000"; }, [baseBal.data]);
 
-  const epochNow = useReadContract({ address: gameCoreAddress as `0x${string}`, abi: gameCoreABI as any, functionName: "epochNow" });
-
-  const preview = useReadContract({
-    address: gameCoreAddress as `0x${string}`,
-    abi: gameCoreABI as any,
-    functionName: "preview",
-    args: address && typeof epochNow.data !== "undefined" && (epochNow.data as bigint) > 0n
-      ? [(epochNow.data as bigint) - 1n, address]
-      : undefined,
-    query: { enabled: Boolean(address && typeof epochNow.data !== "undefined" && (epochNow.data as bigint) > 0n) },
-  });
-
-  const hashrate = useReadContract({ address: gameCoreAddress as `0x${string}`, abi: gameCoreABI as any, functionName: "getHashrate",
-    args: address ? [address] : undefined, query: { enabled: Boolean(address) }});
-  const baseUnit = useReadContract({ address: gameCoreAddress as `0x${string}`, abi: gameCoreABI as any, functionName: "getBaseUnit",
-    args: address ? [address] : undefined, query: { enabled: Boolean(address) }});
   const isSupreme = useReadContract({ address: gameCoreAddress as `0x${string}`, abi: gameCoreABI as any, functionName: "isSupreme",
     args: address ? [address] : undefined, query: { enabled: Boolean(address) }});
-
-  const hashrateNum = useMemo(() => { const v = hashrate.data as bigint | undefined; return v ? Number(v) : 0; }, [hashrate.data]);
-  const baseUnitNum = useMemo(() => { const v = baseUnit.data as bigint | undefined; return v ? Number(v) : 0; }, [baseUnit.data]);
-  const previewReadable = useMemo(() => { const v = preview.data as bigint | undefined; return v ? (Number(v) / 1e18).toFixed(3) : "0.000"; }, [preview.data]);
-
-  const { writeContract, data: claimHash, isPending: claimPending, error: claimErr } = useWriteContract();
-  const { isLoading: claimWaiting, isSuccess: claimOk } = useWaitForTransactionReceipt({ hash: claimHash });
-
-  useEffect(() => {
-    if (claimOk) setMsg("Claim success!");
-    if (claimErr) { const e: any = claimErr; setMsg(e?.shortMessage || e?.message || "Claim failed"); }
-  }, [claimOk, claimErr]);
-
-  const canClaim = useMemo(() => {
-    const e = epochNow.data as bigint | undefined;
-    return Boolean(address && typeof e !== "undefined" && e > 0n && Number(previewReadable) > 0);
-  }, [address, epochNow.data, previewReadable]);
-
-  const onClaim = () => {
-    if (!address) return setMsg("Connect wallet first.");
-    const e = epochNow.data as bigint | undefined;
-    if (!e || e === 0n) return;
-    writeContract({
-      address: gameCoreAddress as `0x${string}`,
-      abi: gameCoreABI as any,
-      functionName: "claim",
-      args: [e - 1n, address as `0x${string}`] as const,
-      account: address as `0x${string}`,
-      chain: baseSepolia,
-      chainId: BASE_CHAIN_ID,
-    });
-    setMsg("Claiming reward…");
-  };
 
   const achievements: Achievement[] = [
     ...(countBasic  > 0n ? [{ name: "Early Miner",  icon: "M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" }] : []),
@@ -185,14 +146,64 @@ export default function Profil() {
     ...((isSupreme.data as boolean | undefined) ? [{ name: "Supreme", icon: "M10.5 6a7.5 7.5 0 100 15 7.5 7.5 0 000-15zM2.25 9h19.5" }] : []),
   ];
 
-  const rigsOwned = Number(countBasic + countPro + countLegend);
+  // ===== Invite: total valid dari on-chain + daftar dari backend (Supabase) jika tersedia
+  const inviteCountRes = useReadContract({
+    address: rigSaleAddress as `0x${string}`,
+    abi: rigSaleABI as any,
+    functionName: "inviteCountOf",
+    args: address ? [address] : undefined,
+    query: { enabled: Boolean(address) },
+  });
+  const totalInvitesValid = inviteCountRes?.data ? Number(inviteCountRes.data as bigint) : 0;
+
+  const [invites, setInvites] = useState<InvitedUser[]>([]);
+  const [loadingInvites, setLoadingInvites] = useState(false);
+
+  useEffect(() => {
+    if (!address) return;
+    (async () => {
+      setLoadingInvites(true);
+      try {
+        // Prefer backend detail if available
+        const r = await fetch(`/api/referral?inviter=${address}&detail=1`);
+        const j = await r.json().catch(() => ({}));
+        if (j?.invited && Array.isArray(j.invited)) {
+          setInvites(
+            j.invited.map((u: any): InvitedUser => ({
+              fid: u?.fid ?? null,
+              wallet: u?.wallet ?? null,
+              username: u?.username ?? null,
+              display_name: u?.display_name ?? null,
+              pfp_url: u?.pfp_url ?? null,
+              status: u?.status === "valid" ? "valid" : "pending",
+            }))
+          );
+        } else {
+          setInvites([]); // fallback empty
+        }
+      } catch {
+        setInvites([]);
+      } finally {
+        setLoadingInvites(false);
+      }
+    })();
+  }, [address]);
+
+  // ===== UI helpers
   const shortAddr = address ? `${address.slice(0, 6)}…${address.slice(-4)}` : "—";
   const displayName = fc.displayName || fc.username || (fc.fid ? `fid:${fc.fid}` : "Guest");
 
-  const copyAddr = async () => {
-    if (!address) return;
-    try { await navigator.clipboard.writeText(address); setCopied(true); setTimeout(() => setCopied(false), 1200); } catch {}
+  const copy = async (text: string) => {
+    try { await navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1000); } catch {}
   };
+
+  const inviteLink = useMemo(() => {
+    if (typeof window === "undefined") return "";
+    const base = window.location.origin || "";
+    const fid = fc.fid ?? "";
+    if (!fid || !address) return `${base}/market`;
+    return `${base}/market?fid=${fid}&ref=${address}`;
+  }, [fc.fid, address]);
 
   const prettyReward = (row: LbRow) => {
     const v = row.score ?? row.total_rewards ?? row.rewards ?? null;
@@ -202,21 +213,28 @@ export default function Profil() {
 
   return (
     <div className="space-y-4 px-4 pt-4 pb-8">
+      {/* ===== Profile header: ambil data dari Farcaster */}
       <div className="flex items-center justify-between bg-neutral-800 rounded-lg p-3">
         <div className="flex items-center space-x-3">
           <div className="w-12 h-12 bg-neutral-700 rounded-full overflow-hidden flex items-center justify-center">
             {fc.pfpUrl ? <Image src={fc.pfpUrl} alt="pfp" width={48} height={48} /> : <span className="text-xs text-neutral-400">PFP</span>}
           </div>
           <div>
-            <div className="font-semibold text-sm md:text-base">{displayName}</div>
-            <div className="text-xs md:text-sm text-neutral-400 flex items-center space-x-2">
-              <span>{shortAddr}</span>
-              {address && (
-                <button onClick={copyAddr} className="px-2 py-0.5 rounded-md bg-neutral-700 hover:bg-neutral-600 text-[10px]" title="Copy address">
+            <div className="font-semibold text-sm md:text-base">
+              {displayName}
+              {fc.username && <span className="text-xs text-neutral-400 ml-2">@{fc.username}</span>}
+            </div>
+            <div className="text-[11px] text-neutral-400">
+              {fc.fid ? <>FID: <b>{fc.fid}</b></> : "Not in Farcaster Mini App context"}
+            </div>
+            {address && (
+              <div className="text-xs md:text-sm text-neutral-400 flex items-center space-x-2">
+                <span>{shortAddr}</span>
+                <button onClick={() => copy(address)} className="px-2 py-0.5 rounded-md bg-neutral-700 hover:bg-neutral-600 text-[10px]" title="Copy address">
                   {copied ? "Copied!" : "Copy"}
                 </button>
-              )}
-            </div>
+              </div>
+            )}
             {!!refFid && (
               <div className="mt-1 inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-neutral-700 text-[10px]">
                 <span className="opacity-70">Referred By</span>
@@ -230,31 +248,89 @@ export default function Profil() {
         )}
       </div>
 
+      {/* ===== Statistics diganti: total invite + copy link + daftar undangan */}
       <div className="bg-neutral-800 rounded-lg p-3 space-y-3">
-        <h2 className="font-semibold text-sm md:text-base">Statistics</h2>
-        <div className="flex space-x-2">
-          <StatCard title="Rigs Owned" value={String(rigsOwned)} />
-          <StatCard title="Hashrate (on-chain)" value={String(hashrateNum)} />
-          <StatCard title="Base Unit" value={String(baseUnitNum)} />
+        <h2 className="font-semibold text-sm md:text-base">Invites</h2>
+
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+          <div className="flex gap-2 w-full">
+            <div className="flex-1">
+              <div className="text-[11px] text-neutral-400">Total Invited (valid)</div>
+              <div className="text-lg font-semibold">{totalInvitesValid}</div>
+            </div>
+            <div className="flex-1">
+              <div className="text-[11px] text-neutral-400">Your $BaseTC</div>
+              <div className="text-lg font-semibold">{baseReadable}</div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <input
+              readOnly
+              value={inviteLink}
+              className="bg-neutral-900 border border-neutral-700 rounded-md px-2 py-1 text-xs w-[260px]"
+            />
+            <button
+              disabled={!inviteLink}
+              onClick={() => inviteLink && copy(inviteLink)}
+              className="px-3 py-1.5 text-xs rounded-md bg-neutral-700 hover:bg-neutral-600 disabled:opacity-50"
+            >
+              {copied ? "Copied!" : "Copy Link"}
+            </button>
+          </div>
         </div>
-        <div className="flex space-x-2">
-          <StatCard title="Token Balance" value={`${baseReadable} $BaseTC`} />
-          <StatCard title="Preview (epoch-1)" value={`${previewReadable} $BaseTC`} />
-          <StatCard title="Epoch Now" value={typeof epochNow.data !== "undefined" ? String(epochNow.data) : "-"} />
-        </div>
-        <div className="pt-1">
-          <button
-            onClick={onClaim}
-            disabled={!canClaim || claimPending || claimWaiting}
-            className="px-3 py-1.5 text-xs rounded-md bg-neutral-700 hover:bg-neutral-600 disabled:bg-neutral-700 disabled:text-neutral-500"
-            title={!canClaim ? "No claimable reward yet" : undefined}
-          >
-            {claimPending || claimWaiting ? "Claiming…" : "Claim epoch-1"}
-          </button>
-          {!!msg && <span className="ml-2 text-xs text-green-400">{msg}</span>}
+
+        <div className="space-y-2">
+          <div className="text-xs text-neutral-400">Invited Users</div>
+          <div className="overflow-hidden rounded-md border border-neutral-700">
+            <table className="w-full text-xs">
+              <thead className="bg-neutral-900 text-neutral-400">
+                <tr>
+                  <th className="text-left px-2 py-1.5">User</th>
+                  <th className="text-left px-2 py-1.5">FID</th>
+                  <th className="text-left px-2 py-1.5">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loadingInvites ? (
+                  <tr><td className="px-2 py-2 text-neutral-500" colSpan={3}>Loading…</td></tr>
+                ) : invites.length === 0 ? (
+                  <tr><td className="px-2 py-2 text-neutral-500" colSpan={3}>
+                    Belum ada data undangan. (Jika kamu sudah menghubungkan Supabase & endpoint <code>/api/referral?detail=1</code>, daftar akan muncul di sini.)
+                  </td></tr>
+                ) : (
+                  invites.map((u, i) => (
+                    <tr key={`${u.fid ?? "x"}-${i}`} className="border-t border-neutral-700">
+                      <td className="px-2 py-1.5 flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-full overflow-hidden bg-neutral-700 flex items-center justify-center">
+                          {u.pfp_url ? <Image src={u.pfp_url} alt="" width={24} height={24} /> : <span className="text-[10px] text-neutral-400">P</span>}
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="font-medium">{u.display_name || u.username || (u.wallet ? `${u.wallet.slice(0,6)}…${u.wallet.slice(-4)}` : "—")}</span>
+                          {u.username && <span className="text-[10px] text-neutral-400">@{u.username}</span>}
+                        </div>
+                      </td>
+                      <td className="px-2 py-1.5">{u.fid ?? "—"}</td>
+                      <td className="px-2 py-1.5">
+                        {u.status === "valid" ? (
+                          <span className="px-2 py-0.5 rounded bg-green-500/20 text-green-300 text-[10px]">valid</span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded bg-yellow-500/20 text-yellow-300 text-[10px]">pending</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-[10px] text-neutral-500">
+            *Total “valid” di atas berasal dari on-chain <code>inviteCountOf</code>. Daftar detail “pending/valid” berasal dari backend (Supabase), jika tersedia.
+          </p>
         </div>
       </div>
 
+      {/* ===== Achievements (tidak diubah) */}
       <div className="bg-neutral-800 rounded-lg p-3 space-y-2">
         <h2 className="font-semibold text-sm md:text-base">Achievements</h2>
         {achievements.length === 0 ? (
@@ -271,6 +347,7 @@ export default function Profil() {
         )}
       </div>
 
+      {/* ===== Leaderboard (tidak diubah) */}
       <div className="bg-neutral-800 rounded-lg p-3 space-y-2">
         <h2 className="font-semibold text-sm md:text-base">Leaderboard</h2>
         {lbLoading ? (
@@ -306,14 +383,7 @@ export default function Profil() {
         </p>
       </div>
 
-      <div className="bg-neutral-800 rounded-lg p-3 space-y-2">
-        <h2 className="font-semibold text-sm md:text-base">Your Rigs</h2>
-        <div className="grid grid-cols-3 gap-2 text-center text-xs md:text-sm">
-          <div className="bg-neutral-900 rounded-lg p-2"><div className="text-neutral-400">Basic</div><div className="text-lg font-semibold">x{String(countBasic)}</div></div>
-          <div className="bg-neutral-900 rounded-lg p-2"><div className="text-neutral-400">Pro</div><div className="text-lg font-semibold">x{String(countPro)}</div></div>
-          <div className="bg-neutral-900 rounded-lg p-2"><div className="text-neutral-400">Legend</div><div className="text-lg font-semibold">x{String(countLegend)}</div></div>
-        </div>
-      </div>
+      {/* ===== "Your Rigs" DIHAPUS sesuai permintaan */}
     </div>
   );
 }
