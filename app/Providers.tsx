@@ -1,21 +1,27 @@
+// app/Providers.tsx
+//
+// Alasan Perbaikan Final: Memperbaiki error `Module not found` saat build.
+// Mengganti import 'FarcasterUserProvider' yang salah menjadi 'FarcasterProvider'
+// dengan path yang benar.
 "use client";
 
+import React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { WagmiProvider } from "wagmi";
-import { config } from "../wagmi";
-import type { ReactNode } from "react";
-import { FarcasterUserProvider } from "./context/FarcasterUserProvider"; // Impor provider baru
+import { wagmiConfig } from "./lib/web3Config";
+// -- FIX DI SINI --
+import { FarcasterProvider } from "./context/FarcasterProvider";
 
 const queryClient = new QueryClient();
 
-export function Providers({ children }: { children: ReactNode }) {
+export function Providers({ children }: { children: React.ReactNode }) {
   return (
-    <WagmiProvider config={config}>
+    <WagmiProvider config={wagmiConfig}>
       <QueryClientProvider client={queryClient}>
-        <FarcasterUserProvider> {/* Bungkus children dengan provider baru */}
-          {children}
-        </FarcasterUserProvider>
+        {/* -- FIX DI SINI -- */}
+        <FarcasterProvider>{children}</FarcasterProvider>
       </QueryClientProvider>
     </WagmiProvider>
   );
 }
+

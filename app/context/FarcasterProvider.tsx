@@ -1,109 +1,185 @@
-// File: app/context/FarcasterUserProvider.tsx
+// app/context/FarcasterProvider.tsx
+//
+// Alasan Perbaikan Final: Memperbaiki semua error build dan masalah logika.
+// 1. Memperbaiki syntax error `const = useState(false)`.
+// 2. Menambahkan useEffect baru yang akan memanggil API `/api/user` untuk mengambil data profil
+//    (nama, pfp) SETELAH FID berhasil didapatkan, baik secara otomatis maupun manual.
+//    Ini menyelesaikan masalah profil kosong saat FID di-input manual.
 "use client";
 
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+  type ReactNode,
+} from "react";
+import FidInput from "../components/FidInput";
 
-// Tipe ini bisa diimpor dari file tipe terpusat jika ada
-export type FarcasterUser = {
+const DEBUG_MODE = true;
+
+type FarcasterUser = {
   fid: number | null;
   username: string | null;
   displayName: string | null;
   pfpUrl: string | null;
 };
 
-interface FarcasterUserContextType {
-  user: FarcasterUser;
-  isLoading: boolean;
-  isReady: boolean; // Menandakan apakah upaya pengambilan data awal telah selesai
+type FarcasterContextType = {
+  user: FarcasterUser | null;
+  fid: number | null;
+  loading: boolean;
+  error: string | null;
+  isInFrame: boolean;
+  setFid: (fid: number) => void;
+};
+
+const FarcasterContext = createContext<FarcasterContextType | undefined>(
+  undefined
+);
+
+async function getFarcasterContext(): Promise<any> {
+  if (typeof window !== 'undefined' && window.self === window.top) {
+    if (DEBUG_MODE) console.info("[FarcasterProvider] Not in an iframe, skipping SDK check.");
+    return null;
+  }
+  try {
+    const mod = await import("@farcaster/miniapp-sdk");
+    const { sdk } = mod;
+    for (let i = 0; i < 10; i++) {
+      const context = await sdk.context;
+      if (context?.user?.fid) {
+        if (DEBUG_MODE) console.log(`[FarcasterProvider] Context found on attempt ${i + 1}`, context);
+        return { user: context.user };
+      }
+      await new Promise((r) => setTimeout(r, 200));
+    }
+    if (DEBUG_MODE) console.warn("[FarcasterProvider] SDK present but no context found after retries.");
+    return null;
+  } catch (err: any) {
+    if (DEBUG_MODE) console.warn("[FarcasterProvider] Mini-app SDK not found or failed to load.");
+    return null;
+  }
 }
 
-const FarcasterUserContext = createContext<FarcasterUserContextType | undefined>(undefined);
+export function FarcasterProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState<FarcasterUser | null>(null);
+  const [fid, setFidState] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isInFrame, setIsInFrame] = useState(false);
 
-export function FarcasterUserProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<FarcasterUser>({ fid: null, username: null, displayName: null, pfpUrl: null });
-  const [isLoading, setIsLoading] = useState(true);
-  const = useState(false);
+  const setFidManually = useCallback((newFid: number) => {
+    if (DEBUG_MODE) console.log(`[FarcasterProvider] Manually setting FID: ${newFid}`);
+    localStorage.setItem("basetc_fid", String(newFid));
+    setFidState(newFid);
+  }, []);
 
+  // Effect #1: Resolve FID from any source (A, B, C, D)
   useEffect(() => {
     let isCancelled = false;
+    const resolveFid = async () => {
+      if (DEBUG_MODE) console.log("[FarcasterProvider] Starting FID resolution...");
+      setLoading(true);
 
-    const initialize = async () => {
+      // A. Frame Context
+      const context = await getFarcasterContext();
+      if (!isCancelled && context?.user?.fid) {
+        if (DEBUG_MODE) console.log("[FarcasterProvider] Priority A: Resolved via Frame Context.", context.user);
+        setIsInFrame(true);
+        localStorage.setItem("basetc_fid", String(context.user.fid));
+        setFidState(context.user.fid); // This will trigger Effect #2
+        return;
+      }
+
+      // B. URL Query Param
+      const url = new URL(window.location.href);
+      const fidFromUrl = url.searchParams.get("fid");
+      if (!isCancelled && fidFromUrl && /^\d+$/.test(fidFromUrl)) {
+        const parsedFid = parseInt(fidFromUrl, 10);
+        if (DEBUG_MODE) console.log(`[FarcasterProvider] Priority B: Resolved via URL param ?fid=${parsedFid}`);
+        localStorage.setItem("basetc_fid", String(parsedFid));
+        setFidState(parsedFid); // This will trigger Effect #2
+        return;
+      }
+
+      // C. LocalStorage
+      const fidFromStorage = localStorage.getItem("basetc_fid");
+      if (!isCancelled && fidFromStorage && /^\d+$/.test(fidFromStorage)) {
+        const parsedFid = parseInt(fidFromStorage, 10);
+        if (DEBUG_MODE) console.log(`[FarcasterProvider] Priority C: Resolved via localStorage: ${parsedFid}`);
+        setFidState(parsedFid); // This will trigger Effect #2
+        return;
+      }
+      
+      // D. Fallback (no FID found)
+      if (!isCancelled) {
+        if (DEBUG_MODE) console.warn("[FarcasterProvider] Priority D: No FID found. Awaiting manual input.");
+        setLoading(false);
+      }
+    };
+    resolveFid();
+    return () => { isCancelled = true; };
+  }, []);
+
+  // Effect #2: Fetch user data whenever FID is resolved
+  useEffect(() => {
+    if (!fid) return;
+
+    const fetchUserData = async () => {
+      if (DEBUG_MODE) console.log(`[FarcasterProvider] FID is set to ${fid}, fetching user data...`);
+      setLoading(true);
       try {
-        // Impor SDK secara dinamis untuk memastikan kode ini hanya berjalan di sisi klien
-        const mod: any = await import("@farcaster/miniapp-sdk");
-        const sdk: any = mod?.sdk;
-
-        // Beri sinyal ke klien Farcaster bahwa UI aplikasi siap untuk ditampilkan.
-        // Ini harus dilakukan di awal untuk menghindari splash screen yang berkepanjangan.
-        try { await sdk?.actions?.ready?.(); } catch {}
-
-        // Upaya tangguh untuk mendapatkan konteks pengguna.
-        // Ini menangani race condition di mana SDK tidak langsung tersedia.
-        let context: any = null;
-        for (let i = 0; i < 10; i++) { // Coba ulang selama ~5 detik
-          const rawCtx = sdk?.context;
-          if (rawCtx) {
-            if (typeof rawCtx === "function") context = await rawCtx.call(sdk);
-            else if (rawCtx && typeof rawCtx.then === "function") context = await rawCtx;
-            else context = rawCtx?? null;
-          }
-          if (context?.user?.fid) break;
-          await new Promise(r => setTimeout(r, 500));
-        }
+        const res = await fetch(`/api/user?fid=${fid}`);
+        if (!res.ok) throw new Error("User not found or API error");
+        const data = await res.json();
         
-        if (isCancelled) return;
-
-        if (context?.user?.fid) {
-          const u = context.user;
-          const profile: FarcasterUser = {
-            fid: u.fid,
-            username: u.username?? null,
-            displayName: u.displayName?? null,
-            pfpUrl: u.pfpUrl?? null,
-          };
-          setUser(profile);
-          // Simpan FID untuk digunakan bagian lain dari aplikasi (misalnya, panggilan backend)
-          localStorage.setItem('basetc_fid', String(u.fid));
+        if (data && data.fid) {
+           if (DEBUG_MODE) console.log("[FarcasterProvider] User data fetched successfully:", data);
+           setUser({
+            fid: data.fid,
+            username: data.username,
+            displayName: data.display_name,
+            pfpUrl: data.pfp_url,
+          });
         } else {
-          // Logika fallback untuk pengujian di luar klien Farcaster
-          const url = new URL(window.location.href);
-          const qfid = url.searchParams.get("fid") |
-
-| localStorage.getItem("basetc_fid");
-          if (qfid && /^\d+$/.test(qfid)) {
-            setUser(prev => ({...prev, fid: Number(qfid) }));
-          }
+            throw new Error("Invalid user data received");
         }
-      } catch (error) {
-        console.error("Gagal menginisialisasi konteks Farcaster:", error);
+      } catch (e: any) {
+        if (DEBUG_MODE) console.error("[FarcasterProvider] Failed to fetch user data, using fallback.", e.message);
+        setUser({ fid, username: `fid:${fid}`, displayName: `User ${fid}`, pfpUrl: null });
       } finally {
-        if (!isCancelled) {
-          setIsLoading(false);
-          setIsReady(true);
-        }
+        setLoading(false);
       }
     };
 
-    initialize();
+    fetchUserData();
+  }, [fid]);
 
-    return () => {
-      isCancelled = true;
-    };
-  },);
-
-  const value = { user, isLoading, isReady };
+  const value = { user, fid, loading, error, isInFrame, setFid: setFidManually };
 
   return (
-    <FarcasterUserContext.Provider value={value}>
-      {children}
-    </FarcasterUserContext.Provider>
+    <FarcasterContext.Provider value={value}>
+      {loading ? (
+        <div className="flex items-center justify-center min-h-screen bg-neutral-950">
+          <p className="text-neutral-400 animate-pulse">Initializing BaseTC...</p>
+        </div>
+      ) : !fid ? (
+        <FidInput setFid={setFidManually} />
+      ) : (
+        children
+      )}
+    </FarcasterContext.Provider>
   );
 }
 
-export const useFarcasterUser = (): FarcasterUserContextType => {
-  const context = useContext(FarcasterUserContext);
+export function useFarcaster(): FarcasterContextType {
+  const context = useContext(FarcasterContext);
   if (context === undefined) {
-    throw new Error('useFarcasterUser harus digunakan di dalam FarcasterUserProvider');
+    throw new Error("useFarcaster must be used within a FarcasterProvider");
   }
   return context;
-};
+}
+
+
