@@ -169,15 +169,15 @@ export default function Profil() {
   const { data: countLegend = 0n } = useReadContract({ address: rigNftAddress, abi: rigNftABI as any, functionName: "balanceOf", args: address && LEGEND ? [address, LEGEND] : undefined, query: { enabled: !!(address && LEGEND) }});
   
   const { data: baseBal } = useReadContract({ address: baseTcAddress, abi: baseTcABI as any, functionName: "balanceOf", args: address ? [address] : undefined, query: { enabled: !!address }});
-  // FIX: Explicitly cast `baseBal` to `bigint` to match `formatEther`'s expected type.
   const baseReadable = useMemo(() => baseBal ? formatEther(baseBal as bigint) : "0.000", [baseBal]);
 
   const { data: isSupreme } = useReadContract({ address: gameCoreAddress, abi: gameCoreABI as any, functionName: "isSupreme", args: address ? [address] : undefined, query: { enabled: !!address }});
 
   const achievements: Achievement[] = [
-    ...(countBasic  > 0n ? [{ name: "Early Miner",  icon: "M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" }] : []),
-    ...(countPro    > 0n ? [{ name: "Pro Upgrader", icon: "M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-3.75-2.25M21 18l-3.75-2.25" }] : []),
-    ...(countLegend > 0n ? [{ name: "First Legend", icon: "M15.362 5.214A8.252 8.252 0 0112 21 8.25 8.25 0 016.038 7.048 8.287 8.287 0 009 9.6a8.983 8.983 0 013.362-3.797z" }] : []),
+    // FIX: Explicitly cast count variables to bigint for comparison
+    ...((countBasic as bigint)  > 0n ? [{ name: "Early Miner",  icon: "M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" }] : []),
+    ...((countPro as bigint)    > 0n ? [{ name: "Pro Upgrader", icon: "M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-3.75-2.25M21 18l-3.75-2.25" }] : []),
+    ...((countLegend as bigint) > 0n ? [{ name: "First Legend", icon: "M15.362 5.214A8.252 8.252 0 0112 21 8.25 8.25 0 016.038 7.048 8.287 8.287 0 009 9.6a8.983 8.983 0 013.362-3.797z" }] : []),
     ...(isSupreme ? [{ name: "Supreme", icon: "M10.5 6a7.5 7.5 0 100 15 7.5 7.5 0 000-15zM2.25 9h19.5" }] : []),
   ];
 
