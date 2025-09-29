@@ -18,7 +18,9 @@ import {
   rigSaleABI,
 } from "../lib/web3Config";
 import { formatEther } from "viem";
+import { useFarcaster } from "../context/FarcasterProvider"; // Import hook baru
 
+// Tipe data yang digunakan di dalam komponen
 type Achievement = { name: string; icon: string };
 type LbRow = {
   fid?: number | null;
@@ -40,6 +42,7 @@ type InvitedUser = {
   status?: "valid" | "pending";
 };
 
+// Komponen-komponen UI kecil (tidak berubah)
 const Icon: FC<{ path: string; className?: string }> = ({ path, className = "w-5 h-5" }) => (
   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} className={className}>
     <path strokeLinecap="round" strokeLinejoin="round" d={path} />
@@ -53,73 +56,7 @@ const StatCard: FC<{ title: string; value: string }> = ({ title, value }) => (
   </div>
 );
 
-/**
- * Robustly gets Farcaster user profile with retry logic and fallbacks.
- * This function is updated to handle the race condition.
- */
-async function getFarcasterProfile(): Promise<{
-  fid: number | null; username: string | null; displayName: string | null; pfpUrl: string | null;
-}> {
-  try {
-    const mod = await import("@farcaster/miniapp-sdk");
-    const { sdk }: any = mod as any;
-    try { await sdk?.actions?.ready?.(); } catch {}
-
-    const tryGet = async () => {
-      if (typeof sdk?.getContext === "function") return await sdk.getContext();
-      const raw = sdk?.context;
-      if (typeof raw === "function") return await raw.call(sdk);
-      if (raw && typeof raw.then === "function") return await raw;
-      return raw ?? null;
-    };
-
-    let ctx: any = null;
-    // Retry for ~3 seconds to wait for SDK injection
-    for (let i = 0; i < 6; i++) {
-      ctx = await tryGet();
-      if (ctx?.user?.fid) break;
-      await new Promise(r => setTimeout(r, 500));
-    }
-
-    const user = ctx?.user ?? {};
-    const profile = {
-      fid: user?.fid ?? null,
-      username: user?.username ?? null,
-      displayName: user?.displayName ?? null,
-      pfpUrl: user?.pfpUrl ?? null,
-    };
-    
-    // Fallback: if context is still empty, check URL and localStorage
-    if (!profile.fid) {
-      const url = new URL(window.location.href);
-      const qfid = url.searchParams.get("fid") || localStorage.getItem("basetc_fid");
-      if (qfid && /^\d+$/.test(qfid)) {
-        profile.fid = Number(qfid);
-      }
-    }
-
-    return profile;
-  } catch {
-    // Return empty profile on any error
-    return { fid: null, username: null, displayName: null, pfpUrl: null };
-  }
-}
-
-function getAndStoreRefFromUrl(): string | null {
-  try {
-    const url = new URL(window.location.href);
-    const urlRef = url.searchParams.get("ref");
-    const storedRef = localStorage.getItem("basetc_ref");
-    
-    const finalRef = urlRef || storedRef;
-    if (finalRef && /^0x[0-9a-fA-F]{40}$/.test(finalRef)) {
-      if (urlRef) localStorage.setItem("basetc_ref", urlRef);
-      return finalRef;
-    }
-  } catch {}
-  return null;
-}
-
+// Fungsi helper untuk fetch leaderboard (tidak berubah)
 async function fetchLeaderboard(): Promise<LbRow[]> {
   try {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -135,23 +72,24 @@ async function fetchLeaderboard(): Promise<LbRow[]> {
 
 export default function Profil() {
   const { address } = useAccount();
-  const [fc, setFc] = useState<{ fid: number | null; username: string | null; displayName: string | null; pfpUrl: string | null; }>({ fid: null, username: null, displayName: null, pfpUrl: null });
-  const [ctxReady, setCtxReady] = useState(false);
+  // INTI PERBAIKAN: Menggunakan data dari FarcasterProvider.
+  // Tidak perlu state loading/ready/context lokal lagi.
+  const { user: fcUser, loading: fcLoading } = useFarcaster();
+
   const [copied, setCopied] = useState(false);
   const [refAddr, setRefAddr] = useState<string | null>(null);
   const [lb, setLb] = useState<LbRow[]>([]);
   const [lbLoading, setLbLoading] = useState<boolean>(true);
 
   useEffect(() => {
-    (async () => {
-      setCtxReady(false);
-      const profile = await getFarcasterProfile();
-      setFc(profile);
-      setCtxReady(true); // Mark context as ready after attempting to fetch
-
-      const r = getAndStoreRefFromUrl();
+    // Ambil data ref dari localStorage
+    const r = localStorage.getItem("basetc_ref");
+    if (r && /^0x[0-9a-fA-F]{40}$/.test(r)) {
       setRefAddr(r);
+    }
 
+    // Fetch leaderboard
+    (async () => {
       setLbLoading(true);
       const rows = await fetchLeaderboard();
       setLb(rows);
@@ -159,7 +97,7 @@ export default function Profil() {
     })();
   }, []);
 
-  // ====== On-chain reads for achievements (unchanged from original)
+  // Semua hook `useReadContract` untuk membaca data dari blockchain tetap sama persis
   const { data: BASIC } = useReadContract({ address: rigNftAddress, abi: rigNftABI as any, functionName: "BASIC" });
   const { data: PRO } = useReadContract({ address: rigNftAddress, abi: rigNftABI as any, functionName: "PRO" });
   const { data: LEGEND } = useReadContract({ address: rigNftAddress, abi: rigNftABI as any, functionName: "LEGEND" });
@@ -174,14 +112,12 @@ export default function Profil() {
   const { data: isSupreme } = useReadContract({ address: gameCoreAddress, abi: gameCoreABI as any, functionName: "isSupreme", args: address ? [address] : undefined, query: { enabled: !!address }});
 
   const achievements: Achievement[] = [
-    // FIX: Explicitly cast count variables to bigint for comparison
     ...((countBasic as bigint)  > 0n ? [{ name: "Early Miner",  icon: "M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" }] : []),
     ...((countPro as bigint)    > 0n ? [{ name: "Pro Upgrader", icon: "M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-3.75-2.25M21 18l-3.75-2.25" }] : []),
     ...((countLegend as bigint) > 0n ? [{ name: "First Legend", icon: "M15.362 5.214A8.252 8.252 0 0112 21 8.25 8.25 0 016.038 7.048 8.287 8.287 0 009 9.6a8.983 8.983 0 013.362-3.797z" }] : []),
     ...(isSupreme ? [{ name: "Supreme", icon: "M10.5 6a7.5 7.5 0 100 15 7.5 7.5 0 000-15zM2.25 9h19.5" }] : []),
   ];
 
-  // ===== Invite data (unchanged from original)
   const { data: totalInvitesValid = 0 } = useReadContract({
     address: rigSaleAddress, abi: rigSaleABI as any, functionName: "inviteCountOf",
     args: address ? [address] : undefined, query: { enabled: !!address, select: (d) => Number(d) },
@@ -197,7 +133,6 @@ export default function Profil() {
       try {
         const r = await fetch(`/api/referral?inviter=${address}&detail=1`);
         const j = await r.json();
-        // Updated to handle 'list' key from the API
         if (j?.list && Array.isArray(j.list)) {
           setInvites(j.list.map((u: any): InvitedUser => ({
             fid: u?.invitee_fid ?? null,
@@ -210,23 +145,22 @@ export default function Profil() {
     })();
   }, [address]);
 
-  // ===== UI helpers (unchanged from original)
+  // Logika tampilan dan format data tidak berubah
   const shortAddr = address ? `${address.slice(0, 6)}…${address.slice(-4)}` : "—";
-  const displayName = fc.displayName || fc.username || (fc.fid ? `fid:${fc.fid}` : "Guest");
+  const displayName = fcUser?.displayName || fcUser?.username || (fcUser?.fid ? `fid:${fcUser.fid}` : "Guest");
 
   const copy = async (text: string) => {
     try { await navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1000); } catch {}
   };
 
   const inviteLink = useMemo(() => {
-    if (typeof window === "undefined") return "";
+    if (typeof window === "undefined" || !address) return "";
     const base = window.location.origin || "";
-    const fidQuery = fc.fid ? `fid=${fc.fid}` : "";
-    const refQuery = address ? `ref=${address}` : "";
-    const query = [fidQuery, refQuery].filter(Boolean).join("&");
-    return `${base}${query ? `?${query}`: ""}`;
-  }, [fc.fid, address]);
-  
+    const refQuery = `ref=${address}`;
+    const fidQuery = fcUser?.fid ? `&fid=${fcUser.fid}` : "";
+    return `${base}?${refQuery}${fidQuery}`;
+  }, [fcUser?.fid, address]);
+
   const prettyReward = (row: LbRow) => {
     const v = row.score ?? row.total_rewards ?? row.rewards ?? null;
     if (v === null || typeof v !== "number") return "-";
@@ -235,19 +169,19 @@ export default function Profil() {
 
   return (
     <div className="space-y-4 px-4 pt-4 pb-8">
-      {/* ===== Profile header (original UI, populated by robust fetcher) */}
+      {/* 1. Profile Header - Desain Asli */}
       <div className="flex items-center justify-between bg-neutral-800 rounded-lg p-3">
         <div className="flex items-center space-x-3">
           <div className="w-12 h-12 bg-neutral-700 rounded-full overflow-hidden flex items-center justify-center">
-            {fc.pfpUrl ? <Image src={fc.pfpUrl} alt="pfp" width={48} height={48} /> : <span className="text-xs text-neutral-400">PFP</span>}
+            {fcUser?.pfpUrl ? <Image src={fcUser.pfpUrl} alt="pfp" width={48} height={48} /> : <span className="text-xs text-neutral-400">PFP</span>}
           </div>
           <div>
             <div className="font-semibold text-sm md:text-base">
               {displayName}
-              {fc.username && <span className="text-xs text-neutral-400 ml-2">@{fc.username}</span>}
+              {fcUser?.username && <span className="text-xs text-neutral-400 ml-2">@{fcUser.username}</span>}
             </div>
             <div className="text-[11px] text-neutral-400">
-              {ctxReady ? (fc.fid ? <>FID: <b>{fc.fid}</b></> : "Not in Farcaster Mini App context") : "Loading context..."}
+              {fcLoading ? "Loading context..." : (fcUser?.fid ? <>FID: <b>{fcUser.fid}</b></> : "FID not available")}
             </div>
             {address && (
               <div className="text-xs md:text-sm text-neutral-400 flex items-center space-x-2">
@@ -257,7 +191,7 @@ export default function Profil() {
                 </button>
               </div>
             )}
-            {!!refAddr && (
+             {!!refAddr && (
               <div className="mt-1 inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-neutral-700 text-[10px]">
                 <span className="opacity-70">Referred By</span>
                 <span className="font-medium">{`${refAddr.slice(0,6)}…`}</span>
@@ -270,7 +204,7 @@ export default function Profil() {
         )}
       </div>
 
-      {/* ===== Statistics and Invites (original UI) */}
+       {/* 2. Statistics and Invites - Desain Asli */}
       <div className="bg-neutral-800 rounded-lg p-3 space-y-3">
         <h2 className="font-semibold text-sm md:text-base">Invites</h2>
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
@@ -309,7 +243,7 @@ export default function Profil() {
                     No recent invite data found.
                   </td></tr>
                 ) : (
-                  invites.slice(0, 5).map((u, i) => ( // Show recent 5
+                  invites.slice(0, 5).map((u, i) => (
                     <tr key={`${u.fid ?? "x"}-${i}`} className="border-t border-neutral-700">
                       <td className="px-2 py-1.5">{u.fid ?? "—"}</td>
                       <td className="px-2 py-1.5">
@@ -328,7 +262,7 @@ export default function Profil() {
         </div>
       </div>
 
-      {/* ===== Achievements (original UI) */}
+      {/* 3. Achievements - Desain Asli */}
       <div className="bg-neutral-800 rounded-lg p-3 space-y-2">
         <h2 className="font-semibold text-sm md:text-base">Achievements</h2>
         {achievements.length === 0 ? (
@@ -345,7 +279,7 @@ export default function Profil() {
         )}
       </div>
 
-      {/* ===== Leaderboard (original UI) */}
+       {/* 4. Leaderboard - Desain Asli */}
       <div className="bg-neutral-800 rounded-lg p-3 space-y-2">
         <h2 className="font-semibold text-sm md:text-base">Leaderboard</h2>
         {lbLoading ? (
@@ -380,5 +314,4 @@ export default function Profil() {
     </div>
   );
 }
-
 
