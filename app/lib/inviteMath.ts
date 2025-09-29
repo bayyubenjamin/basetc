@@ -1,17 +1,33 @@
-// Aturan: #1: 1 invite → +1; sampai total=10 → +1 tiap 2; >10 → +1 tiap 3
-export function maxClaimsFrom(totalInvites: number): number {
-  if (totalInvites <= 0) return 0;
-  if (totalInvites <= 10) {
-    return 1 + Math.floor(Math.max(0, totalInvites - 1) / 2);
+/**
+ * Menghitung jumlah maksimum reward yang bisa diklaim berdasarkan jumlah referral yang valid.
+ * Aturan perhitungan:
+ * - 1 s/d 10 referral pertama, setiap referral memberikan 2 reward (2x).
+ * - Referral ke-11 dan seterusnya, setiap referral memberikan 3 reward (3x).
+ *
+ * @param validInvites Jumlah total referral yang valid.
+ * @returns Jumlah total reward yang bisa diklaim.
+ */
+export function calculateMaxClaims(validInvites: number): number {
+  if (validInvites <= 0) {
+    return 0;
   }
-  return 5 + Math.floor((totalInvites - 10) / 3);
-}
 
-export function invitesNeededForNext(totalInvites: number, claimed: number): number {
-  const nowMax = maxClaimsFrom(totalInvites);
-  if (claimed < nowMax) return 0; // sudah boleh klaim
-  let t = totalInvites;
-  while (maxClaimsFrom(t) < claimed + 1) t++;
-  return t - totalInvites;
+  // Jika jumlah invite 10 atau kurang, kalikan langsung dengan 2.
+  if (validInvites <= 10) {
+    return validInvites * 2;
+  }
+
+  // Jika lebih dari 10, hitung secara terpisah.
+  // 10 invite pertama menghasilkan 10 * 2 = 20 reward.
+  const firstTenRewards = 20;
+  
+  // Sisa invite setelah 10 pertama.
+  const remainingInvites = validInvites - 10;
+  
+  // Sisa invite tersebut masing-masing menghasilkan 3 reward.
+  const subsequentRewards = remainingInvites * 3;
+  
+  // Total reward adalah jumlah dari kedua bagian.
+  return firstTenRewards + subsequentRewards;
 }
 

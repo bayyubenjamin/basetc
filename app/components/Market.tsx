@@ -4,8 +4,10 @@ import { FC, useState, useEffect, useCallback } from "react";
 import { formatEther } from "viem";
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 
-// Impor ABI dan alamat kontrak dari konfigurasi terpusat
-import { rigSaleABI, rigNftABI } from "../lib/abi/rigSale";
+// [FIX 1] Mengoreksi path impor untuk file ABI JSON.
+// Setiap ABI diimpor dari file .json-nya masing-masing.
+import rigSaleABI from "../lib/abi/rigSale.json";
+import rigNftABI from "../lib/abi/rigNft.json";
 import { rigSaleAddress, rigNftAddress } from "../lib/web3Config";
 import { calculateMaxClaims } from "../lib/inviteMath";
 
@@ -40,7 +42,7 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
   // Hook untuk menunggu konfirmasi transaksi di blockchain
   const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({ hash: txHash });
 
-  // [FIX 1] useEffect untuk mengambil statistik referral saat komponen dimuat atau wallet berubah
+  // useEffect untuk mengambil statistik referral saat komponen dimuat atau wallet berubah
   const fetchReferralStats = useCallback(async () => {
       if (address) {
           try {
@@ -59,7 +61,7 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
       fetchReferralStats();
   }, [fetchReferralStats]);
 
-  // [FIX 2] useEffect untuk menangani feedback setelah transaksi dikonfirmasi
+  // useEffect untuk menangani feedback setelah transaksi dikonfirmasi
   useEffect(() => {
       if (isConfirmed) {
           setMessage("Transaction confirmed successfully!");
@@ -72,7 +74,7 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
   // Kalkulasi jumlah klaim yang tersedia
   const availableClaims = calculateMaxClaims(referralStats.validReferrals) - referralStats.claimedRewards;
   
-  // === [FIX 3] Logika untuk "Claim Free Rig" diperbaiki sepenuhnya ===
+  // Logika untuk "Claim Free Rig"
   const handleClaimBasicFree = async () => {
     setMessage("");
     setTxHash(undefined);
@@ -84,10 +86,8 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
       const fidStr = localStorage.getItem("basetc_fid");
       if (!fidStr) throw new Error("Farcaster FID not found. Please open from a Farcaster client.");
       
-      // Ambil alamat inviter dari URL (disimpan di localStorage oleh page.tsx)
       const inviterAddr = localStorage.getItem("basetc_ref") || "0x0000000000000000000000000000000000000000";
 
-      // Langkah 1: Minta signature dari backend
       setMessage("Requesting signature from server...");
       const res = await fetch("/api/referral", {
         method: "POST", headers: { "content-type": "application/json" },
@@ -96,7 +96,6 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
       const sigData = await res.json();
       if (!res.ok || sigData.error) throw new Error(sigData.error || "Failed to get signature.");
 
-      // Langkah 2: Panggil fungsi smart contract dengan signature
       setMessage("Please confirm the transaction in your wallet...");
       const hash = await writeContractAsync({
         address: rigSaleAddress, abi: rigSaleABI, functionName: "claimFreeByFidSig",
@@ -105,7 +104,6 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
       setTxHash(hash);
       setMessage(`Transaction submitted! Waiting for confirmation...`);
 
-      // Langkah 3: Tandai referral sebagai 'valid' di backend
       await fetch("/api/referral", {
         method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify({ action: "mark-valid", invitee_fid: fidStr, invitee_wallet: address }),
@@ -117,7 +115,7 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
     }
   };
 
-  // === Fungsi-fungsi lain tidak diubah, hanya ditambahkan feedback transaksi ===
+  // Fungsi-fungsi lain tidak diubah
   const handleBuy = async (id: number, price?: bigint) => {
     setMessage('');
     setTxHash(undefined);
@@ -139,7 +137,7 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
   const handleBuyPro = () => handleBuy(1, proPrice);
   const handleBuySupreme = () => handleBuy(2, supremePrice);
 
-  // === [FIX 4] Fungsi baru untuk klaim reward dari referral ===
+  // Fungsi baru untuk klaim reward dari referral
   const handleClaimReferralReward = async () => {
     setMessage("");
     setTxHash(undefined);
@@ -147,8 +145,6 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
         if (!address) throw new Error("Please connect your wallet first.");
         if (availableClaims <= 0) throw new Error("You have no rewards to claim.");
         
-        // Asumsi ada fungsi `claimReferralRewards(uint256 amount)` di kontrak Anda.
-        // Ganti nama fungsi jika berbeda.
         setMessage("Please confirm reward claim in your wallet...");
         const hash = await writeContractAsync({
             address: rigSaleAddress, abi: rigSaleABI, functionName: "claimReferralRewards", args: [availableClaims],
@@ -156,8 +152,6 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
         setTxHash(hash);
         setMessage(`Claim transaction submitted! Waiting for confirmation...`);
 
-        // Update jumlah reward yang sudah diklaim di backend.
-        // Asumsi API referral di-extend untuk handle ini.
         await fetch("/api/referral", {
             method: "POST", headers: { "content-type": "application/json" },
             body: JSON.stringify({ inviter: address, inc: availableClaims }),
@@ -177,7 +171,6 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
         <p className="text-sm text-neutral-400">Buy, sell, or claim your mining rig.</p>
       </div>
       
-      {/* Pesan status untuk pengguna */}
       {message && (
         <div className={`p-3 rounded-md text-center text-sm ${isConfirmed ? 'bg-green-500/20 text-green-300' : 'bg-blue-500/20 text-blue-300'}`}>
           <p>{message}</p>
@@ -189,7 +182,6 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
         </div>
       )}
 
-      {/* [BARU] Card untuk klaim reward referral */}
       <div className="card bg-purple-800/20 border border-purple-600 rounded-lg p-4">
         <div className="flex justify-between items-center">
           <div>
@@ -206,7 +198,6 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
         </div>
       </div>
 
-      {/* Card untuk Free Mint */}
       <div className="card bg-neutral-800/50 rounded-lg p-4">
         <div className="flex items-center space-x-4">
           <img src="/img/basic.png" alt="Basic Rig" className="w-20 h-20" />
@@ -227,9 +218,7 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
         </button>
       </div>
 
-      {/* Card untuk pembelian (tidak diubah) */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* Basic */}
           <div className="card bg-neutral-800/50 rounded-lg p-4">
               <img src="/img/basic.png" className="w-full" />
               <div className="font-bold mt-2">Basic Rig</div>
@@ -238,7 +227,6 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
                   {isConfirming ? 'Pending...' : `Buy (${basicPrice ? formatEther(basicPrice) : '...'} ETH)`}
               </button>
           </div>
-          {/* Pro */}
           <div className="card bg-neutral-800/50 rounded-lg p-4">
               <img src="/img/pro.png" className="w-full" />
               <div className="font-bold mt-2">Pro Rig</div>
@@ -247,7 +235,6 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
                   {isConfirming ? 'Pending...' : `Buy (${proPrice ? formatEther(proPrice) : '...'} ETH)`}
               </button>
           </div>
-          {/* Supreme */}
           <div className="card bg-neutral-800/50 rounded-lg p-4">
               <img src="/img/supreme.png" className="w-full" />
               <div className="font-bold mt-2">Supreme Rig</div>
@@ -262,4 +249,5 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
 };
 
 export default Market;
+
 
