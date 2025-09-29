@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { privateKeyToAccount } from "viem/accounts";
-// [FIX] Mengimpor `splitSignature` dari path spesifik untuk mengatasi masalah build.
-import { splitSignature } from "viem/utils"; 
 import { rigSaleAddress } from "../../lib/web3Config";
+
+// [FIX] Menggunakan 'require' untuk memastikan 'splitSignature' berhasil diimpor di lingkungan build Vercel.
+const { splitSignature } = require("viem");
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,7 +30,8 @@ const types = {
     { name: "fid", type: "uint256" },
     { name: "to", type: "address" },
     { name: "inviter", type: "address" },
-    { name: "deadline", type: "uint264" },
+    // [FIX] Tipe data deadline diperbaiki ke uint256 sesuai standar EVM.
+    { name: "deadline", type: "uint256" },
   ],
 } as const;
 
@@ -41,7 +43,6 @@ export async function GET(req: NextRequest) {
 
     const supabase = getSupabase();
 
-    // Ambil jumlah reward yang sudah diklaim
     const { data: rewardsData, error: rewardsError } = await supabase
         .from('referral_claimed_rewards')
         .select('count')
@@ -50,7 +51,6 @@ export async function GET(req: NextRequest) {
 
     if (rewardsError) return NextResponse.json({ error: rewardsError.message }, { status: 500 });
     
-    // Ambil jumlah referral yang valid
     const { count: validReferrals, error: referralsError } = await supabase
         .from('referrals')
         .select('*', { count: 'exact', head: true })
@@ -65,7 +65,7 @@ export async function GET(req: NextRequest) {
     });
 }
 
-// POST handler (diperbaiki)
+// POST handler (tidak diubah)
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   const supabase = getSupabase();
