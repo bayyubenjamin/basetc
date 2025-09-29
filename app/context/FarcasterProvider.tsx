@@ -1,10 +1,9 @@
 // app/context/FarcasterProvider.tsx
 //
-// Alasan Penulisan Ulang: Mengatasi masalah "stuck on splash screen".
-// Provider ini sekarang hanya bertanggung jawab untuk satu hal: membaca data mentah
-// dari Farcaster Mini App SDK secepat mungkin dan menyediakannya ke aplikasi.
-// Semua logika fallback, fetch API, dan penyimpanan state dipindahkan ke `page.tsx`
-// untuk alur data yang lebih jelas dan mencegah race condition.
+// Alasan Perbaikan Definitif: Memperbaiki build error "getContext does not exist"
+// dan masalah "stuck di splash screen". Menggunakan `await sdk.context` yang benar
+// dan memastikan flag `ready` selalu di-set ke `true` setelah inisialisasi selesai,
+// baik berhasil maupun gagal.
 'use client';
 
 import {
@@ -43,15 +42,16 @@ export function FarcasterProvider({ children }: { children: ReactNode }) {
         
         // Polling untuk mendapatkan konteks dengan cepat
         for (let i = 0; i < 20; i++) { // Coba selama 2 detik
-          const ctx = sdk.getContext();
-          if (ctx.fid) {
+          // --- FIX DI SINI: Menggunakan `await sdk.context` yang benar ---
+          const ctx = await sdk.context;
+          if (ctx?.user?.fid) {
             if (!isCancelled) {
               setContext({
                 user: {
-                  fid: ctx.fid,
-                  username: ctx.username,
-                  displayName: ctx.displayName,
-                  pfpUrl: ctx.pfpUrl,
+                  fid: ctx.user.fid,
+                  username: ctx.user.username,
+                  displayName: ctx.user.displayName,
+                  pfpUrl: ctx.user.pfpUrl,
                 },
                 theme: ctx.theme,
                 colorScheme: ctx.colorScheme,
@@ -67,13 +67,13 @@ export function FarcasterProvider({ children }: { children: ReactNode }) {
         
         // Jika setelah polling tetap tidak ada, set ready ke true
         if (!isCancelled) {
-            setContext({ ready: true });
+            setContext({ ready: true, user: undefined });
         }
 
       } catch (error) {
         console.warn('Farcaster SDK not found or failed, running in standalone mode.', error);
         if (!isCancelled) {
-          setContext({ ready: true }); // Tandai siap bahkan jika SDK gagal
+          setContext({ ready: true, user: undefined }); // Tandai siap bahkan jika SDK gagal
         }
       }
     };
