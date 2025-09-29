@@ -1,7 +1,8 @@
 // app/lib/web3Config.ts
 //
-// Alasan: Mengkonsolidasikan semua konfigurasi terkait web3 (alamat, ABI, dan config Wagmi)
-// dalam satu file yang mudah diakses dan diekspor dengan benar untuk digunakan oleh Providers.tsx.
+// Alasan Perbaikan Final: Memperbaiki build error "is not exported".
+// Menambahkan kembali ekspor `BASE_CHAIN_ID` dan `CFG` yang dibutuhkan oleh
+// komponen lain (Monitoring, Rakit, API Routes) yang rusak akibat refactoring sebelumnya.
 import { http, createConfig } from "wagmi";
 import { baseSepolia } from "wagmi/chains";
 import farcaster from "@farcaster/miniapp-wagmi-connector";
@@ -49,8 +50,6 @@ export {
   rewardsVaultABI, treasuryVaultABI, referralABI,
 };
 
-
-// --- INTI PERBAIKAN ---
 // Konfigurasi Wagmi dibuat dan diekspor dari sini
 export const config = createConfig({
   chains: [baseSepolia],
@@ -59,3 +58,9 @@ export const config = createConfig({
     [baseSepolia.id]: http(),
   },
 });
+
+// --- FIX DI SINI ---
+// Menambahkan kembali ekspor yang dibutuhkan oleh komponen lain
+export const BASE_CHAIN_ID = CHAIN.id;
+export const CFG = CHAIN;
+
