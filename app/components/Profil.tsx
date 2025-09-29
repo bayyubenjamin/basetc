@@ -3,22 +3,59 @@
 import { useEffect, useMemo, useState } from "react";
 import type { FC } from "react";
 import Image from "next/image";
-import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
-import { baseSepolia } from "viem/chains";
-import { baseTcAddress, baseTcABI, rigNftAddress, rigNftABI, gameCoreAddress, gameCoreABI, chainId as BASE_CHAIN_ID } from "../lib/web3Config";
+import {
+  useAccount,
+  useReadContract,
+} from "wagmi";
+import {
+  baseTcAddress,
+  baseTcABI,
+  rigNftAddress,
+  rigNftABI,
+  gameCoreAddress,
+  gameCoreABI,
+  rigSaleAddress,
+  rigSaleABI,
+} from "../lib/web3Config";
 import { formatEther } from "viem";
 
-// Types (from original file)
 type Achievement = { name: string; icon: string };
-type LbRow = { fid?: number | null; username?: string | null; display_name?: string | null; score?: number | null; rewards?: number | null; total_rewards?: number | null; hashrate?: number | null; rank?: number | null; };
-type InviteRow = { inviter?: string | null; invitee_fid?: number | null; invitee_wallet?: string | null; status?: "pending" | "valid" | string | null; created_at?: string | null; };
+type LbRow = {
+  fid?: number | null;
+  username?: string | null;
+  display_name?: string | null;
+  score?: number | null;
+  rewards?: number | null;
+  total_rewards?: number | null;
+  hashrate?: number | null;
+  rank?: number | null;
+};
 
-// UI Helpers (from original file)
-const Icon: FC<{ path: string; className?: string }> = ({ path, className = "w-5 h-5" }) => ( <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} className={className}><path strokeLinecap="round" strokeLinejoin="round" d={path} /></svg> );
-const StatCard: FC<{ title: string; value: string }> = ({ title, value }) => ( <div className="flex-1 bg-neutral-800 rounded-lg p-3 text-center text-xs md:text-sm"><div className="text-lg font-semibold">{value}</div><div className="text-neutral-400">{title}</div></div> );
+type InvitedUser = {
+  fid: number | null;
+  wallet?: string | null;
+  username?: string | null;
+  display_name?: string | null;
+  pfp_url?: string | null;
+  status?: "valid" | "pending";
+};
+
+const Icon: FC<{ path: string; className?: string }> = ({ path, className = "w-5 h-5" }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} className={className}>
+    <path strokeLinecap="round" strokeLinejoin="round" d={path} />
+  </svg>
+);
+
+const StatCard: FC<{ title: string; value: string }> = ({ title, value }) => (
+  <div className="flex-1 bg-neutral-800 rounded-lg p-3 text-center text-xs md:text-sm">
+    <div className="text-lg font-semibold">{value}</div>
+    <div className="text-neutral-400">{title}</div>
+  </div>
+);
 
 /**
  * Robustly gets Farcaster user profile with retry logic and fallbacks.
+ * This function is updated to handle the race condition.
  */
 async function getFarcasterProfile(): Promise<{
   fid: number | null; username: string | null; displayName: string | null; pfpUrl: string | null;
@@ -37,7 +74,8 @@ async function getFarcasterProfile(): Promise<{
     };
 
     let ctx: any = null;
-    for (let i = 0; i < 6; i++) { // Retry for ~3 seconds
+    // Retry for ~3 seconds to wait for SDK injection
+    for (let i = 0; i < 6; i++) {
       ctx = await tryGet();
       if (ctx?.user?.fid) break;
       await new Promise(r => setTimeout(r, 500));
@@ -62,11 +100,26 @@ async function getFarcasterProfile(): Promise<{
 
     return profile;
   } catch {
+    // Return empty profile on any error
     return { fid: null, username: null, displayName: null, pfpUrl: null };
   }
 }
 
-// Fetch Leaderboard (from original file, unchanged)
+function getAndStoreRefFromUrl(): string | null {
+  try {
+    const url = new URL(window.location.href);
+    const urlRef = url.searchParams.get("ref");
+    const storedRef = localStorage.getItem("basetc_ref");
+    
+    const finalRef = urlRef || storedRef;
+    if (finalRef && /^0x[0-9a-fA-F]{40}$/.test(finalRef)) {
+      if (urlRef) localStorage.setItem("basetc_ref", urlRef);
+      return finalRef;
+    }
+  } catch {}
+  return null;
+}
+
 async function fetchLeaderboard(): Promise<LbRow[]> {
   try {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -74,29 +127,30 @@ async function fetchLeaderboard(): Promise<LbRow[]> {
     if (!url || !key) return [];
     const { createClient } = await import("@supabase/supabase-js");
     const supabase = createClient(url, key, { auth: { persistSession: false } });
-    const { data } = await supabase.from("leaderboard").select("*").order("score", { ascending: false }).limit(10);
+    const { data, error } = await supabase.from("leaderboard").select("*").order("score", { ascending: false }).limit(10);
+    if (error) console.warn("[leaderboard] supabase error:", error.message);
     return (data as LbRow[]) || [];
-  } catch (e) { return []; }
+  } catch (e) { console.warn("[leaderboard] load failed:", e); return []; }
 }
 
 export default function Profil() {
   const { address } = useAccount();
   const [fc, setFc] = useState<{ fid: number | null; username: string | null; displayName: string | null; pfpUrl: string | null; }>({ fid: null, username: null, displayName: null, pfpUrl: null });
   const [ctxReady, setCtxReady] = useState(false);
-  const [msg, setMsg] = useState<string>("");
   const [copied, setCopied] = useState(false);
+  const [refAddr, setRefAddr] = useState<string | null>(null);
   const [lb, setLb] = useState<LbRow[]>([]);
   const [lbLoading, setLbLoading] = useState<boolean>(true);
-  const [invList, setInvList] = useState<InviteRow[]>([]);
-  const [invLoading, setInvLoading] = useState<boolean>(true);
 
-  // Initialization effect
   useEffect(() => {
     (async () => {
       setCtxReady(false);
       const profile = await getFarcasterProfile();
       setFc(profile);
-      setCtxReady(true);
+      setCtxReady(true); // Mark context as ready after attempting to fetch
+
+      const r = getAndStoreRefFromUrl();
+      setRefAddr(r);
 
       setLbLoading(true);
       const rows = await fetchLeaderboard();
@@ -105,15 +159,19 @@ export default function Profil() {
     })();
   }, []);
 
-  // Blockchain reads (from original file, unchanged)
-  const { data: countBasic = 0n } = useReadContract({ address: rigNftAddress, abi: rigNftABI as any, functionName: "balanceOf", args: address ? [address, 1n] : undefined, query: { enabled: !!address } });
-  const { data: countPro = 0n } = useReadContract({ address: rigNftAddress, abi: rigNftABI as any, functionName: "balanceOf", args: address ? [address, 2n] : undefined, query: { enabled: !!address } });
-  const { data: countLegend = 0n } = useReadContract({ address: rigNftAddress, abi: rigNftABI as any, functionName: "balanceOf", args: address ? [address, 3n] : undefined, query: { enabled: !!address } });
-  const { data: baseBal } = useReadContract({ address: baseTcAddress, abi: baseTcABI as any, functionName: "balanceOf", args: address ? [address] : undefined, query: { enabled: !!address }});
-  const { data: hashrate = 0n } = useReadContract({ address: gameCoreAddress, abi: gameCoreABI as any, functionName: "getHashrate", args: address ? [address] : undefined, query: { enabled: !!address } });
-  const { data: isSupreme = false } = useReadContract({ address: gameCoreAddress, abi: gameCoreABI as any, functionName: "isSupreme", args: address ? [address] : undefined, query: { enabled: !!address }});
+  // ====== On-chain reads for achievements (unchanged from original)
+  const { data: BASIC } = useReadContract({ address: rigNftAddress, abi: rigNftABI as any, functionName: "BASIC" });
+  const { data: PRO } = useReadContract({ address: rigNftAddress, abi: rigNftABI as any, functionName: "PRO" });
+  const { data: LEGEND } = useReadContract({ address: rigNftAddress, abi: rigNftABI as any, functionName: "LEGEND" });
+
+  const { data: countBasic = 0n } = useReadContract({ address: rigNftAddress, abi: rigNftABI as any, functionName: "balanceOf", args: address && BASIC ? [address, BASIC] : undefined, query: { enabled: !!(address && BASIC) }});
+  const { data: countPro = 0n } = useReadContract({ address: rigNftAddress, abi: rigNftABI as any, functionName: "balanceOf", args: address && PRO ? [address, PRO] : undefined, query: { enabled: !!(address && PRO) }});
+  const { data: countLegend = 0n } = useReadContract({ address: rigNftAddress, abi: rigNftABI as any, functionName: "balanceOf", args: address && LEGEND ? [address, LEGEND] : undefined, query: { enabled: !!(address && LEGEND) }});
   
-  const baseReadable = useMemo(() => baseBal ? formatEther(baseBal) : "0.0", [baseBal]);
+  const { data: baseBal } = useReadContract({ address: baseTcAddress, abi: baseTcABI as any, functionName: "balanceOf", args: address ? [address] : undefined, query: { enabled: !!address }});
+  const baseReadable = useMemo(() => baseBal ? formatEther(baseBal as bigint) : "0.000", [baseBal]);
+
+  const { data: isSupreme } = useReadContract({ address: gameCoreAddress, abi: gameCoreABI as any, functionName: "isSupreme", args: address ? [address] : undefined, query: { enabled: !!address }});
 
   const achievements: Achievement[] = [
     ...(countBasic  > 0n ? [{ name: "Early Miner",  icon: "M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" }] : []),
@@ -121,80 +179,205 @@ export default function Profil() {
     ...(countLegend > 0n ? [{ name: "First Legend", icon: "M15.362 5.214A8.252 8.252 0 0112 21 8.25 8.25 0 016.038 7.048 8.287 8.287 0 009 9.6a8.983 8.983 0 013.362-3.797z" }] : []),
     ...(isSupreme ? [{ name: "Supreme", icon: "M10.5 6a7.5 7.5 0 100 15 7.5 7.5 0 000-15zM2.25 9h19.5" }] : []),
   ];
-  
-  const [inviteValidCount, setInviteValidCount] = useState<number>(0);
-  const inviteLink = useMemo(() => {
-    const base = typeof window !== "undefined" ? window.location.origin : "https://basetc.vercel.app";
-    const fid = fc.fid ? `fid=${fc.fid}` : "";
-    const ref = address ? `ref=${address}` : "";
-    const qs = [fid, ref].filter(Boolean).join("&");
-    return `${base}/?${qs}`;
-  }, [fc.fid, address]);
 
-  // Fetch referral list
+  // ===== Invite data (unchanged from original)
+  const { data: totalInvitesValid = 0 } = useReadContract({
+    address: rigSaleAddress, abi: rigSaleABI as any, functionName: "inviteCountOf",
+    args: address ? [address] : undefined, query: { enabled: !!address, select: (d) => Number(d) },
+  });
+
+  const [invites, setInvites] = useState<InvitedUser[]>([]);
+  const [loadingInvites, setLoadingInvites] = useState(false);
+
   useEffect(() => {
-    if (!address) { setInvList([]); setInviteValidCount(0); return; }
-    setInvLoading(true);
-    fetch(`/api/referral?inviter=${address}&detail=1`)
-      .then(r => r.json())
-      .then(d => {
-        const list: InviteRow[] = d?.list ?? [];
-        setInvList(list);
-        setInviteValidCount(list.filter(x => x.status === "valid").length);
-      })
-      .finally(() => setInvLoading(false));
+    if (!address) return;
+    (async () => {
+      setLoadingInvites(true);
+      try {
+        const r = await fetch(`/api/referral?inviter=${address}&detail=1`);
+        const j = await r.json();
+        // Updated to handle 'list' key from the API
+        if (j?.list && Array.isArray(j.list)) {
+          setInvites(j.list.map((u: any): InvitedUser => ({
+            fid: u?.invitee_fid ?? null,
+            wallet: u?.invitee_wallet ?? null,
+            status: u?.status === "valid" ? "valid" : "pending",
+          })));
+        } else { setInvites([]); }
+      } catch { setInvites([]);
+      } finally { setLoadingInvites(false); }
+    })();
   }, [address]);
 
-  const copyText = (text: string) => {
-    navigator.clipboard.writeText(text).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    });
-  };
-
-  const shortAddr = address ? `${address.slice(0, 6)}…${address.slice(-4)}` : "Not Connected";
+  // ===== UI helpers (unchanged from original)
+  const shortAddr = address ? `${address.slice(0, 6)}…${address.slice(-4)}` : "—";
   const displayName = fc.displayName || fc.username || (fc.fid ? `fid:${fc.fid}` : "Guest");
 
-  // Render logic...
+  const copy = async (text: string) => {
+    try { await navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1000); } catch {}
+  };
+
+  const inviteLink = useMemo(() => {
+    if (typeof window === "undefined") return "";
+    const base = window.location.origin || "";
+    const fidQuery = fc.fid ? `fid=${fc.fid}` : "";
+    const refQuery = address ? `ref=${address}` : "";
+    const query = [fidQuery, refQuery].filter(Boolean).join("&");
+    return `${base}${query ? `?${query}`: ""}`;
+  }, [fc.fid, address]);
+  
+  const prettyReward = (row: LbRow) => {
+    const v = row.score ?? row.total_rewards ?? row.rewards ?? null;
+    if (v === null || typeof v !== "number") return "-";
+    return `${v.toFixed(3)} $BaseTC`;
+  };
+
   return (
     <div className="space-y-4 px-4 pt-4 pb-8">
+      {/* ===== Profile header (original UI, populated by robust fetcher) */}
       <div className="flex items-center justify-between bg-neutral-800 rounded-lg p-3">
         <div className="flex items-center space-x-3">
-          <div className="w-12 h-12 bg-neutral-700 rounded-full overflow-hidden flex-shrink-0">
-            {fc.pfpUrl ? <Image src={fc.pfpUrl} alt="pfp" width={48} height={48} /> : null}
+          <div className="w-12 h-12 bg-neutral-700 rounded-full overflow-hidden flex items-center justify-center">
+            {fc.pfpUrl ? <Image src={fc.pfpUrl} alt="pfp" width={48} height={48} /> : <span className="text-xs text-neutral-400">PFP</span>}
           </div>
           <div>
-            <div className="font-semibold text-sm md:text-base">{displayName}</div>
-            <div className="text-xs md:text-sm text-neutral-400 flex items-center space-x-2">
-              <span className="truncate">{shortAddr}</span>
-              {address && <button onClick={() => copyText(address)} className="px-2 py-0.5 rounded-md bg-neutral-700 hover:bg-neutral-600 text-[10px]">{copied ? "Copied!" : "Copy"}</button>}
+            <div className="font-semibold text-sm md:text-base">
+              {displayName}
+              {fc.username && <span className="text-xs text-neutral-400 ml-2">@{fc.username}</span>}
             </div>
-            {ctxReady && !fc.fid && (
-              <div className="mt-1 text-[10px] text-amber-400">Not in Farcaster Mini App context.</div>
+            <div className="text-[11px] text-neutral-400">
+              {ctxReady ? (fc.fid ? <>FID: <b>{fc.fid}</b></> : "Not in Farcaster Mini App context") : "Loading context..."}
+            </div>
+            {address && (
+              <div className="text-xs md:text-sm text-neutral-400 flex items-center space-x-2">
+                <span>{shortAddr}</span>
+                <button onClick={() => copy(address)} className="px-2 py-0.5 rounded-md bg-neutral-700 hover:bg-neutral-600 text-[10px]" title="Copy address">
+                  {copied ? "Copied!" : "Copy"}
+                </button>
+              </div>
+            )}
+            {!!refAddr && (
+              <div className="mt-1 inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-neutral-700 text-[10px]">
+                <span className="opacity-70">Referred By</span>
+                <span className="font-medium">{`${refAddr.slice(0,6)}…`}</span>
+              </div>
             )}
           </div>
         </div>
+        {isSupreme && (
+          <div className="px-2 py-1 rounded-md text-[10px] bg-purple-700/30 border border-purple-600/40">Supreme</div>
+        )}
       </div>
 
+      {/* ===== Statistics and Invites (original UI) */}
       <div className="bg-neutral-800 rounded-lg p-3 space-y-3">
-        <h2 className="font-semibold text-sm">Statistics</h2>
-        <div className="flex space-x-2">
-          <StatCard title="Invites (Valid)" value={String(inviteValidCount)} />
-          <StatCard title="Token Balance" value={`${Number(baseReadable).toFixed(3)} $BaseTC`} />
-          <StatCard title="Hashrate" value={String(hashrate)} />
+        <h2 className="font-semibold text-sm md:text-base">Invites</h2>
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+            <div className="flex gap-2 w-full">
+                <div className="flex-1">
+                    <div className="text-[11px] text-neutral-400">Total Invited (valid)</div>
+                    <div className="text-lg font-semibold">{totalInvitesValid}</div>
+                </div>
+                <div className="flex-1">
+                    <div className="text-[11px] text-neutral-400">Your $BaseTC</div>
+                    <div className="text-lg font-semibold">{Number(baseReadable).toLocaleString()}</div>
+                </div>
+            </div>
+            <div className="flex items-center gap-2">
+                <input readOnly value={inviteLink} className="bg-neutral-900 border border-neutral-700 rounded-md px-2 py-1 text-xs w-full md:w-[260px]" />
+                <button disabled={!inviteLink} onClick={() => inviteLink && copy(inviteLink)} className="px-3 py-1.5 text-xs rounded-md bg-neutral-700 hover:bg-neutral-600 disabled:opacity-50">
+                    {copied ? "Copied!" : "Copy Link"}
+                </button>
+            </div>
         </div>
-        <div className="text-xs mt-2">
-          <div className="font-medium mb-1">Your Invite Link</div>
-          <div className="flex items-center gap-2">
-            <input readOnly value={inviteLink} className="flex-1 truncate px-2 py-1 rounded bg-neutral-900 border border-neutral-700 text-neutral-300" />
-            <button onClick={() => copyText(inviteLink)} className="px-2 py-1 rounded-md bg-neutral-700 hover:bg-neutral-600 text-[11px]">{copied ? "Copied!" : "Copy"}</button>
+        <div className="space-y-2">
+          <div className="text-xs text-neutral-400">Invited Users (recent pending/valid)</div>
+          <div className="overflow-hidden rounded-md border border-neutral-700">
+            <table className="w-full text-xs">
+              <thead className="bg-neutral-900 text-neutral-400">
+                <tr>
+                  <th className="text-left px-2 py-1.5">User (FID)</th>
+                  <th className="text-left px-2 py-1.5">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loadingInvites ? (
+                  <tr><td className="px-2 py-2 text-neutral-500" colSpan={2}>Loading…</td></tr>
+                ) : invites.length === 0 ? (
+                  <tr><td className="px-2 py-2 text-neutral-500" colSpan={2}>
+                    No recent invite data found.
+                  </td></tr>
+                ) : (
+                  invites.slice(0, 5).map((u, i) => ( // Show recent 5
+                    <tr key={`${u.fid ?? "x"}-${i}`} className="border-t border-neutral-700">
+                      <td className="px-2 py-1.5">{u.fid ?? "—"}</td>
+                      <td className="px-2 py-1.5">
+                        {u.status === "valid" ? (
+                          <span className="px-2 py-0.5 rounded bg-green-500/20 text-green-300 text-[10px]">valid</span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded bg-yellow-500/20 text-yellow-300 text-[10px]">pending</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
-      
-      {/* Other sections like Achievements, Leaderboard, etc. remain the same as the original file */}
-      {/* ... */}
+
+      {/* ===== Achievements (original UI) */}
+      <div className="bg-neutral-800 rounded-lg p-3 space-y-2">
+        <h2 className="font-semibold text-sm md:text-base">Achievements</h2>
+        {achievements.length === 0 ? (
+          <div className="text-xs text-neutral-500">No achievements yet…</div>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {achievements.map((ach) => (
+              <div key={ach.name} className="flex items-center space-x-1 bg-neutral-900 rounded-md px-2 py-1 text-xs">
+                <Icon path={ach.icon} className="w-4 h-4 text-yellow-400" />
+                <span>{ach.name}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ===== Leaderboard (original UI) */}
+      <div className="bg-neutral-800 rounded-lg p-3 space-y-2">
+        <h2 className="font-semibold text-sm md:text-base">Leaderboard</h2>
+        {lbLoading ? (
+          <div className="text-xs text-neutral-500">Loading…</div>
+        ) : lb.length === 0 ? (
+          <div className="text-xs text-neutral-500">No data yet…</div>
+        ) : (
+          <div className="overflow-hidden rounded-md border border-neutral-700">
+            <table className="w-full text-xs">
+              <thead className="bg-neutral-900 text-neutral-400">
+                <tr>
+                  <th className="text-left px-2 py-1.5">#</th>
+                  <th className="text-left px-2 py-1.5">User</th>
+                  <th className="text-right px-2 py-1.5">Reward/Score</th>
+                  <th className="text-right px-2 py-1.5">Hashrate</th>
+                </tr>
+              </thead>
+              <tbody>
+                {lb.map((row, i) => (
+                  <tr key={`${row.fid ?? "x"}-${i}`} className="border-t border-neutral-700">
+                    <td className="px-2 py-1.5">{row.rank ?? i + 1}</td>
+                    <td className="px-2 py-1.5">{row.display_name || row.username || (row.fid ? `fid:${row.fid}` : "—")}</td>
+                    <td className="px-2 py-1.5 text-right">{prettyReward(row)}</td>
+                    <td className="px-2 py-1.5 text-right">{typeof row.hashrate === "number" ? `${row.hashrate}` : "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
+
 
