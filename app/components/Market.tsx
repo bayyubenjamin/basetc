@@ -39,7 +39,7 @@ export default function Market() {
     } catch {}
   }, []);
 
-  // Contract Reads (from original file, unchanged)
+  // Contract Reads
   const { data: BASIC = 1n } = useReadContract({ address: rigNftAddress, abi: rigNftABI as any, functionName: "BASIC" });
   const { data: PRO = 2n } = useReadContract({ address: rigNftAddress, abi: rigNftABI as any, functionName: "PRO" });
   const { data: LEGEND = 3n } = useReadContract({ address: rigNftAddress, abi: rigNftABI as any, functionName: "LEGEND" });
@@ -146,12 +146,12 @@ export default function Market() {
               <div className="flex-1">
                 <div className="flex items-baseline justify-between">
                   <h3 className="font-semibold">{tier.name}</h3>
-                  <span className="text-sm text-neutral-400">{isFree ? "FREE" : (price ? `${formatEther(price)} ETH` : 'N/A')}</span>
+                  <span className="text-sm text-neutral-400">{isFree ? "FREE" : (price ? `${formatEther(price as bigint)} ETH` : 'N/A')}</span>
                 </div>
                 <p className="text-xs text-neutral-400 pt-0.5">{tier.description}</p>
               </div>
               <button
-                onClick={() => isFree ? handleClaimBasicFree() : handleBuy(id!, price!)}
+                onClick={() => isFree ? handleClaimBasicFree() : handleBuy(id!, price as bigint)}
                 disabled={buttonDisabled}
                 className="px-4 py-2 text-sm rounded-md bg-blue-600 hover:bg-blue-500 text-white disabled:bg-neutral-700 disabled:text-neutral-500 disabled:cursor-not-allowed"
               >
@@ -165,4 +165,5 @@ export default function Market() {
     </div>
   );
 }
+
 
