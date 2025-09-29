@@ -1,15 +1,23 @@
+// app/api/referral/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
-// --- Supabase client (service role, server-only)
-const supabase = createClient(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE!
-);
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+export const revalidate = 0;
 
-// Helpers
+// --- Lazy init Supabase biar gak crash waktu build
+function getSupabase(): SupabaseClient | null {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE;
+  if (!url || !key) return null;
+  return createClient(url, key);
+}
+
 async function getClaimed(inviter: string): Promise<number> {
-  const { data, error } = await supabase
+  const sp = getSupabase();
+  if (!sp) return 0; // fallback aman kalau env belum siap
+  const { data, error } = await sp
     .from("invite_claims")
     .select("claimed")
     .eq("inviter", inviter.toLowerCase())
@@ -21,20 +29,23 @@ async function getClaimed(inviter: string): Promise<number> {
   return data?.claimed ?? 0;
 }
 
-async function incClaimed(inviter: string, inc = 1): Promise<number> {
+async function incClaimed(inviter: string, inc = 1): Promise<{ ok: boolean; claimedRewards?: number; error?: string; }> {
+  const sp = getSupabase();
+  if (!sp) return { ok: false, error: "SUPABASE_NOT_CONFIGURED" };
   const addr = inviter.toLowerCase();
-  const existing = await getClaimed(addr);
-  const next = existing + (Number(inc) || 0);
-  const { error } = await supabase
+  const prev = await getClaimed(addr);
+  const next = prev + (Number(inc) || 0);
+  const { error } = await sp
     .from("invite_claims")
     .upsert({ inviter: addr, claimed: next }, { onConflict: "inviter" });
   if (error) {
     console.error("supabase incClaimed error:", error);
-    throw new Error("DB error");
+    return { ok: false, error: "DB_ERROR" };
   }
-  return next;
+  return { ok: true, claimedRewards: next };
 }
 
+// GET /api/referral?inviter=0x...
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const inviter = (searchParams.get("inviter") || "").trim();
@@ -45,41 +56,36 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ claimedRewards });
 }
 
-// ====== POST: increment claimed OR sign free-mint ======
+// POST /api/referral
+// 1) { inviter, inc } -> increment claimed
+// 2) { mode: "free-sign", fid, to, inviter } -> stub signer EIP-712 (isi nanti)
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
-  // 1) increment claimed: { inviter, inc }
+
+  // increment claimed
   if (body?.inviter && body?.inc) {
-    const next = await incClaimed(body.inviter, body.inc);
-    return NextResponse.json({ ok: true, claimedRewards: next });
+    const res = await incClaimed(body.inviter, body.inc);
+    if (!res.ok) {
+      // kalau supabase belum diset, balikin pesan jelas (tanpa bikin build error)
+      return NextResponse.json(res, { status: 500 });
+    }
+    return NextResponse.json({ ok: true, claimedRewards: res.claimedRewards });
   }
 
-  // 2) (optional) sign free-mint user baru via EIP-712:
-  // body: { mode: "free-sign", fid, to, inviter }
+  // stub signer EIP-712 (lengkapi nanti)
   if (body?.mode === "free-sign") {
     const { fid, to, inviter } = body;
     if (!fid || !to) {
       return NextResponse.json({ error: "missing fid/to" }, { status: 400 });
     }
-
-    // TODO: SESUAIKAN typed-data dgn kontrakmu.
-    // Kamu perlu tahu "name", "version", chainId, verifyingContract, dan struct types.
-    // Di bawah ini hanya contoh *placeholder* struktur payload.
-    // Lengkapi lalu tandatangani pakai private key signer (FID_SIGNER_PK) di server.
-    const deadline = Math.floor(Date.now() / 1000) + 3600; // 1 jam
-    const payload = {
-      fid: String(fid),
+    const deadline = Math.floor(Date.now() / 1000) + 3600;
+    // TODO: isi domain, types, dan signing pakai FID_SIGNER_PK
+    return NextResponse.json({
+      fid,
       to,
       inviter: inviter || "0x0000000000000000000000000000000000000000",
-      deadline
-    };
-
-    // Contoh balikan (tanpa tanda tangan dulu):
-    // Setelah kamu isi EIP-712 real, balikan { v,r,s } sesuai.
-    return NextResponse.json({
-      ...payload,
-      // v,r,s: "ISI_DARI_SIGNER",
-      note: "Isi proses EIP-712 signing sesuai kontrak RigSaleFlexible kamu."
+      deadline,
+      note: "Signer EIP-712 belum diaktifkan. Lengkapi domain/types+signer lalu kirim v,r,s.",
     });
   }
 
