@@ -7,78 +7,16 @@ import Monitoring from "./components/Monitoring";
 import Rakit from "./components/Rakit";
 import Market from "./components/Market";
 import Profil from "./components/Profil";
-import { useFarcaster } from "./context/FarcasterProvider"; // Import hook terpusat
+import { useFarcaster } from "./context/FarcasterProvider";
+import FidInput from "./components/FidInput";
 
 const DEFAULT_TAB: TabName = "monitoring";
 const TAB_KEY = "basetc_active_tab";
 
-export default function Page() {
+function MainApp() {
   const [activeTab, setActiveTab] = useState<TabName>(DEFAULT_TAB);
   const { address } = useAccount();
-  
-  // INTI PERBAIKAN: Menggunakan FID dan data user dari context.
-  // Tidak ada lagi state atau logic manual untuk mendapatkan FID di sini.
-  const { fid, user } = useFarcaster();
 
-  // Effect untuk auto-save profil Farcaster & menangani referral.
-  // Fungsionalitas ini tetap ada, namun sekarang bergantung pada `fid` dari context,
-  // membuatnya lebih andal.
-  useEffect(() => {
-    if (!fid || !user) return;
-
-    // 1. Auto-upsert profil pengguna ke Supabase.
-    // Hanya berjalan jika ada data lengkap dari Farcaster context.
-    if (user.username && user.username !== `fid:${fid}`) {
-       fetch("/api/user", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          fid: user.fid,
-          username: user.username,
-          display_name: user.displayName,
-          pfp_url: user.pfpUrl,
-        }),
-      }).catch(err => console.error("Initial user auto-upsert failed:", err));
-    }
-
-    // 2. Menangani "touch" referral dari URL.
-    try {
-      const url = new URL(window.location.href);
-      const ref = url.searchParams.get("ref");
-      // Cek jika parameter 'ref' adalah alamat wallet yang valid
-      if (ref && /^0x[0-9a-fA-F]{40}$/.test(ref)) {
-        localStorage.setItem("basetc_ref", ref);
-        fetch("/api/referral", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            mode: "touch",
-            inviter: ref,
-            invitee_fid: fid,
-          }),
-        }).catch(err => console.error("Referral touch failed:", err));
-      }
-    } catch (e) {
-      console.warn("Could not process referral param:", e);
-    }
-  }, [fid, user]);
-
-  // Effect untuk memetakan wallet address ke FID di database.
-  // Fungsionalitas ini juga tetap ada dan bergantung pada `address` dan `fid`.
-  useEffect(() => {
-    if (!address || !fid) return;
-
-    fetch("/api/user", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        fid: fid,
-        wallet: address,
-      }),
-    }).catch(err => console.error("Wallet mapping upsert failed:", err));
-  }, [address, fid]);
-
-  // Logika manajemen Tab (tidak berubah)
   useEffect(() => {
     try {
       const url = new URL(window.location.href);
@@ -98,6 +36,17 @@ export default function Page() {
     window.scrollTo({ top: 0, behavior: "instant" });
   }, [activeTab]);
 
+  // Map wallet to FID in the database when connected
+  useEffect(() => {
+    const fidStr = localStorage.getItem("basetc_fid");
+    if (!address || !fidStr) return;
+    fetch("/api/user", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fid: Number(fidStr), wallet: address }),
+    }).catch(err => console.error("Wallet mapping upsert failed:", err));
+  }, [address]);
+
   const content = useMemo(() => {
     switch (activeTab) {
       case "rakit": return <Rakit />;
@@ -107,7 +56,6 @@ export default function Page() {
     }
   }, [activeTab]);
 
-  // Desain utama dan struktur layout tidak berubah
   return (
     <div className="flex flex-col min-h-screen">
       <main className="flex-1 pb-24">
@@ -118,3 +66,80 @@ export default function Page() {
   );
 }
 
+export default function Page() {
+  const fcContext = useFarcaster();
+  const [resolvedFid, setResolvedFid] = useState<number | null>(null);
+  const [isInitializing, setIsInitializing] = useState(true);
+
+  useEffect(() => {
+    if (!fcContext.ready) {
+      return; // Tunggu FarcasterProvider selesai inisialisasi
+    }
+
+    let finalFid: number | null = null;
+
+    // Prioritas 1: Konteks Farcaster
+    if (fcContext.user?.fid) {
+      finalFid = fcContext.user.fid;
+      // Simpan profil lengkap dari context jika ada
+      fetch("/api/user", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fid: fcContext.user.fid,
+          username: fcContext.user.username,
+          display_name: fcContext.user.displayName,
+          pfp_url: fcContext.user.pfpUrl,
+        }),
+      }).catch(err => console.error("Context user auto-upsert failed:", err));
+    } else {
+      // Prioritas 2 & 3: URL Param & localStorage
+      try {
+        const url = new URL(window.location.href);
+        const qfid = url.searchParams.get("fid") || localStorage.getItem("basetc_fid");
+        if (qfid && /^\d+$/.test(qfid)) {
+          finalFid = Number(qfid);
+        }
+      } catch {}
+    }
+
+    if (finalFid) {
+      localStorage.setItem("basetc_fid", String(finalFid));
+      setResolvedFid(finalFid);
+      
+      // Handle referral touch
+      try {
+        const url = new URL(window.location.href);
+        const ref = url.searchParams.get("ref");
+        if (ref && /^0x[0-9a-fA-F]{40}$/.test(ref)) {
+          localStorage.setItem("basetc_ref", ref);
+          fetch("/api/referral", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ mode: "touch", inviter: ref, invitee_fid: finalFid }),
+          }).catch(err => console.error("Referral touch failed:", err));
+        }
+      } catch {}
+    }
+
+    setIsInitializing(false);
+  }, [fcContext.ready, fcContext.user]);
+
+  if (isInitializing) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-neutral-950">
+        <p className="text-neutral-400 animate-pulse">Initializing BaseTC...</p>
+      </div>
+    );
+  }
+
+  if (resolvedFid) {
+    return <MainApp />;
+  }
+
+  // Fallback: Jika tidak ada FID dari mana pun, tampilkan input
+  return <FidInput setFid={(fid) => {
+    localStorage.setItem("basetc_fid", String(fid));
+    setResolvedFid(fid);
+  }} />;
+}
