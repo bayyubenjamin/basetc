@@ -1,53 +1,61 @@
 // app/lib/web3Config.ts
-import { ADDR, CHAIN } from "./addresses";
+//
+// Alasan: Mengkonsolidasikan semua konfigurasi terkait web3 (alamat, ABI, dan config Wagmi)
+// dalam satu file yang mudah diakses dan diekspor dengan benar untuk digunakan oleh Providers.tsx.
+import { http, createConfig } from "wagmi";
+import { baseSepolia } from "wagmi/chains";
+import farcaster from "@farcaster/miniapp-wagmi-connector";
 
-// Pastikan tsconfig: "resolveJsonModule": true
-import baseTcABI         from "./abi/baseTc.json";
-import rigNftABI         from "./abi/rigNft.json";
-import rigSaleABI        from "./abi/rigSale.json";      // ← ABI kontrak RigSaleFlexible final (FID)
-import gameCoreABI       from "./abi/gameCore.json";
-import rewardsVaultABI   from "./abi/rewardsVault.json";
-import treasuryVaultABI  from "./abi/treasuryVault.json";
-import referralABI       from "./abi/referralClaimer.json";
+// ABIs diimpor dari file JSON
+import baseTcABI from "./abi/baseTc.json";
+import rigNftABI from "./abi/rigNft.json";
+import rigSaleABI from "./abi/rigSale.json";
+import gameCoreABI from "./abi/gameCore.json";
+import rewardsVaultABI from "./abi/rewardsVault.json";
+import treasuryVaultABI from "./abi/treasuryVault.json";
+import referralABI from "./abi/referralClaimer.json";
 
-// RPC & Chain
-export const rpcUrl  = CHAIN.rpcUrl;
-export const chainId = CHAIN.id;
-
-// Addresses (named) — diambil dari addresses.ts (sudah kamu set di situ)
-export const baseTcAddress        = ADDR.BASETC as `0x${string}`;
-export const rigNftAddress        = ADDR.RIGNFT as `0x${string}`;
-export const rigSaleAddress       = ADDR.RIGSALE as `0x${string}`;    // ← 0x6DAb... (dari addresses.ts)
-export const gameCoreAddress      = ADDR.GAMECORE as `0x${string}`;
-export const rewardsVaultAddress  = ADDR.REWARDS_VAULT as `0x${string}`;
-export const treasuryVaultAddress = ADDR.TREASURY as `0x${string}`;
-export const referralAddress      = ADDR.REFERRAL as `0x${string}`;
-export const usdcAddress          = ADDR.USDC as `0x${string}`;
-
-// ABIs (named exports)
-export {
-  baseTcABI,
-  rigNftABI,
-  rigSaleABI,         // ← digunakan Market & komponen lain
-  gameCoreABI,
-  rewardsVaultABI,
-  treasuryVaultABI,
-  referralABI,
-};
-
-// (opsional) satu objek config
-export const CFG = {
-  chainId,
-  rpcUrl,
-  addresses: ADDR,
-  abis: {
-    baseTc: baseTcABI,
-    rigNft: rigNftABI,
-    rigSale: rigSaleABI,
-    gameCore: gameCoreABI,
-    rewardsVault: rewardsVaultABI,
-    treasuryVault: treasuryVaultABI,
-    referral: referralABI,
-  },
+// Alamat kontrak dan detail chain
+export const ADDR = {
+  BASETC:        "0x6F1d3aEB43beE9337dbeA4574dACC22AE0a0B7FB",
+  RIGNFT:        "0x18cb04711f100fC3d108825476c294eaed6EA173",
+  GAMECORE:      "0x87Eac0Fbf5e656457bF52ec29c607BB955a58836",
+  REWARDS_VAULT: "0x94301D1ad0228b60C9D2C320E99d43A5A45150aC",
+  RIGSALE:       "0xe3B591CFECED03A809E6668E5c0f380846d238Cf",
+  TREASURY:      "0x8eC2Ca3fdea29C1658c7ecF8b8dCE7EC09Fa7E55",
+  USDC:          "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+  REFERRAL:      "0x8f75cB6135F106C45f2B7B8841ecA92dD25e47B5",
 } as const;
 
+export const CHAIN = {
+  id: 84532,
+  rpcUrl: "https://sepolia.base.org",
+} as const;
+
+// Ekspor alamat dan ABI secara individual
+export const {
+    BASETC: baseTcAddress,
+    RIGNFT: rigNftAddress,
+    GAMECORE: gameCoreAddress,
+    REWARDS_VAULT: rewardsVaultAddress,
+    RIGSALE: rigSaleAddress,
+    TREASURY: treasuryVaultAddress,
+    USDC: usdcAddress,
+    REFERRAL: referralAddress,
+} = ADDR;
+
+export {
+  baseTcABI, rigNftABI, rigSaleABI, gameCoreABI,
+  rewardsVaultABI, treasuryVaultABI, referralABI,
+};
+
+
+// --- INTI PERBAIKAN ---
+// Konfigurasi Wagmi dibuat dan diekspor dari sini
+export const config = createConfig({
+  chains: [baseSepolia],
+  connectors: [farcaster()],
+  transports: {
+    [baseSepolia.id]: http(),
+  },
+});
