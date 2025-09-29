@@ -251,6 +251,20 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
           }),
         });
       } catch {}
+
+      // === [NEW] Tandai referral VALID setelah mint sukses
+      try {
+        await fetch("/api/referral", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            action: "mark-valid",
+            invitee_fid: String(fid),
+            invitee_wallet: address,
+          }),
+        });
+      } catch {}
+
     } catch (e: any) {
       setMessage(e?.shortMessage || e?.message || "Claim failed");
     }

@@ -42,6 +42,32 @@ export default function Page() {
     }
   }, []);
 
+  // === [NEW] Referral 'touch' saat landing (Home) ===
+  useEffect(() => {
+    try {
+      const url = new URL(window.location.href);
+      const fid = url.searchParams.get("fid");
+      const ref = url.searchParams.get("ref");
+
+      // simpan ke localStorage supaya persist pindah halaman
+      if (fid && /^\d+$/.test(fid)) localStorage.setItem("basetc_fid", fid);
+      if (ref && /^0x[0-9a-fA-F]{40}$/.test(ref)) localStorage.setItem("basetc_ref", ref);
+
+      // kirim 'pending/touch' ke backend sekali saat landing
+      if (fid && /^\d+$/.test(fid) && ref && /^0x[0-9a-fA-F]{40}$/.test(ref)) {
+        fetch("/api/referral", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            action: "touch",
+            inviter: ref,
+            invitee_fid: Number(fid),
+          }),
+        }).catch(() => {});
+      }
+    } catch {}
+  }, []);
+
   // simpan tab + scroll to top saat tab berubah
   useEffect(() => {
     try {

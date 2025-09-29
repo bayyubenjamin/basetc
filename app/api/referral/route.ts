@@ -1,94 +1,63 @@
-// app/api/referral/route.ts
+// app/api/referral/route.ts (potongan POST)
+
 import { NextRequest, NextResponse } from "next/server";
-import { createClient, SupabaseClient } from "@supabase/supabase-js";
+import { createClient } from "@supabase/supabase-js";
 
-export const dynamic = "force-dynamic";
-export const runtime = "nodejs";
-export const revalidate = 0;
-
-// --- Lazy init Supabase biar gak crash waktu build
-function getSupabase(): SupabaseClient | null {
-  const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE;
-  if (!url || !key) return null;
-  return createClient(url, key);
+function getSupabase() {
+  const url = process.env.SUPABASE_URL!;
+  const key = process.env.SUPABASE_SERVICE_ROLE!;
+  return createClient(url, key, { auth: { persistSession: false } });
 }
 
-async function getClaimed(inviter: string): Promise<number> {
-  const sp = getSupabase();
-  if (!sp) return 0; // fallback aman kalau env belum siap
-  const { data, error } = await sp
-    .from("invite_claims")
-    .select("claimed")
-    .eq("inviter", inviter.toLowerCase())
-    .maybeSingle();
-  if (error) {
-    console.error("supabase getClaimed error:", error);
-    return 0;
-  }
-  return data?.claimed ?? 0;
-}
-
-async function incClaimed(inviter: string, inc = 1): Promise<{ ok: boolean; claimedRewards?: number; error?: string; }> {
-  const sp = getSupabase();
-  if (!sp) return { ok: false, error: "SUPABASE_NOT_CONFIGURED" };
-  const addr = inviter.toLowerCase();
-  const prev = await getClaimed(addr);
-  const next = prev + (Number(inc) || 0);
-  const { error } = await sp
-    .from("invite_claims")
-    .upsert({ inviter: addr, claimed: next }, { onConflict: "inviter" });
-  if (error) {
-    console.error("supabase incClaimed error:", error);
-    return { ok: false, error: "DB_ERROR" };
-  }
-  return { ok: true, claimedRewards: next };
-}
-
-// GET /api/referral?inviter=0x...
-export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url);
-  const inviter = (searchParams.get("inviter") || "").trim();
-  if (!inviter) {
-    return NextResponse.json({ error: "missing inviter" }, { status: 400 });
-  }
-  const claimedRewards = await getClaimed(inviter);
-  return NextResponse.json({ claimedRewards });
-}
-
-// POST /api/referral
-// 1) { inviter, inc } -> increment claimed
-// 2) { mode: "free-sign", fid, to, inviter } -> stub signer EIP-712 (isi nanti)
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
+  const supabase = getSupabase();
 
-  // increment claimed
-  if (body?.inviter && body?.inc) {
-    const res = await incClaimed(body.inviter, body.inc);
-    if (!res.ok) {
-      // kalau supabase belum diset, balikin pesan jelas (tanpa bikin build error)
-      return NextResponse.json(res, { status: 500 });
+  // === A) Upsert PENDING referral saat user baru mendarat (Home / dsb) ===
+  // body: { action: "touch", inviter, invitee_fid, invitee_wallet? }
+  if (body?.action === "touch") {
+    const { inviter, invitee_fid, invitee_wallet } = body;
+    if (!inviter || !invitee_fid) {
+      return NextResponse.json({ error: "missing inviter or invitee_fid" }, { status: 400 });
     }
-    return NextResponse.json({ ok: true, claimedRewards: res.claimedRewards });
+
+    const { data, error } = await supabase
+      .from("referrals")
+      .upsert({
+        inviter: String(inviter).toLowerCase(),
+        invitee_fid: Number(invitee_fid),
+        invitee_wallet: invitee_wallet?.toLowerCase?.() ?? null,
+        status: "pending",
+      }, { onConflict: "invitee_fid" }) // supaya tidak dobel
+      .select()
+      .maybeSingle();
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ ok: true, referral: data });
   }
 
-  // stub signer EIP-712 (lengkapi nanti)
-  if (body?.mode === "free-sign") {
-    const { fid, to, inviter } = body;
-    if (!fid || !to) {
-      return NextResponse.json({ error: "missing fid/to" }, { status: 400 });
+  // === B) Update ke VALID setelah user baru sukses claim ===
+  // body: { action: "mark-valid", invitee_fid, invitee_wallet? }
+  if (body?.action === "mark-valid") {
+    const { invitee_fid, invitee_wallet } = body;
+    if (!invitee_fid) {
+      return NextResponse.json({ error: "missing invitee_fid" }, { status: 400 });
     }
-    const deadline = Math.floor(Date.now() / 1000) + 3600;
-    // TODO: isi domain, types, dan signing pakai FID_SIGNER_PK
-    return NextResponse.json({
-      fid,
-      to,
-      inviter: inviter || "0x0000000000000000000000000000000000000000",
-      deadline,
-      note: "Signer EIP-712 belum diaktifkan. Lengkapi domain/types+signer lalu kirim v,r,s.",
-    });
+
+    const { data, error } = await supabase
+      .from("referrals")
+      .update({
+        status: "valid",
+        invitee_wallet: invitee_wallet?.toLowerCase?.() ?? null,
+      })
+      .eq("invitee_fid", Number(invitee_fid))
+      .select()
+      .maybeSingle();
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ ok: true, referral: data });
   }
 
-  return NextResponse.json({ error: "unsupported body" }, { status: 400 });
+  return NextResponse.json({ error: "unsupported action" }, { status: 400 });
 }
 
