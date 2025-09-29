@@ -1,304 +1,187 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/security/Pausable.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
-import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
+import "@openzeppelin/contracts/token/ERC1155/extensions/ERC1155Supply.sol";
+import "@openzeppelin/contracts/access/AccessControl.sol";
+import "@openzeppelin/contracts/utils/Pausable.sol";
+import "@openzeppelin/contracts/utils/Strings.sol";
+import "@openzeppelin/contracts/utils/Base64.sol";
 
-interface IRigNFT {
-    function mintBySale(address to, uint256 id, uint256 amount) external;
+interface IGameCoreHook {
+    function onRigBalanceWillChange(address user) external;
 }
 
-contract RigSaleFlexible is Ownable, Pausable, ReentrancyGuard, EIP712 {
-    IRigNFT public immutable rigNFT;
-    address public treasury;
+contract RigNFT is ERC1155, ERC1155Supply, AccessControl, Pausable {
+    using Strings for uint256;
 
-    /// ====== Mode pembayaran ======
-    enum Mode { ETH_ONLY, ERC20_ONLY }
-    Mode private _mode;
-    IERC20 private _payToken; // 0x0 jika mode ETH
+    // --- Token Tiers ---
+    uint256 public constant BASIC  = 1;
+    uint256 public constant PRO    = 2;
+    uint256 public constant LEGEND = 3;
 
-    /// ====== Harga per tokenId ======
-    mapping(uint256 => uint256) private _ethPrices;   // WEI
-    mapping(uint256 => uint256) private _erc20Prices; // smallest unit token aktif
+    // --- Roles ---
+    bytes32 public constant SALE_MINTER_ROLE = keccak256("SALE_MINTER_ROLE");
+    bytes32 public constant GAME_MINTER_ROLE = keccak256("GAME_MINTER_ROLE");
+    bytes32 public constant BURNER_ROLE      = keccak256("BURNER_ROLE");
+    bytes32 public constant PAUSER_ROLE      = keccak256("PAUSER_ROLE");
 
-    /// ====== Free Mint Basic ======
-    uint256 private _freeMintId;         // tokenId free mint (mis. BASIC)
-    bool    private _freeMintOpen;       // ON/OFF free mint (global)
-    mapping(address => bool) private _freeMinted;     // per wallet (fitur lama, tetap dipertahankan)
+    // --- Supply Caps for Legend Tier ---
+    uint256 public constant LEGEND_TOTAL_CAP = 3000;
+    uint256 public constant LEGEND_SALE_CAP  = 1500;
+    uint256 public constant LEGEND_GAME_CAP  = 1500;
 
-    /// ====== Free Mint per FID ======
-    address public fidSigner;                       // signer tepercaya (mis. RELAYER_ADDRESS)
-    mapping(uint256 => bool) public freeMintedByFid; // FID sudah klaim?
+    // --- NEW: Per-user holding cap for LEGEND ---
+    uint256 public constant LEGEND_MAX_PER_USER = 3;
 
-    // EIP-712 typehash untuk klaim berbasis FID
-    // FreeClaim(uint256 fid,address to,uint256 deadline)
-    bytes32 private constant FREECLAIM_TYPEHASH =
-        keccak256("FreeClaim(uint256 fid,address to,uint256 deadline)");
+    uint256 public legendSaleMinted;
+    uint256 public legendGameMinted;
 
-    /// ===== Events =====
-    event TreasuryChanged(address indexed newTreasury);
-    event ModeChanged(Mode newMode, address indexed payToken);
-    event PriceSetETH(uint256 indexed id, uint256 priceWei);
-    event PriceSetERC20(uint256 indexed id, uint256 priceTokenUnits);
-    event BoughtETH(address indexed buyer, uint256 indexed id, uint256 amount, uint256 paidWei);
-    event BoughtERC20(address indexed buyer, uint256 indexed id, uint256 amount, uint256 paid);
-    event Withdrawn(address indexed to, uint256 amountWei);
+    // --- Metadata (Pinata URLs) ---
+    string private basicImageURI;
+    string private proImageURI;
+    string private legendImageURI;
 
-    event FreeMintConfigured(uint256 indexed id, bool open);
-    event FreeMinted(address indexed to, uint256 indexed id);
-    event FidSignerChanged(address indexed newSigner);
+    // --- GameCore Hook ---
+    address public gameCore;
+    event GameCoreSet(address indexed gameCore);
 
-    constructor(address _rigNFT, address _treasury, address initialOwner)
-        Ownable(initialOwner)
-        EIP712("RigSaleFlexible", "1")
-    {
-        require(_rigNFT != address(0), "bad rig");
-        require(_treasury != address(0), "bad treasury");
-        rigNFT = IRigNFT(_rigNFT);
-        treasury = _treasury;
+    // Event mint
+    event RigMinted(address indexed to, uint256 indexed tierId, uint256 amount, string tierName);
 
-        _mode = Mode.ETH_ONLY; // default
-        _freeMintId = 0;       // set via setFreeMintId
-        _freeMintOpen = false; // default closed
+    constructor() ERC1155("") {
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _grantRole(PAUSER_ROLE, msg.sender);
+
+        basicImageURI  = "https://amethyst-elegant-spider-17.mypinata.cloud/ipfs/bafkreiewdqrirz76f2a7vcesiobufbvvjc4okjcagdzrmqq5l2f2d7kneq";
+        proImageURI    = "https://amethyst-elegant-spider-17.mypinata.cloud/ipfs/bafkreibt6czouhp4uxmh6zn3ggy44x4gytssjw3m4jyhn5k4mvhuabptdq";
+        legendImageURI = "https://amethyst-elegant-spider-17.mypinata.cloud/ipfs/bafkreib74sdvzq7uiw7kg5ljizr4hanrj34enyzkyvbrloozwxafz2mowu";
     }
 
-    // ======================
-    // Admin
-    // ======================
-
-    function setTreasury(address t) external onlyOwner {
-        require(t != address(0), "bad treasury");
-        treasury = t;
-        emit TreasuryChanged(t);
+    // ---------- Admin ----------
+    function setImageURIs(
+        string calldata newBasicURI,
+        string calldata newProURI,
+        string calldata newLegendURI
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        basicImageURI  = newBasicURI;
+        proImageURI    = newProURI;
+        legendImageURI = newLegendURI;
     }
 
-    function setPaymentModeETH() external onlyOwner {
-        _mode = Mode.ETH_ONLY;
-        _payToken = IERC20(address(0));
-        emit ModeChanged(_mode, address(0));
+    function setGameCore(address _gameCore) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(_gameCore != address(0), "ZERO_ADDR");
+        gameCore = _gameCore;
+        emit GameCoreSet(_gameCore);
     }
 
-    function setPaymentModeERC20(address token) external onlyOwner {
-        require(token != address(0), "bad token");
-        _payToken = IERC20(token);
-        _mode = Mode.ERC20_ONLY;
-        emit ModeChanged(_mode, token);
-    }
+    function pause() external onlyRole(PAUSER_ROLE) { _pause(); }
+    function unpause() external onlyRole(PAUSER_ROLE) { _unpause(); }
 
-    function setEthPrice(uint256 id, uint256 priceWei) external onlyOwner {
-        _ethPrices[id] = priceWei; // 0 = not for sale (ETH)
-        emit PriceSetETH(id, priceWei);
-    }
-
-    function setErc20Price(uint256 id, uint256 priceTokenUnits) external onlyOwner {
-        _erc20Prices[id] = priceTokenUnits; // 0 = not for sale (ERC20)
-        emit PriceSetERC20(id, priceTokenUnits);
-    }
-
-    function setBatchEthPrices(uint256[] calldata ids, uint256[] calldata pricesWei) external onlyOwner {
-        require(ids.length == pricesWei.length, "len mismatch");
-        for (uint256 i = 0; i < ids.length; i++) {
-            _ethPrices[ids[i]] = pricesWei[i];
-            emit PriceSetETH(ids[i], pricesWei[i]);
+    // ---------- Minting ----------
+    function mintBySale(address to, uint256 id, uint256 amount) external onlyRole(SALE_MINTER_ROLE) {
+        if (id == LEGEND) {
+            // Global caps
+            require(legendSaleMinted + amount <= LEGEND_SALE_CAP, "LEGEND sale cap exceeded");
+            require(totalSupply(LEGEND) + amount <= LEGEND_TOTAL_CAP, "LEGEND total cap exceeded");
+            // Per-user holding cap
+            require(balanceOf(to, LEGEND) + amount <= LEGEND_MAX_PER_USER, "LEGEND_MAX_PER_USER_3");
+            legendSaleMinted += amount;
         }
+        _mint(to, id, amount, "");
+        emit RigMinted(to, id, amount, _getTierNameById(id));
     }
 
-    function setBatchErc20Prices(uint256[] calldata ids, uint256[] calldata prices) external onlyOwner {
-        require(ids.length == prices.length, "len mismatch");
-        for (uint256 i = 0; i < ids.length; i++) {
-            _erc20Prices[ids[i]] = prices[i];
-            emit PriceSetERC20(ids[i], prices[i]);
+    function mintByGame(address to, uint256 id, uint256 amount) external onlyRole(GAME_MINTER_ROLE) {
+        if (id == LEGEND) {
+            // Global caps
+            require(legendGameMinted + amount <= LEGEND_GAME_CAP, "LEGEND game cap exceeded");
+            require(totalSupply(LEGEND) + amount <= LEGEND_TOTAL_CAP, "LEGEND total cap exceeded");
+            // Per-user holding cap
+            require(balanceOf(to, LEGEND) + amount <= LEGEND_MAX_PER_USER, "LEGEND_MAX_PER_USER_3");
+            legendGameMinted += amount;
         }
+        _mint(to, id, amount, "");
+        emit RigMinted(to, id, amount, _getTierNameById(id));
     }
 
-    /// ====== Free mint controls ======
-    function setFreeMintId(uint256 id) external onlyOwner {
-        _freeMintId = id;
-        emit FreeMintConfigured(_freeMintId, _freeMintOpen);
+    // ---------- Burn ----------
+    function burnFrom(address account, uint256 id, uint256 amount) external onlyRole(BURNER_ROLE) {
+        _burn(account, id, amount);
     }
 
-    function setFreeMintOpen(bool open) external onlyOwner {
-        _freeMintOpen = open;
-        emit FreeMintConfigured(_freeMintId, _freeMintOpen);
+    // ---------- Metadata ----------
+    function uri(uint256 id) public view override returns (string memory) {
+        (string memory tier, string memory image) = _meta(id);
+        bytes memory json = abi.encodePacked(
+            '{"name":"BaseTC Rig - ', tier, '",',
+            '"description":"Mining rig NFT for BaseTC game.",',
+            '"image":"', image, '",',
+            '"attributes":[{"trait_type":"Tier","value":"', tier, '"}]}'
+        );
+        return string(abi.encodePacked("data:application/json;base64,", Base64.encode(json)));
     }
 
-    /// ====== FID signer ======
-    function setFidSigner(address signer) external onlyOwner {
-        fidSigner = signer;
-        emit FidSignerChanged(signer);
+    function _meta(uint256 id) internal view returns (string memory tier, string memory image) {
+        if (id == BASIC)  return ("BASIC",  basicImageURI);
+        if (id == PRO)    return ("PRO",    proImageURI);
+        if (id == LEGEND) return ("LEGEND", legendImageURI);
+        revert("URIQueryForNonexistentToken");
     }
 
-    function pause() external onlyOwner { _pause(); }
-    function unpause() external onlyOwner { _unpause(); }
-
-    function withdraw(uint256 amountWei) external onlyOwner nonReentrant {
-        require(amountWei <= address(this).balance, "insufficient ETH");
-        (bool ok, ) = payable(treasury).call{value: amountWei}("");
-        require(ok, "withdraw failed");
-        emit Withdrawn(treasury, amountWei);
+    function _getTierNameById(uint256 id) internal pure returns (string memory) {
+        if (id == BASIC) return "BASIC";
+        if (id == PRO) return "PRO";
+        if (id == LEGEND) return "LEGEND";
+        return "UNKNOWN";
     }
 
-    function withdrawAll() external onlyOwner nonReentrant {
-        uint256 bal = address(this).balance;
-        (bool ok, ) = payable(treasury).call{value: bal}("");
-        require(ok, "withdraw failed");
-        emit Withdrawn(treasury, bal);
-    }
-
-    // ======================
-    // View / Getters (untuk frontend)
-    // ======================
-
-    function currentMode() external view returns (Mode) { return _mode; }
-    function paymentToken() external view returns (address) { return address(_payToken); }
-
-    function priceOf(uint256 id) external view returns (uint256) {
-        return _mode == Mode.ETH_ONLY ? _ethPrices[id] : _erc20Prices[id];
-    }
-    function priceETHOf(uint256 id) external view returns (uint256) { return _ethPrices[id]; }
-    function priceERC20Of(uint256 id) external view returns (uint256) { return _erc20Prices[id]; }
-    function isForSale(uint256 id) external view returns (bool) {
-        return _mode == Mode.ETH_ONLY ? _ethPrices[id] > 0 : _erc20Prices[id] > 0;
-    }
-
-    function freeMintId() external view returns (uint256) { return _freeMintId; }
-    function freeMintOpen() external view returns (bool) { return _freeMintOpen; }
-    function freeMinted(address user) external view returns (bool) { return _freeMinted[user]; }
-    function freeMintedByFidView(uint256 fid) external view returns (bool) { return freeMintedByFid[fid]; }
-
-    // ======================
-    // Free Mint (versi lama, per wallet) — dipertahankan
-    // ======================
-    function claimFree() external whenNotPaused nonReentrant {
-        require(_freeMintOpen, "free closed");
-        require(!_freeMinted[msg.sender], "wallet claimed");
-        uint256 id = _freeMintId;
-        require(id != 0, "free id not set");
-
-        _freeMinted[msg.sender] = true;
-        rigNFT.mintBySale(msg.sender, id, 1);
-        emit FreeMinted(msg.sender, id);
-    }
-
-    // ======================
-    // Free Mint per FID (baru)
-    // ======================
-
-    /**
-     * @notice Klaim 1x per FID dengan EIP-712 signature dari fidSigner.
-     * Digest: keccak256(
-     *   abi.encode(
-     *     FREECLAIM_TYPEHASH,
-     *     fid,
-     *     to,
-     *     deadline
-     *   )
-     * ) lalu _hashTypedDataV4(...)
-     *
-     * - signer: fidSigner (trusted backend/relayer yang memverifikasi relasi FID ↔ wallet)
-     * - replay protection: freeMintedByFid[fid] = true setelah klaim pertama
-     */
-    function claimFreeByFidSig(
-        uint256 fid,
+    // ---------- Hooks ----------
+    // OZ v5 pattern: _update dipanggil untuk mint/burn/transfer
+    function _update(
+        address from,
         address to,
-        uint256 deadline,
-        uint8 v, bytes32 r, bytes32 s
-    ) external whenNotPaused nonReentrant
+        uint256[] memory ids,
+        uint256[] memory amounts
+    )
+        internal
+        override(ERC1155, ERC1155Supply)
+        whenNotPaused
     {
-        require(_freeMintOpen, "free closed");
-        require(fidSigner != address(0), "fid signer not set");
-        require(!freeMintedByFid[fid], "FID claimed");
-        require(block.timestamp <= deadline, "expired");
-
-        // bangun digest EIP-712
-        bytes32 structHash = keccak256(abi.encode(
-            FREECLAIM_TYPEHASH,
-            fid,
-            to,
-            deadline
-        ));
-        bytes32 digest = _hashTypedDataV4(structHash);
-
-        // verify signer
-        address signer = ECDSA.recover(digest, v, r, s);
-        require(signer == fidSigner, "bad signer");
-
-        uint256 id = _freeMintId;
-        require(id != 0, "free id not set");
-
-        // set claimed dan mint
-        freeMintedByFid[fid] = true;
-        rigNFT.mintBySale(to, id, 1);
-        emit FreeMinted(to, id);
-    }
-
-    // ======================
-    // User Buying (bayar)
-    // ======================
-
-    function buy(uint256 id, uint256 amount) external payable whenNotPaused nonReentrant {
-        if (_mode == Mode.ETH_ONLY) {
-            _buyETH(id, amount);
-        } else {
-            _buyERC20(id, amount);
-        }
-    }
-
-    function buyWithETH(uint256 id, uint256 amount) external payable whenNotPaused nonReentrant {
-        require(_mode == Mode.ETH_ONLY, "ETH disabled");
-        _buyETH(id, amount);
-    }
-
-    function buyWithERC20(uint256 id, uint256 amount) external whenNotPaused nonReentrant {
-        require(_mode == Mode.ERC20_ONLY, "ERC20 disabled");
-        _buyERC20(id, amount);
-    }
-
-    // ---------- Internal helpers ----------
-
-    function _buyETH(uint256 id, uint256 amount) internal {
-        require(amount > 0, "amount=0");
-        uint256 price = _ethPrices[id];
-        require(price > 0, "not for sale (ETH)");
-        uint256 cost = price * amount;
-        require(msg.value >= cost, "insufficient ETH");
-
-        rigNFT.mintBySale(msg.sender, id, amount);
-
-        uint256 refund = msg.value - cost;
-
-        (bool ok, ) = payable(treasury).call{value: cost}("");
-        require(ok, "forward failed");
-
-        if (refund > 0) {
-            (ok, ) = payable(msg.sender).call{value: refund}("");
-            require(ok, "refund failed");
+        // === Per-user LEGEND cap check (on receiver) ===
+        if (to != address(0)) {
+            uint256 incomingLegend;
+            for (uint256 i = 0; i < ids.length; i++) {
+                if (ids[i] == LEGEND) {
+                    incomingLegend += amounts[i];
+                }
+            }
+            if (incomingLegend > 0) {
+                uint256 newBal = balanceOf(to, LEGEND) + incomingLegend;
+                require(newBal <= LEGEND_MAX_PER_USER, "LEGEND_MAX_PER_USER_3");
+            }
         }
 
-        emit BoughtETH(msg.sender, id, amount, cost);
+        // === Call GameCore hook BEFORE balance changes (only if it won't revert by cap) ===
+        if (gameCore != address(0) && from != to) {
+            if (from != address(0)) {
+                IGameCoreHook(gameCore).onRigBalanceWillChange(from);
+            }
+            if (to != address(0)) {
+                IGameCoreHook(gameCore).onRigBalanceWillChange(to);
+            }
+        }
+
+        super._update(from, to, ids, amounts);
     }
 
-    function _buyERC20(uint256 id, uint256 amount) internal {
-        require(address(_payToken) != address(0), "token not set");
-        require(amount > 0, "amount=0");
-
-        uint256 price = _erc20Prices[id];
-        require(price > 0, "not for sale (ERC20)");
-
-        uint256 cost = price * amount;
-
-        require(_payToken.allowance(msg.sender, address(this)) >= cost, "allowance low");
-        require(_payToken.transferFrom(msg.sender, treasury, cost), "transfer failed");
-
-        rigNFT.mintBySale(msg.sender, id, amount);
-
-        emit BoughtERC20(msg.sender, id, amount, cost);
+    function supportsInterface(bytes4 interfaceId)
+        public
+        view
+        override(ERC1155, AccessControl)
+        returns (bool)
+    {
+        return super.supportsInterface(interfaceId);
     }
-
-    receive() external payable {}
 }
 
