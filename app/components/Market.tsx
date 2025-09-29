@@ -2,13 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { FC } from "react";
-import Image from "next/image";
+import Image from "next/image"; // <-- Tambahkan impor ini
 import {
   useAccount,
   useReadContract,
   useWriteContract,
 } from "wagmi";
-import { baseSepolia } from "wagmi/chains";
+import { baseSepolia } from "wagmi/chains"; // ← PENTING: pakai wagmi/chains, bukan viem/chains
 import {
   rigSaleAddress,
   rigSaleABI,
@@ -122,7 +122,7 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
   // ----- Free mint status -----
   const freeOpenRes = useReadContract({ address: rigSaleAddress, abi: rigSaleABI as any, functionName: "freeMintOpen" });
   const freeIdRes   = useReadContract({ address: rigSaleAddress, abi: rigSaleABI as any, functionName: "freeMintId" });
-  // NOTE: kontrak versi FID biasanya track "freeMintedByFid", tapi di UI kita tetap pakai flag address untuk UX dasar
+  // NOTE: beberapa versi kontrak pakai freeMintedByFid, tapi di UI ini kita cek per-address untuk UX dasar
   const freeMineRes = useReadContract({
     address: rigSaleAddress, abi: rigSaleABI as any, functionName: "freeMinted",
     args: address ? [address] : undefined,
@@ -133,24 +133,42 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
   const freeUsed  = Boolean(freeMineRes.data);
   const isBasicFreeForMe = freeOpen && BASIC !== undefined && freeId === BASIC && !freeUsed;
 
-  // ===== [NEW] Ambil FID & inviter dari URL/localStorage =====
+  // ===== Ambil FID & inviter: Supabase -> URL -> localStorage
   const [fid, setFid] = useState<bigint>(0n);
   const [inviter, setInviter] = useState<Address>("0x0000000000000000000000000000000000000000");
   useEffect(() => {
-    try {
-      const url = new URL(window.location.href);
-      const qFid = url.searchParams.get("fid");
-      const qRef = url.searchParams.get("ref");
-      const lsFid = typeof window !== "undefined" ? window.localStorage.getItem("basetc_fid") : null;
-      const lsRef = typeof window !== "undefined" ? window.localStorage.getItem("basetc_ref") : null;
+    async function trySupabase() {
+      if (!address) return false;
+      try {
+        const r = await fetch(`/api/user?wallet=${address}`);
+        const j = await r.json();
+        if (j?.user?.fid) {
+          setFid(BigInt(j.user.fid));
+          return true;
+        }
+      } catch {}
+      return false;
+    }
+    function tryFallbacks() {
+      try {
+        const url = new URL(window.location.href);
+        const qFid = url.searchParams.get("fid");
+        const qRef = url.searchParams.get("ref");
+        const lsFid = window.localStorage.getItem("basetc_fid");
+        const lsRef = window.localStorage.getItem("basetc_ref");
 
-      const fidNum = qFid ?? lsFid ?? "";
-      if (fidNum && /^\d+$/.test(fidNum)) setFid(BigInt(fidNum));
+        const fidNum = qFid ?? lsFid ?? "";
+        if (fidNum && /^\d+$/.test(fidNum)) setFid(BigInt(fidNum));
 
-      const refAddr = (qRef ?? lsRef ?? "").trim();
-      if (refAddr && /^0x[0-9a-fA-F]{40}$/.test(refAddr)) setInviter(refAddr as Address);
-    } catch {}
-  }, []);
+        const refAddr = (qRef ?? lsRef ?? "").trim();
+        if (refAddr && /^0x[0-9a-fA-F]{40}$/.test(refAddr)) setInviter(refAddr as Address);
+      } catch {}
+    }
+    (async () => {
+      const ok = await trySupabase();
+      if (!ok) tryFallbacks();
+    })();
+  }, [address]);
 
   // ----- ERC20 allowance -----
   const allowanceRes = useReadContract({
@@ -177,13 +195,13 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
   };
 
   // ---- Handlers ----
-  // [CHANGED] Sekarang pakai claimFreeByFidSig dengan signature dari backend
+  // Claim Free: pakai claimFreeByFidSig (signature dari backend /api/referral)
   const handleClaimBasicFree = async () => {
     try {
       setMessage("");
       if (!address) return setMessage("Connect wallet first.");
       if (!freeOpen) return setMessage("Free mint belum dibuka.");
-      if (!fid || fid === 0n) return setMessage("FID Farcaster tidak ditemukan. Tambah ?fid=... di URL atau set localStorage 'basetc_fid'.");
+      if (!fid || fid === 0n) return setMessage("FID Farcaster tidak ditemukan. Tambah ?fid=... di URL / set localStorage 'basetc_fid'.");
 
       // Minta payload signature ke server
       const res = await fetch("/api/referral", {
@@ -215,11 +233,24 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
           sig.v, sig.r, sig.s,
         ],
         account: address as `0x${string}`,
-        chain: baseSepolia,
+        chain: baseSepolia, // ← tambahkan chain + account
       });
 
       setMessage("Free mint sukses!");
       onTransactionSuccess?.();
+
+      // Upsert user ke Supabase (kalau route tersedia)
+      try {
+        await fetch("/api/user", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            fid: String(fid),
+            wallet: address,
+            // username/display_name/pfp_url bisa ditambahkan kalau ada
+          }),
+        });
+      } catch {}
     } catch (e: any) {
       setMessage(e?.shortMessage || e?.message || "Claim failed");
     }
@@ -289,9 +320,8 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
   const ctaText = (t: TierID) => (t === "basic" && isBasicFreeForMe ? "Claim Free Rig" : "Buy");
 
   // ==========================================================
-  // Invite Task + Free Mint CARDs (tetap, hanya tombol claim free diubah)
+  // Invite Task (tracking klaim via /api/referral sementara)
   // ==========================================================
-
   const inviteCountRes = useReadContract({
     address: rigSaleAddress,
     abi: rigSaleABI as any,
@@ -326,7 +356,7 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
       }
       setBusyInvite(true);
 
-      // TODO (opsional): mint on-chain via relayer di backend terlebih dulu
+      // (Opsional) jalankan relayer mint on-chain di backend sebelum increment
       const res = await fetch("/api/referral", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -384,7 +414,7 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
             <div className="text-sm opacity-80">Invite Friends → Free Basic</div>
             <div className="text-lg font-semibold">1 • 2× sampai 10 • 3× setelahnya</div>
           </div>
-          <button
+        <button
             onClick={handleClaimInviteReward}
             disabled={busyInvite || availableClaims <= 0}
             className={`px-4 py-2 rounded-xl ${availableClaims>0 ? "bg-green-500" : "bg-neutral-600 cursor-not-allowed"}`}
@@ -440,8 +470,7 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
         })}
       </div>
 
-      {/* Pesan global */}
-      {/* {!!message && <p className="text-xs text-green-400">{message}</p>} */}
+      {!!message && <p className="text-xs text-green-400">{message}</p>}
     </div>
   );
 };
