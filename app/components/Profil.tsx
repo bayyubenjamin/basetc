@@ -169,6 +169,7 @@ export default function Profil() {
   const { data: countLegend = 0n } = useReadContract({ address: rigNftAddress, abi: rigNftABI as any, functionName: "balanceOf", args: address && LEGEND ? [address, LEGEND] : undefined, query: { enabled: !!(address && LEGEND) }});
   
   const { data: baseBal } = useReadContract({ address: baseTcAddress, abi: baseTcABI as any, functionName: "balanceOf", args: address ? [address] : undefined, query: { enabled: !!address }});
+  // FIX: Explicitly cast `baseBal` to `bigint` to match `formatEther`'s expected type.
   const baseReadable = useMemo(() => baseBal ? formatEther(baseBal as bigint) : "0.000", [baseBal]);
 
   const { data: isSupreme } = useReadContract({ address: gameCoreAddress, abi: gameCoreABI as any, functionName: "isSupreme", args: address ? [address] : undefined, query: { enabled: !!address }});
