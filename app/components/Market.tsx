@@ -195,7 +195,6 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
   };
 
   // ---- Handlers ----
-  // Claim Free: pakai claimFreeByFidSig (signature dari backend /api/referral)
   const handleClaimBasicFree = async () => {
     try {
       setMessage("");
@@ -203,7 +202,6 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
       if (!freeOpen) return setMessage("Free mint belum dibuka.");
       if (!fid || fid === 0n) return setMessage("FID Farcaster tidak ditemukan. Tambah ?fid=... di URL / set localStorage 'basetc_fid'.");
 
-      // Minta payload signature ke server
       const res = await fetch("/api/referral", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -211,7 +209,7 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
           mode: "free-sign",
           fid: String(fid),
           to: address,
-          inviter, // bisa 0x0 kalau tanpa referral
+          inviter,
         }),
       });
       const sig = await res.json();
@@ -220,7 +218,6 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
         return setMessage("Signer belum aktif di backend (v,r,s kosong).");
       }
 
-      // Panggil kontrak: claimFreeByFidSig(fid, to, inviter, deadline, v, r, s)
       await writeContractAsync({
         address: rigSaleAddress,
         abi: rigSaleABI as any,
@@ -233,13 +230,13 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
           sig.v, sig.r, sig.s,
         ],
         account: address as `0x${string}`,
-        chain: baseSepolia, // ← tambahkan chain + account
+        chain: baseSepolia,
       });
 
       setMessage("Free mint sukses!");
       onTransactionSuccess?.();
 
-      // Upsert user ke Supabase (kalau route tersedia)
+      // Upsert user (lengkapi wallet)
       try {
         await fetch("/api/user", {
           method: "POST",
@@ -247,12 +244,11 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
           body: JSON.stringify({
             fid: String(fid),
             wallet: address,
-            // username/display_name/pfp_url bisa ditambahkan kalau ada
           }),
         });
       } catch {}
 
-      // === [NEW] Tandai referral VALID setelah mint sukses
+      // Tandai referral VALID
       try {
         await fetch("/api/referral", {
           method: "POST",
@@ -279,7 +275,6 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
       if (!price || price === 0n) return setMessage("Not for sale.");
 
       if (modeVal === 0) {
-        // ETH
         await writeContractAsync({
           address: rigSaleAddress,
           abi: rigSaleABI as any,
@@ -296,7 +291,6 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
 
       if (modeVal === 1 && tokenAddr) {
         if (allowance < price) {
-          // approve dulu
           await writeContractAsync({
             address: tokenAddr,
             abi: erc20ABI as any,
@@ -328,7 +322,7 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
   const tierId = (t: TierID) => (t === "basic" ? BASIC : t === "pro" ? PRO : LEGEND);
   const onClickCta = (t: TierID) => {
     const id = tierId(t);
-    if (t === "basic" && isBasicFreeForMe) return () => handleClaimBasicFree(); // <- sekarang sig-based
+    if (t === "basic" && isBasicFreeForMe) return () => handleClaimBasicFree();
     return () => handleBuy(id);
   };
   const ctaText = (t: TierID) => (t === "basic" && isBasicFreeForMe ? "Claim Free Rig" : "Buy");
@@ -399,7 +393,7 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
         Mode: {modeVal === 0 ? "ETH" : modeVal === 1 ? `Token (${tokenSymbol})` : "—"}
       </div>
 
-      {/* Free Mint Card (tombol sekarang claimFreeByFidSig) */}
+      {/* Free Mint Card */}
       <div className="rounded-2xl p-4 border border-white/10 bg-white/5">
         <div className="flex items-center justify-between gap-3">
           <div>

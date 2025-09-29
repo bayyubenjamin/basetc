@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useAccount } from "wagmi"; // [NEW] untuk ambil wallet kalau sudah auto-connect
 import Navigation, { type TabName } from "./components/Navigation";
 import Monitoring from "./components/Monitoring";
 import Rakit from "./components/Rakit";
@@ -12,6 +13,7 @@ const TAB_KEY = "basetc_active_tab";
 
 export default function Page() {
   const [activeTab, setActiveTab] = useState<TabName>(DEFAULT_TAB);
+  const { address } = useAccount(); // [NEW]
 
   // init: Farcaster SDK ready + restore tab dari ?tab= atau localStorage
   useEffect(() => {
@@ -42,7 +44,65 @@ export default function Page() {
     }
   }, []);
 
-  // === [NEW] Referral 'touch' saat landing (Home) ===
+  // === [NEW] Upsert user ke Supabase dari Farcaster context saat landing
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { sdk } = await import("@farcaster/miniapp-sdk");
+        const raw = (sdk as any)?.context;
+        const ctx = typeof raw === "function" ? await raw.call(sdk) : await raw;
+        const user = ctx?.user;
+        if (!user?.fid) return;
+
+        // persist FID ke localStorage
+        try { localStorage.setItem("basetc_fid", String(user.fid)); } catch {}
+
+        // upsert profil dasar (tanpa wallet dulu)
+        if (!cancelled) {
+          await fetch("/api/user", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              fid: Number(user.fid),
+              wallet: null,
+              username: user.username ?? null,
+              display_name: user.displayName ?? null,
+              pfp_url: user.pfpUrl ?? null,
+            }),
+          }).catch(() => {});
+        }
+      } catch {
+        // bukan di konteks Farcaster → skip
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // === [NEW] Lengkapi mapping fid ↔ wallet begitu wallet tersedia
+  useEffect(() => {
+    (async () => {
+      if (!address) return;
+      // ambil fid dari localStorage / query bila ada
+      let fidStr: string | null = null;
+      try {
+        const url = new URL(window.location.href);
+        fidStr = url.searchParams.get("fid") || localStorage.getItem("basetc_fid");
+      } catch {}
+      if (!fidStr || !/^\d+$/.test(fidStr)) return;
+
+      await fetch("/api/user", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          fid: Number(fidStr),
+          wallet: address,
+        }),
+      }).catch(() => {});
+    })();
+  }, [address]);
+
+  // === Referral 'touch' saat landing (Home)
   useEffect(() => {
     try {
       const url = new URL(window.location.href);
