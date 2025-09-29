@@ -2,36 +2,32 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { FC } from "react";
-import Image from "next/image"; // <-- Tambahkan impor ini
+import Image from "next/image";
 import {
   useAccount,
   useReadContract,
   useWriteContract,
 } from "wagmi";
-import { baseSepolia } from "wagmi/chains"; // ← PENTING: pakai wagmi/chains, bukan viem/chains
+import { baseSepolia } from "wagmi/chains";
 import {
   rigSaleAddress,
   rigSaleABI,
   rigNftAddress,
   rigNftABI,
 } from "../lib/web3Config";
-import { formatEther, formatUnits, type Address } from "viem"; // [ADD] type Address
+import { formatEther, formatUnits, type Address } from "viem";
 
 // =============================
-// [ADD] Helper Invite Math (aturan klaim: 1 • 2× s/d 10 • 3× setelahnya)
+// Invite Math (1 • 2× s/d 10 • 3× setelahnya)
 // =============================
 function maxClaimsFrom(totalInvites: number): number {
   if (totalInvites <= 0) return 0;
-  if (totalInvites <= 10) {
-    // 1 (saat capai 1) + floor((total-1)/2)
-    return 1 + Math.floor(Math.max(0, totalInvites - 1) / 2);
-  }
-  // Sampai 10 → total 5 klaim, selanjutnya per 3
+  if (totalInvites <= 10) return 1 + Math.floor(Math.max(0, totalInvites - 1) / 2);
   return 5 + Math.floor((totalInvites - 10) / 3);
 }
 function invitesNeededForNext(totalInvites: number, claimed: number): number {
   const nowMax = maxClaimsFrom(totalInvites);
-  if (claimed < nowMax) return 0; // sudah eligible
+  if (claimed < nowMax) return 0;
   let t = totalInvites;
   while (maxClaimsFrom(t) < claimed + 1) t++;
   return t - totalInvites;
@@ -126,6 +122,7 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
   // ----- Free mint status -----
   const freeOpenRes = useReadContract({ address: rigSaleAddress, abi: rigSaleABI as any, functionName: "freeMintOpen" });
   const freeIdRes   = useReadContract({ address: rigSaleAddress, abi: rigSaleABI as any, functionName: "freeMintId" });
+  // NOTE: kontrak versi FID biasanya track "freeMintedByFid", tapi di UI kita tetap pakai flag address untuk UX dasar
   const freeMineRes = useReadContract({
     address: rigSaleAddress, abi: rigSaleABI as any, functionName: "freeMinted",
     args: address ? [address] : undefined,
@@ -135,6 +132,25 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
   const freeId    = freeIdRes.data as bigint | undefined;
   const freeUsed  = Boolean(freeMineRes.data);
   const isBasicFreeForMe = freeOpen && BASIC !== undefined && freeId === BASIC && !freeUsed;
+
+  // ===== [NEW] Ambil FID & inviter dari URL/localStorage =====
+  const [fid, setFid] = useState<bigint>(0n);
+  const [inviter, setInviter] = useState<Address>("0x0000000000000000000000000000000000000000");
+  useEffect(() => {
+    try {
+      const url = new URL(window.location.href);
+      const qFid = url.searchParams.get("fid");
+      const qRef = url.searchParams.get("ref");
+      const lsFid = typeof window !== "undefined" ? window.localStorage.getItem("basetc_fid") : null;
+      const lsRef = typeof window !== "undefined" ? window.localStorage.getItem("basetc_ref") : null;
+
+      const fidNum = qFid ?? lsFid ?? "";
+      if (fidNum && /^\d+$/.test(fidNum)) setFid(BigInt(fidNum));
+
+      const refAddr = (qRef ?? lsRef ?? "").trim();
+      if (refAddr && /^0x[0-9a-fA-F]{40}$/.test(refAddr)) setInviter(refAddr as Address);
+    } catch {}
+  }, []);
 
   // ----- ERC20 allowance -----
   const allowanceRes = useReadContract({
@@ -161,22 +177,48 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
   };
 
   // ---- Handlers ----
+  // [CHANGED] Sekarang pakai claimFreeByFidSig dengan signature dari backend
   const handleClaimBasicFree = async () => {
     try {
       setMessage("");
       if (!address) return setMessage("Connect wallet first.");
-      if (!isBasicFreeForMe) return setMessage("No free mint available.");
+      if (!freeOpen) return setMessage("Free mint belum dibuka.");
+      if (!fid || fid === 0n) return setMessage("FID Farcaster tidak ditemukan. Tambah ?fid=... di URL atau set localStorage 'basetc_fid'.");
 
+      // Minta payload signature ke server
+      const res = await fetch("/api/referral", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          mode: "free-sign",
+          fid: String(fid),
+          to: address,
+          inviter, // bisa 0x0 kalau tanpa referral
+        }),
+      });
+      const sig = await res.json();
+      if (sig?.error) throw new Error(sig.error);
+      if (!("v" in sig) || !("r" in sig) || !("s" in sig) || !("deadline" in sig)) {
+        return setMessage("Signer belum aktif di backend (v,r,s kosong).");
+      }
+
+      // Panggil kontrak: claimFreeByFidSig(fid, to, inviter, deadline, v, r, s)
       await writeContractAsync({
         address: rigSaleAddress,
         abi: rigSaleABI as any,
-        functionName: "claimFree",
-        args: [],
+        functionName: "claimFreeByFidSig",
+        args: [
+          BigInt(sig.fid ?? fid),
+          address as `0x${string}`,
+          (sig.inviter ?? inviter) as `0x${string}`,
+          BigInt(sig.deadline),
+          sig.v, sig.r, sig.s,
+        ],
         account: address as `0x${string}`,
-        chain: baseSepolia, // ← tambahkan chain + account
+        chain: baseSepolia,
       });
 
-      setMessage("Claim success!");
+      setMessage("Free mint sukses!");
       onTransactionSuccess?.();
     } catch (e: any) {
       setMessage(e?.shortMessage || e?.message || "Claim failed");
@@ -241,16 +283,15 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
   const tierId = (t: TierID) => (t === "basic" ? BASIC : t === "pro" ? PRO : LEGEND);
   const onClickCta = (t: TierID) => {
     const id = tierId(t);
-    if (t === "basic" && isBasicFreeForMe) return () => handleClaimBasicFree();
+    if (t === "basic" && isBasicFreeForMe) return () => handleClaimBasicFree(); // <- sekarang sig-based
     return () => handleBuy(id);
   };
   const ctaText = (t: TierID) => (t === "basic" && isBasicFreeForMe ? "Claim Free Rig" : "Buy");
 
   // ==========================================================
-  // [ADD] SECTION: Invite Task + Free Mint (tanpa menghapus apa pun)
+  // Invite Task + Free Mint CARDs (tetap, hanya tombol claim free diubah)
   // ==========================================================
 
-  // Total undangan valid on-chain (sebagai inviter). Pastikan ABI punya inviteCountOf(address).
   const inviteCountRes = useReadContract({
     address: rigSaleAddress,
     abi: rigSaleABI as any,
@@ -260,7 +301,6 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
   });
   const totalInvites = inviteCountRes?.data ? Number(inviteCountRes.data as bigint) : 0;
 
-  // Klaim yang sudah diambil (sementara dari backend /api/referral)
   const [claimedRewards, setClaimedRewards] = useState(0);
   useEffect(() => {
     if (!address) return;
@@ -275,53 +315,8 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
   const needMoreInv = invitesNeededForNext(totalInvites, claimedRewards);
 
   const [inviteMsg, setInviteMsg] = useState<string>("");
-  const [freeMsg, setFreeMsg] = useState<string>("");
   const [busyInvite, setBusyInvite] = useState(false);
-  const [busyFreeCard, setBusyFreeCard] = useState(false);
 
-  // [ADD] Optional: Free mint via backend signature (kalau kamu aktifkan di /api/referral)
-  // Jika tidak dipakai, card Free Mint di bawah tetap bisa gunakan handleClaimBasicFree yang on-chain.
-  async function handleFreeMintViaSignature(opts: { fid: bigint; inviter?: Address }) {
-    try {
-      if (!address) return setFreeMsg("Connect wallet dulu.");
-      if (!freeOpen) return setFreeMsg("Free mint belum dibuka.");
-      setFreeMsg("");
-      setBusyFreeCard(true);
-
-      const res = await fetch("/api/referral", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          mode: "free-sign",
-          fid: String(opts.fid),
-          to: address,
-          inviter: opts.inviter ?? "0x0000000000000000000000000000000000000000",
-        }),
-      });
-      const sig = await res.json();
-      if (sig?.error) throw new Error(sig.error);
-
-      // Kalau backend sudah mengembalikan v,r,s & deadline sesuai EIP-712:
-      // await writeContractAsync({
-      //   address: rigSaleAddress,
-      //   abi: rigSaleABI as any,
-      //   functionName: "claimFreeByFidSig",
-      //   args: [BigInt(sig.fid), address as `0x${string}`, (opts.inviter ?? "0x0000000000000000000000000000000000000000") as `0x${string}`, BigInt(sig.deadline), sig.v, sig.r, sig.s],
-      //   account: address as `0x${string}`,
-      //   chain: baseSepolia,
-      // });
-
-      setFreeMsg("Free mint request sent (cek backend signer).");
-    } catch (e: any) {
-      setFreeMsg(e?.shortMessage || e?.message || "Free mint gagal");
-    } finally {
-      setBusyFreeCard(false);
-    }
-  }
-
-  // [ADD] Claim reward inviter (kuota dihitung dari totalInvites vs claimedRewards)
-  // Di tahap lanjut, sebaiknya backend jalankan relayer mint on-chain terlebih dulu,
-  // lalu baru increment claimed di DB. Di sini disiapkan panggilan increment.
   async function handleClaimInviteReward() {
     try {
       if (!address) return setInviteMsg("Connect wallet dulu.");
@@ -331,14 +326,7 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
       }
       setBusyInvite(true);
 
-      // (Opsional) panggil backend untuk lakukan mint via relayer:
-      // await fetch("/api/referral", {
-      //   method: "POST",
-      //   headers: { "content-type": "application/json" },
-      //   body: JSON.stringify({ action: "claim-invite-reward", inviter: address, to: address }),
-      // });
-
-      // Increment counter claimed di DB:
+      // TODO (opsional): mint on-chain via relayer di backend terlebih dulu
       const res = await fetch("/api/referral", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -367,9 +355,7 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
         Mode: {modeVal === 0 ? "ETH" : modeVal === 1 ? `Token (${tokenSymbol})` : "—"}
       </div>
 
-      {/* ============================== */}
-      {/* [ADD] CARD: Free Mint User Baru */}
-      {/* ============================== */}
+      {/* Free Mint Card (tombol sekarang claimFreeByFidSig) */}
       <div className="rounded-2xl p-4 border border-white/10 bg-white/5">
         <div className="flex items-center justify-between gap-3">
           <div>
@@ -378,38 +364,20 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
             {!freeOpen && <div className="text-xs opacity-70">Free mint belum dibuka.</div>}
           </div>
           <div className="flex gap-2">
-            {/* Tombol lama (on-chain claimFree) tetap dipertahankan */}
             <button
               disabled={!freeOpen || !isBasicFreeForMe}
               onClick={handleClaimBasicFree}
               className={`px-3 py-2 rounded-lg ${freeOpen && isBasicFreeForMe ? "bg-cyan-500" : "bg-neutral-600 cursor-not-allowed"}`}
               title={!freeOpen ? "Closed" : (!isBasicFreeForMe ? "Tidak tersedia / sudah di-claim" : undefined)}
             >
-              Claim Free (On-chain)
-            </button>
-
-            {/* Optional: tombol via Signature backend (kalau kamu aktifkan signer) */}
-            <button
-              disabled={!freeOpen || busyFreeCard}
-              onClick={() => {
-                // TODO: ganti 0n dengan FID Farcaster dari session mini-app kamu
-                const fidFromSession = 0n as bigint;
-                const inviterAddr = undefined as Address | undefined;
-                handleFreeMintViaSignature({ fid: fidFromSession, inviter: inviterAddr });
-              }}
-              className={`px-3 py-2 rounded-lg ${freeOpen ? "bg-indigo-500" : "bg-neutral-600 cursor-not-allowed"}`}
-              title="EIP-712 (opsional)"
-            >
-              {busyFreeCard ? "Processing..." : "Free Mint (Sig)"}
+              Claim Free
             </button>
           </div>
         </div>
-        {!!freeMsg && <div className="mt-2 text-sm opacity-90">{freeMsg}</div>}
+        {!!message && <div className="mt-2 text-sm opacity-90">{message}</div>}
       </div>
 
-      {/* ============================== */}
-      {/* [ADD] CARD: Invite Task → Free Basic */}
-      {/* ============================== */}
+      {/* Invite Task Card */}
       <div className="rounded-2xl p-4 border border-white/10 bg-white/5">
         <div className="flex items-center justify-between gap-3">
           <div>
@@ -472,7 +440,8 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
         })}
       </div>
 
-      {!!message && <p className="text-xs text-green-400">{message}</p>}
+      {/* Pesan global */}
+      {/* {!!message && <p className="text-xs text-green-400">{message}</p>} */}
     </div>
   );
 };
