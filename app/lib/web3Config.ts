@@ -1,8 +1,8 @@
 // app/lib/web3Config.ts
 //
-// Alasan Perbaikan Final: Memperbaiki build error "'chainId' is not exported" dan "'CFG' is not exported".
-// Menambahkan kembali ekspor `chainId` dan objek `CFG` yang komprehensif. Ini dibutuhkan oleh
-// komponen lama (Monitoring, Rakit) dan rute API (relayer) yang rusak akibat refactoring sebelumnya.
+// Alasan Perbaikan Definitif: Memperbaiki build error "Property 'referral' does not exist".
+// Mengganti nama key `referralClaimer` menjadi `referral` di dalam objek `CFG.abis`.
+// Ini untuk menyelaraskan dengan nama properti yang diharapkan oleh file `app/lib/contracts.ts`.
 import { http, createConfig } from "wagmi";
 import { baseSepolia } from "wagmi/chains";
 import farcaster from "@farcaster/miniapp-wagmi-connector";
@@ -59,14 +59,10 @@ export const config = createConfig({
   },
 });
 
-// --- FIX FINAL DI SINI ---
-// Menambahkan kembali ekspor lama untuk kompatibilitas dengan sisa aplikasi.
-
-// 1. Ekspor `chainId` (dan aliasnya) yang dibutuhkan oleh Monitoring.tsx dan Rakit.tsx
+// Ekspor lama untuk kompatibilitas
 export const chainId = CHAIN.id;
 export const BASE_CHAIN_ID = CHAIN.id;
 
-// 2. Ekspor objek `CFG` komprehensif yang dibutuhkan oleh rute API server-side
 export const CFG = {
     ...CHAIN,
     addresses: ADDR,
@@ -77,7 +73,8 @@ export const CFG = {
         gameCore: gameCoreABI,
         rewardsVault: rewardsVaultABI,
         treasuryVault: treasuryVaultABI,
-        referralClaimer: referralABI,
+        // --- FIX FINAL DI SINI ---
+        referral: referralABI, // Nama properti diubah dari 'referralClaimer' menjadi 'referral'
     }
 };
 
