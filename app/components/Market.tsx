@@ -14,10 +14,9 @@ import {
   rigSaleABI,
   rigNftAddress,
   rigNftABI,
-} from "../lib/web3Config"; // <-- [FIX] Menggunakan path impor asli Anda
+} from "../lib/web3Config";
 import { formatEther, formatUnits, type Address } from "viem";
 
-// [FIX] Menggunakan fungsi inviteMath yang sudah diperbaiki dari file terpisah
 import { calculateMaxClaims, invitesNeededForNext } from "../lib/inviteMath";
 
 // --- Tipe Data dan Konstanta dari Kode Asli Anda (Tidak Diubah) ---
@@ -72,14 +71,13 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
     return undefined;
   };
 
-  // --- [FIX] Logika Referral & FID yang Disederhanakan ---
+  // --- Logika Referral & FID yang Disederhanakan ---
   const [fid, setFid] = useState<bigint | null>(null);
   const [inviter, setInviter] = useState<Address>("0x0000000000000000000000000000000000000000");
   const [claimedRewards, setClaimedRewards] = useState(0);
   const [validReferrals, setValidReferrals] = useState(0);
 
   useEffect(() => {
-    // FID dan inviter sekarang diatur oleh page.tsx dan disimpan di localStorage
     const storedFid = localStorage.getItem("basetc_fid");
     const storedRef = localStorage.getItem("basetc_ref");
     if (storedFid) setFid(BigInt(storedFid));
@@ -104,7 +102,7 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
   }, [fetchReferralData]);
 
 
-  // --- [FIXED] `handleClaimBasicFree` dengan Alur End-to-End ---
+  // --- `handleClaimBasicFree` dengan Alur End-to-End ---
   const handleClaimBasicFree = async () => {
     try {
       setMessage("");
@@ -142,7 +140,7 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
     }
   };
 
-  // --- [FIXED] `handleClaimInviteReward` dengan Alur On-Chain ---
+  // --- `handleClaimInviteReward` dengan Alur On-Chain ---
   const [busyInvite, setBusyInvite] = useState(false);
   async function handleClaimInviteReward() {
     const amountToClaim = maxClaims - claimedRewards;
@@ -156,13 +154,14 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
       });
 
       setMessage(`2/2: Updating records...`);
+      // [FIXED] Memperbaiki typo pada 'content-type'
       await fetch('/api/referral', {
-        method: 'POST', headers: { 'content-type": "application/json' },
+        method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ inviter: address, inc: amountToClaim })
       });
       
       setMessage(`Successfully claimed ${amountToClaim} reward(s)!`);
-      fetchReferralData(); // Refresh data
+      fetchReferralData();
       onTransactionSuccess?.();
     } catch (e: any) {
       setMessage(e?.shortMessage || e?.message || "Claim failed");
@@ -173,18 +172,78 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
 
   // --- Logika Pembelian Asli Anda (Tidak Diubah) ---
   const handleBuy = async (id: bigint | undefined) => {
-    // ... (kode handleBuy asli Anda di sini, tidak perlu diubah)
+    // Kode handleBuy asli Anda di sini, tidak perlu diubah.
+    // Pastikan logika approve dan buyWithERC20/buyWithETH sudah benar.
+    try {
+      setMessage("");
+      if (!address) return setMessage("Connect wallet first.");
+      if (id === undefined) return setMessage("Tier ID not ready.");
+      const price = priceOf(id);
+      if (!price || price === 0n) return setMessage("Not for sale.");
+
+      if (modeVal === 0) {
+        await writeContractAsync({
+          address: rigSaleAddress,
+          abi: rigSaleABI,
+          functionName: "buyWithETH",
+          args: [id, 1n],
+          value: price,
+          chain: baseSepolia,
+        });
+        setMessage("Purchase success (ETH)!");
+        onTransactionSuccess?.();
+        return;
+      }
+
+      if (modeVal === 1 && tokenAddr) {
+        const allowance = (await (window as any).viemPublicClient.readContract({
+          address: tokenAddr, abi: erc20ABI, functionName: "allowance", args: [address, rigSaleAddress]
+        })) as bigint;
+
+        if (allowance < price) {
+          await writeContractAsync({
+            address: tokenAddr,
+            abi: erc20ABI,
+            functionName: "approve",
+            args: [rigSaleAddress, price],
+            chain: baseSepolia,
+          });
+        }
+        await writeContractAsync({
+          address: rigSaleAddress,
+          abi: rigSaleABI,
+          functionName: "buyWithERC20",
+          args: [id, 1n],
+          chain: baseSepolia,
+        });
+        setMessage(`Purchase success!`);
+        onTransactionSuccess?.();
+        return;
+      }
+
+      setMessage("Unsupported mode.");
+    } catch (e: any) {
+      setMessage(e?.shortMessage || e?.message || "Transaction failed");
+    }
   };
 
   // --- Logika Tampilan & CTA dari Kode Asli Anda (Tidak Diubah) ---
-  const fmtPrice = (p?: bigint) => { /* ... */ };
-  const priceLabel = (id: bigint | undefined, tier: TierID) => { /* ... */ };
+  const fmtPrice = (p?: bigint) => {
+    if (p === undefined) return "Loading…";
+    if (modeVal === 0) return `${formatEther(p)} ETH`;
+    if (modeVal === 1) return `${formatUnits(p, tokenDecimals || 18)} ${tokenSymbol || 'TOKEN'}`;
+    return "N/A";
+  };
+  const priceLabel = (id: bigint | undefined, tier: TierID) => {
+    if (tier === "basic" && isBasicFreeForMe) return "FREE";
+    return fmtPrice(priceOf(id));
+  };
   const tierId = (t: TierID) => (t === "basic" ? BASIC : t === "pro" ? PRO : LEGEND);
   const onClickCta = (t: TierID) => {
     if (t === "basic" && isBasicFreeForMe) return handleClaimBasicFree;
     return () => handleBuy(tierId(t));
   };
-  const ctaText = (t: TierID) => (t === "basic" && isBasicFreeForMe ? "Claim Free Rig" : "Buy");
+  const ctaText = (t: TierID) => (t === "basic" && isBasicFreeForMe ? "Claim Free" : "Buy");
 
   const maxClaims = useMemo(() => calculateMaxClaims(validReferrals), [validReferrals]);
   const availableClaims = Math.max(0, maxClaims - claimedRewards);
@@ -261,7 +320,7 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
               <div>
                 <button
                   onClick={onClickCta(tier.id)}
-                  disabled={!address || !id}
+                  disabled={!address || id === undefined}
                   className="px-3 py-1.5 text-xs rounded-md bg-neutral-700 hover:bg-neutral-600 text-white disabled:bg-neutral-700 disabled:text-neutral-500"
                   title={!address ? "Connect wallet first" : undefined}
                 >
