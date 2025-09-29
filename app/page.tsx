@@ -7,34 +7,65 @@ import Monitoring from "./components/Monitoring";
 import Rakit from "./components/Rakit";
 import Market from "./components/Market";
 import Profil from "./components/Profil";
-// Impor fungsi yang sudah diperbaiki dari farcaster.ts
-import { getFarcasterIds, sdkReady } from "./lib/farcaster";
-import { isAddress } from "viem";
 
 const DEFAULT_TAB: TabName = "monitoring";
 const TAB_KEY = "basetc_active_tab";
+
+// helper: ambil context Farcaster robust (getContext / context fn / promise) + retry
+async function getFarcasterContextUser(): Promise<{
+  fid: number | null;
+  username: string | null;
+  displayName: string | null;
+  pfpUrl: string | null;
+}> {
+  try {
+    const { sdk }: any = await import("@farcaster/miniapp-sdk");
+    try { await sdk?.actions?.ready?.(); } catch {}
+
+    const tryGet = async () => {
+      if (typeof sdk?.getContext === "function") return await sdk.getContext();
+      const raw = sdk?.context;
+      if (typeof raw === "function") return await raw.call(sdk);
+      if (raw && typeof raw.then === "function") return await raw;
+      return raw ?? null;
+    };
+
+    let ctx: any = null;
+    for (let i = 0; i < 6; i++) { // retry ~3 detik total
+      ctx = await tryGet();
+      if (ctx?.user?.fid) break;
+      await new Promise(r => setTimeout(r, 500));
+    }
+
+    const u = ctx?.user ?? {};
+    return {
+      fid: u?.fid ?? null,
+      username: u?.username ?? null,
+      displayName: u?.displayName ?? null,
+      pfpUrl: u?.pfpUrl ?? null,
+    };
+  } catch {
+    return { fid: null, username: null, displayName: null, pfpUrl: null };
+  }
+}
 
 export default function Page() {
   const [activeTab, setActiveTab] = useState<TabName>(DEFAULT_TAB);
   const { address } = useAccount();
 
-  // Efek ini berjalan sekali saat komponen pertama kali dimuat.
-  // Tugasnya adalah memberi tahu Farcaster SDK bahwa aplikasi siap dan
-  // mengembalikan pengguna ke tab terakhir yang mereka buka.
+  // init: Farcaster SDK ready + restore tab dari ?tab= atau localStorage
   useEffect(() => {
-    // Memberi sinyal ke Farcaster bahwa Mini App sudah siap ditampilkan.
-    sdkReady();
+    (async () => {
+      try {
+        const { sdk } = await import("@farcaster/miniapp-sdk");
+        sdk.actions.ready?.();
+      } catch (err) {
+        console.warn("[miniapp] SDK not available:", err);
+      }
+    })();
 
     try {
       const url = new URL(window.location.href);
-      const refFromUrl = url.searchParams.get('ref');
-
-      // Jika ada parameter 'ref' di URL, simpan sebagai inviter di localStorage.
-      // Ini memastikan link referral tetap berfungsi meski pengguna berpindah tab.
-      if (refFromUrl && isAddress(refFromUrl)) {
-        localStorage.setItem("basetc_ref", refFromUrl);
-      }
-      
       const q = (url.searchParams.get("tab") || "").toLowerCase();
       const fromQuery = ["monitoring", "rakit", "market", "profil"].includes(q)
         ? (q as TabName)
@@ -51,62 +82,87 @@ export default function Page() {
     }
   }, []);
 
-  // [REVISI UTAMA]
-  // Efek ini adalah jantung dari inisialisasi pengguna.
-  // Dijalankan setiap kali 'address' (wallet) berubah (saat connect/disconnect).
-  // Ini menggabungkan semua logika penting ke dalam satu tempat untuk menghindari race condition.
+  // === Auto-upsert user ke Supabase dari Farcaster context (landing)
   useEffect(() => {
-    const initializeUserAndReferral = async () => {
-      // 1. Ambil semua informasi dari Farcaster dalam satu panggilan.
-      //    Fungsi getFarcasterIds sudah dibuat robust dengan retry.
-      const { fid, userProfile } = await getFarcasterIds();
+    let cancelled = false;
+    (async () => {
+      const u = await getFarcasterContextUser();
 
-      // Jika tidak mendapatkan FID, hentikan proses.
-      if (!fid) {
-        console.warn("Could not get Farcaster FID. User initialization stopped.");
-        return;
+      // fallback: kalau context kosong, coba ambil dari ?fid / localStorage
+      if (!u.fid) {
+        try {
+          const url = new URL(window.location.href);
+          const qfid = url.searchParams.get("fid") || localStorage.getItem("basetc_fid");
+          if (qfid && /^\d+$/.test(qfid)) u.fid = Number(qfid);
+        } catch {}
       }
-      
-      // Simpan FID ke localStorage agar bisa diakses komponen lain sebagai fallback.
-      localStorage.setItem("basetc_fid", String(fid));
 
-      // 2. Lakukan "Referral Touch"
-      //    Ini untuk mencatat referral yang statusnya masih 'pending' di database.
-      const inviterAddress = localStorage.getItem("basetc_ref");
-      if (inviterAddress) {
+      if (!u.fid || cancelled) return;
+
+      try { localStorage.setItem("basetc_fid", String(u.fid)); } catch {}
+
+      // upsert profil dasar (tanpa wallet)
+      try {
+        await fetch("/api/user", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            fid: u.fid,
+            wallet: null,
+            username: u.username ?? null,
+            display_name: u.displayName ?? null,
+            pfp_url: u.pfpUrl ?? null,
+          }),
+        });
+      } catch {}
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // === Lengkapi mapping fid ↔ wallet ketika wallet tersedia
+  useEffect(() => {
+    (async () => {
+      if (!address) return;
+      let fidStr: string | null = null;
+      try {
+        const url = new URL(window.location.href);
+        fidStr = url.searchParams.get("fid") || localStorage.getItem("basetc_fid");
+      } catch {}
+      if (!fidStr || !/^\d+$/.test(fidStr)) return;
+
+      await fetch("/api/user", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ fid: Number(fidStr), wallet: address }),
+      }).catch(() => {});
+    })();
+  }, [address]);
+
+  // === Referral 'touch' saat landing (Home)
+  useEffect(() => {
+    try {
+      const url = new URL(window.location.href);
+      const fid = url.searchParams.get("fid");
+      const ref = url.searchParams.get("ref");
+
+      if (fid && /^\d+$/.test(fid)) localStorage.setItem("basetc_fid", fid);
+      if (ref && /^0x[0-9a-fA-F]{40}$/.test(ref)) localStorage.setItem("basetc_ref", ref);
+
+      if (fid && /^\d+$/.test(fid) && ref && /^0x[0-9a-fA-F]{40}$/.test(ref)) {
         fetch("/api/referral", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
             action: "touch",
-            inviter: inviterAddress,
-            invitee_fid: fid,
-            invitee_wallet: address, // Sertakan wallet jika sudah terhubung
+            inviter: ref,
+            invitee_fid: Number(fid),
           }),
-        }).catch(console.warn); // Lanjutkan eksekusi meski fetch ini gagal.
+        }).catch(() => {});
       }
+    } catch {}
+  }, []);
 
-      // 3. Lakukan Auto-Upsert Pengguna ke Supabase
-      //    Ini akan membuat data pengguna baru atau memperbarui data yang sudah ada (misal, menambahkan alamat wallet).
-      await fetch("/api/user", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          fid: fid,
-          wallet: address ?? null, // Selalu kirim status wallet terbaru.
-          username: userProfile?.username ?? null,
-          display_name: userProfile?.displayName ?? null,
-          pfp_url: userProfile?.pfpUrl ?? null,
-        }),
-      }).catch(console.warn); // Lanjutkan eksekusi meski fetch ini gagal.
-    };
-
-    initializeUserAndReferral();
-  }, [address]); // <-- Bergantung pada 'address', jadi akan berjalan lagi saat wallet terhubung.
-
-
-  // Efek ini untuk menyimpan tab aktif ke localStorage
-  // agar pengalaman pengguna konsisten saat kembali ke aplikasi.
+  // simpan tab + scroll to top saat tab berubah
   useEffect(() => {
     try {
       localStorage.setItem(TAB_KEY, activeTab);
@@ -114,16 +170,13 @@ export default function Page() {
     window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
   }, [activeTab]);
 
-
-  // Gunakan useMemo untuk efisiensi, agar komponen tidak di-render ulang
-  // jika tab tidak berubah.
+  // pilih konten
   const content = useMemo(() => {
     switch (activeTab) {
       case "rakit":
         return <Rakit />;
       case "market":
-        // Kirim prop onTransactionSuccess untuk refresh data jika diperlukan
-        return <Market onTransactionSuccess={() => console.log('transaksi berhasil')} />;
+        return <Market />;
       case "profil":
         return <Profil />;
       case "monitoring":
@@ -133,14 +186,15 @@ export default function Page() {
   }, [activeTab]);
 
   return (
-    <div className="flex flex-col min-h-screen bg-gray-900 text-white">
-      {/* Padding di bawah untuk memberi ruang bagi navigation bar di mobile */}
-      <main
+    <div className="flex flex-col min-h-screen">
+      {/* padding bottom untuk nav + safe area iOS */}
+      <div
         className="flex-1"
-        style={{ paddingBottom: "calc(5rem + env(safe-area-inset-bottom, 0px))" }}
+        style={{ paddingBottom: "calc(4rem + env(safe-area-inset-bottom, 0px))" }}
       >
         {content}
-      </main>
+      </div>
+
       <Navigation activeTab={activeTab} setActiveTab={setActiveTab} />
     </div>
   );
