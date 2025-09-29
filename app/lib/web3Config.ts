@@ -1,8 +1,8 @@
 // app/lib/web3Config.ts
 //
-// Alasan Perbaikan Final: Memperbaiki build error "is not exported".
-// Menambahkan kembali ekspor `BASE_CHAIN_ID` dan `CFG` yang dibutuhkan oleh
-// komponen lain (Monitoring, Rakit, API Routes) yang rusak akibat refactoring sebelumnya.
+// Alasan Perbaikan Final: Memperbaiki build error "'chainId' is not exported" dan "'CFG' is not exported".
+// Menambahkan kembali ekspor `chainId` dan objek `CFG` yang komprehensif. Ini dibutuhkan oleh
+// komponen lama (Monitoring, Rakit) dan rute API (relayer) yang rusak akibat refactoring sebelumnya.
 import { http, createConfig } from "wagmi";
 import { baseSepolia } from "wagmi/chains";
 import farcaster from "@farcaster/miniapp-wagmi-connector";
@@ -33,7 +33,7 @@ export const CHAIN = {
   rpcUrl: "https://sepolia.base.org",
 } as const;
 
-// Ekspor alamat dan ABI secara individual
+// Ekspor alamat dan ABI secara individual untuk kemudahan penggunaan di client-side
 export const {
     BASETC: baseTcAddress,
     RIGNFT: rigNftAddress,
@@ -50,7 +50,7 @@ export {
   rewardsVaultABI, treasuryVaultABI, referralABI,
 };
 
-// Konfigurasi Wagmi dibuat dan diekspor dari sini
+// Konfigurasi Wagmi baru untuk digunakan oleh Providers.tsx
 export const config = createConfig({
   chains: [baseSepolia],
   connectors: [farcaster()],
@@ -59,8 +59,26 @@ export const config = createConfig({
   },
 });
 
-// --- FIX DI SINI ---
-// Menambahkan kembali ekspor yang dibutuhkan oleh komponen lain
+// --- FIX FINAL DI SINI ---
+// Menambahkan kembali ekspor lama untuk kompatibilitas dengan sisa aplikasi.
+
+// 1. Ekspor `chainId` (dan aliasnya) yang dibutuhkan oleh Monitoring.tsx dan Rakit.tsx
+export const chainId = CHAIN.id;
 export const BASE_CHAIN_ID = CHAIN.id;
-export const CFG = CHAIN;
+
+// 2. Ekspor objek `CFG` komprehensif yang dibutuhkan oleh rute API server-side
+export const CFG = {
+    ...CHAIN,
+    addresses: ADDR,
+    abis: {
+        baseTc: baseTcABI,
+        rigNft: rigNftABI,
+        rigSale: rigSaleABI,
+        gameCore: gameCoreABI,
+        rewardsVault: rewardsVaultABI,
+        treasuryVault: treasuryVaultABI,
+        referralClaimer: referralABI,
+    }
+};
+
 
