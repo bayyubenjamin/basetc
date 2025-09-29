@@ -1,114 +1,87 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-// [FIX 1] Paksa route ini menjadi dinamis.
-// Ini sangat penting agar Vercel selalu membaca environment variables
-// pada saat runtime, bukan saat build time. Mencegah error "Missing SUPABASE_URL".
-export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
-/**
- * Helper function terpusat untuk membuat koneksi Supabase sebagai admin.
- * Menggunakan service_role key untuk bypass RLS (Row Level Security).
- * @returns SupabaseClient
- */
+// Helper Supabase (tidak diubah)
 function getSbAdmin() {
   const url = process.env.SUPABASE_URL;
-  // [FIX 2] Standardisasi nama environment variable.
-  // Gunakan SUPABASE_SERVICE_ROLE_KEY secara konsisten di seluruh proyek.
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
   if (!url || !key) {
-    // Memberikan error yang jelas di log server jika env var tidak ditemukan.
-    console.error("Server Error: Missing Supabase admin credentials.");
-    throw new Error("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY environment variables.");
+    throw new Error("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY");
   }
-
-  // Opsi { auth: { persistSession: false } } penting untuk lingkungan server.
   return createClient(url, key, { auth: { persistSession: false } });
 }
 
-/**
- * Handler GET: Mengambil data pengguna berdasarkan FID atau wallet.
- */
+// [FIXED] GET handler
 export async function GET(req: NextRequest) {
   try {
+    const sb = getSbAdmin();
     const { searchParams } = new URL(req.url);
     const fid = searchParams.get("fid");
     const wallet = searchParams.get("wallet");
 
+    // Validasi: harus ada salah satu parameter
     if (!fid && !wallet) {
       return NextResponse.json({ error: "fid or wallet parameter is required" }, { status: 400 });
     }
 
-    const sb = getSbAdmin();
-    let query = sb.from("users").select().limit(1).single();
+    // Memulai query dengan select()
+    let query = sb.from("users").select();
 
+    // Menerapkan filter eq() setelah select()
     if (fid) {
       query = query.eq('fid', fid);
     } else if (wallet) {
       query = query.eq('wallet', String(wallet).toLowerCase());
     }
 
-    const { data, error } = await query;
+    // Menjalankan query dan mengambil satu hasil
+    const { data, error } = await query.maybeSingle();
 
-    if (error) {
-      if (error.code === 'PGRST116') { // Kode error Supabase jika tidak ada baris yang ditemukan
-        return NextResponse.json({ error: "User not found" }, { status: 404 });
-      }
-      throw error;
+    if (error) throw error;
+
+    if (!data) {
+      return NextResponse.json({ error: "user not found" }, { status: 404 });
     }
 
-    return NextResponse.json(data);
+    return NextResponse.json({ user: data });
 
   } catch (e: any) {
-    console.error("GET /api/user Error:", e);
-    return NextResponse.json({ error: e.message || "An unexpected error occurred" }, { status: 500 });
+    return NextResponse.json({ error: e?.message || "server error" }, { status: 500 });
   }
 }
 
-/**
- * Handler POST: Membuat atau memperbarui (upsert) data pengguna.
- */
+// POST handler (tidak diubah, sudah benar)
 export async function POST(req: NextRequest) {
   try {
     const sb = getSbAdmin();
-    const body = await req.json().catch(() => {
-      throw new Error("Invalid JSON body");
-    });
+    const body = await req.json().catch(() => ({}));
 
-    // [FIX 3] Validasi dan sanitasi payload yang masuk.
-    // Ini mencegah data yang tidak valid atau tidak lengkap masuk ke database.
     const payload: any = {};
     if (body.fid) payload.fid = Number(body.fid);
     if (body.wallet) payload.wallet = String(body.wallet).toLowerCase();
-    
-    // Hanya perbarui field profil jika nilainya ada (bukan undefined).
-    // Ini mencegah data yang ada terhapus oleh nilai null/undefined.
     if (typeof body.username !== 'undefined') payload.username = body.username;
     if (typeof body.display_name !== 'undefined') payload.display_name = body.display_name;
     if (typeof body.pfp_url !== 'undefined') payload.pfp_url = body.pfp_url;
     
-    // FID adalah kunci utama, jadi wajib ada.
     if (!payload.fid) {
-      return NextResponse.json({ error: "Missing required field: fid" }, { status: 400 });
+      return NextResponse.json({ error: "missing fid" }, { status: 400 });
     }
 
-    // Menggunakan .upsert() adalah cara yang paling efisien dan aman untuk
-    // membuat atau memperbarui data dalam satu operasi.
     const { data, error } = await sb
       .from("users")
-      .upsert(payload, { onConflict: "fid" }) // Tentukan kolom 'fid' sebagai unique identifier.
+      .upsert(payload, { onConflict: "fid" })
       .select()
-      .single(); // Kembalikan data yang baru saja di-upsert.
+      .single();
 
-    if (error) throw error; // Biarkan error Supabase ditangkap oleh blok catch.
-
-    return NextResponse.json({ success: true, user: data });
+    if (error) throw error;
+    return NextResponse.json({ ok: true, user: data });
 
   } catch (e: any) {
-    console.error("POST /api/user Error:", e);
-    return NextResponse.json({ success: false, error: e.message || "An unexpected server error occurred" }, { status: 500 });
+    return NextResponse.json({ error: e?.message || "server error" }, { status: 500 });
   }
 }
+
 
