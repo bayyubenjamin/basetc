@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabaseAdmin } from "@/app/lib/supabase/server";
+import { getSupabaseAdmin } from "../../lib/supabase/server";
 import { ethers } from "ethers";
-import { rigSaleAddress } from "@/app/lib/web3Config";
+import { rigSaleAddress } from "../../lib/web3Config";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
