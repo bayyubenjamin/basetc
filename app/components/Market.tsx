@@ -150,11 +150,14 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
       if (!sigRes.ok) throw new Error(sigData.error || "Failed to get signature.");
 
       setMessage("Awaiting transaction confirmation...");
+      // PERBAIKAN: Menambahkan properti `account` dan `chain` yang wajib ada
       const txHash = await writeContractAsync({
         address: rigSaleAddress,
         abi: rigSaleABI as any,
         functionName: "claimFreeByFidSig",
         args: [fid, address, sigData.inviter, BigInt(sigData.deadline), sigData.v, sigData.r, sigData.s],
+        account: address,
+        chain: baseSepolia,
       });
       await publicClient?.waitForTransactionReceipt({ hash: txHash });
 
@@ -188,18 +191,18 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
         if (modeVal === 0) { // ETH
             await writeContractAsync({
                 address: rigSaleAddress, abi: rigSaleABI as any, functionName: "buyWithETH",
-                args: [id, 1n], value: price,
+                args: [id, 1n], value: price, account: address, chain: baseSepolia,
             });
         } else if (modeVal === 1 && tokenAddr) { // ERC20
             if ((allowance as bigint) < price) {
                 await writeContractAsync({
                     address: tokenAddr as Address, abi: erc20ABI, functionName: "approve",
-                    args: [rigSaleAddress, price],
+                    args: [rigSaleAddress, price], account: address, chain: baseSepolia,
                 });
             }
             await writeContractAsync({
                 address: rigSaleAddress, abi: rigSaleABI as any, functionName: "buyWithERC20",
-                args: [id, 1n],
+                args: [id, 1n], account: address, chain: baseSepolia,
             });
         } else {
             throw new Error("Unsupported payment mode.");
@@ -316,7 +319,6 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
           const id = tierId(tier.id);
           const price = priceOf(id);
           const isFree = tier.id === "basic" && isBasicFreeForMe;
-          // PERBAIKAN: Type error di sini diperbaiki dengan cast `price as bigint`
           const priceText = isFree ? "FREE" : (price ? `${formatEther(price as bigint)} ETH` : 'N/A');
           return (
             <div key={tier.id} className="flex items-center bg-neutral-800 rounded-lg p-3 space-x-3">
