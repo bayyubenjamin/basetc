@@ -1,23 +1,21 @@
 // app/layout.tsx
-import type { Metadata } from "next";
-import { Inter } from "next/font/google";
 import "./globals.css";
-
-const inter = Inter({ subsets: ["latin"] });
+import type { Metadata } from "next";
+import React from "react";
 
 export const metadata: Metadata = {
-  title: "BaseTC",
-  description: "BaseTC Mini App",
+  title: "BaseTC MiniApp",
+  description: "Farcaster mining console built with Next.js and Tailwind.",
 };
 
 export default function RootLayout({
   children,
-}: Readonly<{
+}: {
   children: React.ReactNode;
-}>) {
+}) {
   return (
     <html lang="en">
-      <body className={inter.className}>
+      <body className="min-h-screen flex flex-col">
         {children}
       </body>
     </html>
