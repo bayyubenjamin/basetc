@@ -10,13 +10,11 @@ type FarcasterUser = {
   pfpUrl?: string;
 };
 
-// Tambahkan 'ready' ke tipe konteks
 type MiniAppContext = {
   user?: FarcasterUser;
   ready: boolean;
 };
 
-// Beri nilai default
 const FarcasterContext = createContext<MiniAppContext>({ ready: false });
 
 export function FarcasterProvider({ children }: { children: ReactNode }) {
@@ -26,11 +24,12 @@ export function FarcasterProvider({ children }: { children: ReactNode }) {
     const init = async () => {
       try {
         const { sdk } = await import("@farcaster/miniapp-sdk");
-        const fcContext = await sdk.getContext();
+        // FIX: Menggunakan sdk.context (properti), bukan sdk.getContext() (metode)
+        const fcContext = await sdk.context; 
         setContext({ ...fcContext, ready: true });
       } catch (error) {
         console.warn("Could not get Farcaster context", error);
-        setContext({ ready: true }); // Tetap set ready, meskipun konteks gagal
+        setContext({ ready: true });
       }
     };
     init();

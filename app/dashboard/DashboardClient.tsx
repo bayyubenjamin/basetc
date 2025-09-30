@@ -4,9 +4,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAccount } from "wagmi";
 
-// Import Provider dan komponen dari direktori yang benar
 import { FarcasterProvider, useFarcaster } from "../context/FarcasterProvider";
-import Web3Provider from "../context/Web3Provider";
+// FIX: Web3Provider adalah named export, jadi gunakan {}
+import { Web3Provider } from "../context/Web3Provider"; 
 import Navigation, { type TabName } from "../components/Navigation";
 import Monitoring from "../components/Monitoring";
 import Rakit from "../components/Rakit";
@@ -17,7 +17,6 @@ import FidInput from "../components/FidInput";
 const DEFAULT_TAB: TabName = "monitoring";
 const TAB_KEY = "basetc_active_tab";
 
-// --- Ini adalah isi dari file page.tsx lama Anda ---
 function MainApp() {
   const [activeTab, setActiveTab] = useState<TabName>(DEFAULT_TAB);
   const { address } = useAccount();
@@ -74,7 +73,7 @@ function AppInitializer() {
 
   useEffect(() => {
     if (!ready) {
-      return; // Tunggu FarcasterProvider selesai
+      return; 
     }
 
     let finalFid: number | null = null;
@@ -134,7 +133,6 @@ function AppInitializer() {
   }} />;
 }
 
-// --- Pembungkus utama yang akan diekspor ---
 export default function DashboardClient() {
   return (
     <Web3Provider>
