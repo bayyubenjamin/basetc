@@ -14,6 +14,7 @@ export default function Head() {
       },
     },
   };
+
   return (
     <>
       <meta name="fc:miniapp" content={JSON.stringify(embed)} />
