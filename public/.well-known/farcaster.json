@@ -9,9 +9,9 @@
     "name": "BaseTC Mini App",
     "iconUrl": "https://basetc.vercel.app/img/logo.png",
     "homeUrl": "https://basetc.vercel.app",
-    "imageUrl": "https://basetc.vercel.app/img/basic.png",
+    "imageUrl": "https://basetc.vercel.app/img/logo.png",
     "buttonTitle": "Start Mining",
-    "splashImageUrl": "https://basetc.vercel.app/img/pro.png",
+    "splashImageUrl": "https://basetc.vercel.app/img/splash.gif",
     "splashBackgroundColor": "#0b0e12",
     "webhookUrl": "https://basetc.vercel.app/api/frame"
   }
