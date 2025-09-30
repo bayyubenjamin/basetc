@@ -21,18 +21,51 @@ export function FarcasterProvider({ children }: { children: ReactNode }) {
   const [context, setContext] = useState<MiniAppContext>({ ready: false });
 
   useEffect(() => {
-    const init = async () => {
+    let isCancelled = false;
+
+    const initialize = async () => {
       try {
         const { sdk } = await import("@farcaster/miniapp-sdk");
-        // FIX: Menggunakan sdk.context (properti), bukan sdk.getContext() (metode)
-        const fcContext = await sdk.context; 
-        setContext({ ...fcContext, ready: true });
+        
+        let fcContext: any = null;
+        // Coba ambil konteks beberapa kali untuk mengatasi race condition
+        for (let i = 0; i < 15; i++) { // Coba selama ~3 detik
+          if (isCancelled) return;
+          try {
+            // sdk.context bisa error jika Warpcast belum siap
+            fcContext = await sdk.context;
+            // Jika berhasil dan ada FID, keluar dari loop
+            if (fcContext?.user?.fid) {
+              break; 
+            }
+          } catch (e) {
+            // Abaikan error sementara dan coba lagi
+          }
+          // Tunggu 200ms sebelum mencoba lagi
+          await new Promise(resolve => setTimeout(resolve, 200));
+        }
+
+        if (isCancelled) return;
+
+        // Apapun hasilnya (dapat konteks atau tidak), set `ready` ke true
+        setContext({
+          user: fcContext?.user,
+          ready: true,
+        });
+
       } catch (error) {
-        console.warn("Could not get Farcaster context", error);
-        setContext({ ready: true });
+        console.warn("Farcaster SDK gagal diinisialisasi.", error);
+        if (!isCancelled) {
+          setContext({ user: undefined, ready: true });
+        }
       }
     };
-    init();
+
+    initialize();
+
+    return () => {
+      isCancelled = true;
+    };
   }, []);
 
   return (
