@@ -3,15 +3,16 @@
     "header": "eyJmaWQiOjg2ODc2NywidHlwZSI6ImN1c3RvZHkiLCJrZXkiOiIweDJmNUU1RDc5MGQ3Mzg4N2Y2NjcxQ0Y4NmZhNGNkNzAxMkEzNUQ1NzQifQ",
     "payload": "eyJkb21haW4iOiJiYXNldGMudmVyY2VsLmFwcCJ9",
     "signature": "MHg2ZjkyM2M5NTlkZWRhMTIyNTQ3NTFjNmNmZWVkZDRkMjA4ZDA0ZmNiOGVmMDQ2ZWE1MzUzMDY2ODQwYzNkMTM2MWI3ZjI5ZjNlY2Q3ZDE4ODFiYjgxMmUzYTk0ZDFmY2E0NDFhNjkyMmI5N2MzNTQ5OTE1YTZiNTk3ZGFkNDkyYjFj"
-  },
-  "miniapp": {
-    "version": "1",
-    "name": "BaseTC Mini App",
-    "iconUrl": "https://basetc.vercel.app/img/logo.png",
-    "homeUrl": "https://basetc.vercel.app/launch",
-    "splashImageUrl": "/s.png",
-    "splashBackgroundColor": "#0b0b0b",
-    "webhookUrl": "https://basetc.vercel.app/api/frame"
-  }
+},
+"frame": {
+"version": "1",
+"name": "BaseTC Mini App",
+"iconUrl": "https://basetc.vercel.app/img/logo.png",
+"homeUrl": "https://basetc.vercel.app/launch",
+"imageUrl": "https://basetc.vercel.app/img/splash.gif",
+"buttonTitle": "Open BaseTC",
+"splashImageUrl": "https://basetc.vercel.app/img/splash.gif",
+"splashBackgroundColor": "#FFFFFF",
+"webhookUrl": "https://basetc.vercel.app/api/frame"
+ }
 }
-
