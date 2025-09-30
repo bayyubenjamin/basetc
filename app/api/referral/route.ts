@@ -5,21 +5,16 @@ import { ethers } from "ethers";
 
 /* =========================
    ✅ INLINE: Invite Tiering (tanpa import)
-   Aturan:
-   - 1 undangan pertama  → 1 NFT.
-   - Undangan #2..#11    → tiap 2 undangan = 1 NFT. (total 11 undangan = 6 NFT)
-   - Undangan #12+       → tiap 3 undangan = 1 NFT.
    ========================= */
 function calculateMaxClaims(validInvites: number): number {
   if (!Number.isFinite(validInvites) || validInvites <= 0) return 0;
   const first = validInvites >= 1 ? 1 : 0;
-  const midInvites = Math.max(Math.min(validInvites, 11) - 1, 0); // invite #2..#11 → 0..10
+  const midInvites = Math.max(Math.min(validInvites, 11) - 1, 0); // #2..#11 → 0..10
   const mid = Math.floor(midInvites / 2);
-  const tailInvites = Math.max(validInvites - 11, 0);             // invite #12+
+  const tailInvites = Math.max(validInvites - 11, 0);             // #12+
   const tail = Math.floor(tailInvites / 3);
   return first + mid + tail;
 }
-
 function remainingClaims(validInvites: number, usedClaims: number): number {
   const maxClaims = calculateMaxClaims(validInvites);
   const used = Number.isFinite(usedClaims) ? Math.max(0, usedClaims) : 0;
@@ -27,37 +22,49 @@ function remainingClaims(validInvites: number, usedClaims: number): number {
 }
 
 /* =========================
-   ENV VARS (sesuaikan)
+   ENV VARS (dengan fallback nama yang kamu pakai)
    ========================= */
-const SUPABASE_URL = process.env.SUPABASE_URL!;
-const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY!;
+// URL Supabase: pakai SUPABASE_URL → fallback ke NEXT_PUBLIC_SUPABASE_URL
+const SUPABASE_URL =
+  process.env.SUPABASE_URL ||
+  process.env.NEXT_PUBLIC_SUPABASE_URL;
 
-const NEXT_PUBLIC_CHAIN_ID = Number(process.env.NEXT_PUBLIC_CHAIN_ID || "84532"); // Base Sepolia
+// Service Role Key: dukung banyak nama yang kamu sebutkan
+const SUPABASE_SERVICE_KEY =
+  process.env.SUPABASE_SERVICE_KEY ||
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  process.env.SUPABASE_SERVICE_ROLE;
+
+if (!SUPABASE_URL) {
+  console.error("Missing SUPABASE_URL / NEXT_PUBLIC_SUPABASE_URL");
+}
+if (!SUPABASE_SERVICE_KEY) {
+  console.error("Missing SUPABASE_SERVICE_KEY / SUPABASE_SERVICE_ROLE_KEY / SUPABASE_SERVICE_ROLE");
+}
+
+const NEXT_PUBLIC_CHAIN_ID = Number(process.env.NEXT_PUBLIC_CHAIN_ID || process.env.CHAIN_ID || "84532"); // Base Sepolia
 const RPC_URL = process.env.RPC_URL || "https://sepolia.base.org";
 
-const RIGSALE_ADDRESS = process.env.CONTRACT_RIGSALE || ""; // jika mint via RigSaleFlexible
-const RIGNFT_ADDRESS  = process.env.CONTRACT_RIGNFT  || ""; // jika mint langsung via RigNFT
-const MINT_MODE = (process.env.REFERRAL_MINT_MODE || "none").toLowerCase(); 
-// opsi: "none" | "rigsale" | "rignft"
+const RIGSALE_ADDRESS = process.env.CONTRACT_RIGSALE || "";
+const RIGNFT_ADDRESS  = process.env.CONTRACT_RIGNFT  || "";
+const MINT_MODE = (process.env.REFERRAL_MINT_MODE || "none").toLowerCase(); // "none" | "rigsale" | "rignft"
 
-const BACKEND_SIGNER_PK = process.env.BACKEND_SIGNER_PK || ""; // jika backend yang melakukan mint
+const BACKEND_SIGNER_PK =
+  process.env.BACKEND_SIGNER_PK ||
+  process.env.RELAYER_PRIVATE_KEY || // dukung nama lain yg kamu pakai
+  "";
 
-// Konstanta ID NFT Basic (samakan dengan kontrak)
 const BASIC_ID = 1;
 
-// Nama tabel (samakan dengan skema DB kamu)
-const TABLE_REFERRALS = "referrals"; // kolom minimal: inviter, invitee_fid, status ("valid"/"pending")
-const TABLE_CLAIMS    = "claims";    // kolom minimal: inviter, type ("basic_free"), amount, tx_hash, created_at
+const TABLE_REFERRALS = "referrals";
+const TABLE_CLAIMS    = "claims";
 
 /* =========================
-   Minimal ABI (sesuaikan)
+   Minimal ABI
    ========================= */
-// RigSaleFlexible: mintBySale(address to, uint256 id, uint256 amount)
 const ABI_RIGSALE = [
   "function mintBySale(address to, uint256 id, uint256 amount) external"
 ];
-
-// RigNFT (opsional, jika kamu punya fungsi mintByGame)
 const ABI_RIGNFT = [
   "function mintByGame(address to, uint256 id, uint256 amount) external",
 ];
@@ -66,6 +73,9 @@ const ABI_RIGNFT = [
    Utility: Supabase & Ethers
    ========================= */
 function supabaseAdmin() {
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
+    throw new Error("Supabase env missing: SUPABASE_URL / SUPABASE_SERVICE_KEY (or ROLE_KEY/ROLE).");
+  }
   return createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
     auth: { persistSession: false },
   });
@@ -86,7 +96,6 @@ function requireString(value: unknown, name: string) {
     throw new Error(`Field "${name}" wajib diisi (string).`);
   }
 }
-
 function requireAddress(value: string, name: string) {
   if (!ethers.isAddress(value)) {
     throw new Error(`Field "${name}" harus berupa address EVM yang valid.`);
@@ -132,7 +141,7 @@ async function recordClaim(inviter: string, amount: number, txHash: string) {
   if (error) throw new Error(`Gagal mencatat klaim: ${error.message}`);
 }
 
-/* ✅ FINAL FIX: pakai upsert (v2) tanpa 'returning' */
+/* ✅ upsert idempotent (tanpa 'returning') */
 async function trackReferral(
   inviter: string,
   invitee_fid: string,
@@ -145,8 +154,7 @@ async function trackReferral(
       { inviter, invitee_fid, status },
       {
         onConflict: "inviter,invitee_fid",
-        ignoreDuplicates: true, // jika sudah ada, tidak error
-        // defaultToNull: true, // opsional
+        ignoreDuplicates: true,
       }
     );
   if (error) throw new Error(`Gagal menyimpan referral: ${error.message}`);
@@ -164,7 +172,6 @@ async function mintBasicViaRigSale(to: string) {
   const receipt = await tx.wait();
   return receipt?.hash ?? tx.hash;
 }
-
 async function mintBasicViaRigNFT(to: string) {
   const { signer } = getProviderAndSigner();
   if (!signer) throw new Error("Signer backend tidak dikonfigurasi.");
@@ -182,17 +189,11 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
     const mode = String(body?.mode || "").toLowerCase();
-
     if (!mode) {
       return NextResponse.json({ error: "Mode wajib diisi." }, { status: 400 });
     }
 
     switch (mode) {
-      /* -------------------------------------------------
-         MODE: track
-         Mencatat referral baru (default 'pending').
-         Body: { mode: "track", inviter: string, invitee_fid: string, status?: "pending"|"valid" }
-         ------------------------------------------------- */
       case "track": {
         requireString(body.inviter, "inviter");
         requireString(body.invitee_fid, "invitee_fid");
@@ -204,11 +205,6 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: true });
       }
 
-      /* -------------------------------------------------
-         MODE: stats
-         Mengembalikan statistik referral: validInvites, usedClaims, remaining
-         Body: { mode: "stats", inviter: string }
-         ------------------------------------------------- */
       case "stats": {
         requireString(body.inviter, "inviter");
         const inviter = body.inviter.trim();
@@ -225,11 +221,6 @@ export async function POST(req: NextRequest) {
         });
       }
 
-      /* -------------------------------------------------
-         MODE: claim
-         Klaim 1 NFT Basic free jika masih ada kuota (tiering sesuai aturan).
-         Body: { mode: "claim", inviter: string, receiver: string }
-         ------------------------------------------------- */
       case "claim": {
         requireString(body.inviter, "inviter");
         requireString(body.receiver, "receiver");
@@ -238,7 +229,6 @@ export async function POST(req: NextRequest) {
         const receiver = body.receiver.trim();
         requireAddress(receiver, "receiver");
 
-        // 1) Hitung kuota
         const [validInvites, usedClaims] = await Promise.all([
           countValidInvites(inviter),
           sumUsedClaims(inviter),
@@ -248,21 +238,16 @@ export async function POST(req: NextRequest) {
           return NextResponse.json({ error: "No free-claim quota" }, { status: 400 });
         }
 
-        // 2) Mint 1x Basic (sesuai mode)
         let txHash = "0x";
         if (MINT_MODE === "rigsale") {
           txHash = await mintBasicViaRigSale(receiver);
         } else if (MINT_MODE === "rignft") {
           txHash = await mintBasicViaRigNFT(receiver);
         } else {
-          // Jika ingin mint di frontend, bisa biarkan "none" dan hanya rekam klaim.
-          // Namun best-practice: backend yang mint agar aman.
           txHash = "0x000000000000000000000000000000000000000000000000000000000000BEEF";
         }
 
-        // 3) Catat pemakaian 1 kuota
         await recordClaim(inviter, 1, txHash);
-
         return NextResponse.json({ ok: true, txHash });
       }
 
@@ -271,7 +256,8 @@ export async function POST(req: NextRequest) {
     }
   } catch (e: any) {
     console.error("API referral error:", e);
-    return NextResponse.json({ error: e?.message || "Server error" }, { status: 500 });
+    const msg = String(e?.message || "Server error");
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
 
