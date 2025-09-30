@@ -6,13 +6,13 @@
   },
   "frame": {
     "version": "1",
-    "name": "BaseTC Console",
+    "name": "BaseTC Mini App",
     "iconUrl": "https://basetc.vercel.app/img/logo.png",
     "homeUrl": "https://basetc.vercel.app",
     "imageUrl": "https://basetc.vercel.app/img/splash.gif",
     "buttonTitle": "Start Mining",
     "splashImageUrl": "https://basetc.vercel.app/img/splash.gif",
-    "splashBackgroundColor": "#0b0e12",
+    "splashBackgroundColor": "#FFFFFF",
     "webhookUrl": "https://basetc.vercel.app/api/frame"
   }
 }
