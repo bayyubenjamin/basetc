@@ -2,13 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useAccount } from "wagmi";
-import Navigation, { type TabName } from "../components/Navigation";
-import Monitoring from "../components/Monitoring";
-import Rakit from "../components/Rakit";
-import Market from "../components/Market";
-import Profil from "../components/Profil";
+import Navigation, { type TabName } from "../components/Navigation"; // FIX
+import Monitoring from "../components/Monitoring"; // FIX
+import Rakit from "../components/Rakit"; // FIX
+import Market from "../components/Market"; // FIX
+import Profil from "../components/Profil"; // FIX
 import { useFarcaster } from "../context/FarcasterProvider";
-import FidInput from "../components/FidInput";
+import FidInput from "../components/FidInput"; // FIX
 
 const DEFAULT_TAB: TabName = "monitoring";
 const TAB_KEY = "basetc_active_tab";
@@ -106,7 +106,7 @@ export default function Page() {
     if (finalFid) {
       localStorage.setItem("basetc_fid", String(finalFid));
       setResolvedFid(finalFid);
-
+      
       // Handle referral touch
       try {
         const url = new URL(window.location.href);
@@ -138,11 +138,8 @@ export default function Page() {
   }
 
   // Fallback: Jika tidak ada FID dari mana pun, tampilkan input
-  return (
-    <FidInput setFid={(fid) => {
-      localStorage.setItem("basetc_fid", String(fid));
-      setResolvedFid(fid);
-    }} />
-  );
+  return <FidInput setFid={(fid) => {
+    localStorage.setItem("basetc_fid", String(fid));
+    setResolvedFid(fid);
+  }} />;
 }
-
