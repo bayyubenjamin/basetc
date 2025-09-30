@@ -9,7 +9,6 @@
     "name": "BaseTC Mini App",
     "iconUrl": "https://basetc.vercel.app/img/logo.png",
     "homeUrl": "https://basetc.vercel.app/launch",
-    "imageUrl": "https://basetc.vercel.app/img/splash.gif",
     "buttonTitle": "Open BaseTC",
     "splashImageUrl": "https://basetc.vercel.app/img/splash.gif",
     "splashBackgroundColor": "#FFFFFF",
