@@ -1,24 +1,35 @@
 import { NextResponse } from "next/server";
 
-export async function GET() {
-  const VERCEL_URL = "https://basetc.vercel.app"; // GANTI DENGAN URL-MU
-  const img = `${VERCEL_URL}/img/basic.png`;
-  const html = `<!DOCTYPE html>
-<html>
-<head>
-<meta property="og:title" content="BaseTC Miner" />
-<meta property="og:image" content="${img}" />
-<meta property="fc:frame" content="vNext" />
-<meta property="fc:frame:image" content="${img}" />
-<meta property="fc:frame:button:1" content="Mint Basic" />
-<meta property="fc:frame:button:1:action" content="post" />
-<meta property="fc:frame:button:2" content="Rakit" />
-<meta property="fc:frame:button:2:action" content="post" />
-<meta property="fc:frame:button:3" content="Market" />
-<meta property="fc:frame:button:3:action" content="post" />
-<meta property="fc:frame:post_url" content="${VERCEL_URL}/api/frame/actions" />
-</head>
-<body></body>
-</html>`;
-  return new NextResponse(html, { headers: { "Content-Type": "text/html" } });
+/**
+ * Webhook handler untuk Frame.
+ * - Farcaster/Infra akan ngirim POST ke endpoint ini
+ * - Balasan minimal harus 200 OK biar dianggap valid
+ * - Bisa dipakai juga buat validasi signature / logging event user
+ */
+export async function POST(req: Request) {
+  try {
+    const body = await req.json().catch(() => ({}));
+
+    // 🔎 Contoh log event (opsional, hapus kalau nggak mau)
+    console.log("Webhook hit /api/frame:", body);
+
+    // TODO:
+    // - kalau mau, lo bisa verifikasi signature (pakai Neynar SDK)
+    // - bisa juga simpan event ke DB (Supabase dsb)
+
+    // ✅ wajib balas 200
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    console.error("Error /api/frame:", err);
+    return NextResponse.json({ ok: false }, { status: 500 });
+  }
 }
+
+/**
+ * (Opsional) GET untuk health check
+ * Bisa dipanggil manual buat cek endpoint hidup
+ */
+export async function GET() {
+  return NextResponse.json({ status: "frame webhook alive" });
+}
+
