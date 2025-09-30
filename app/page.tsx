@@ -42,7 +42,7 @@ export default function Page() {
         // Abaikan error import; tetap lanjut redirect
       } finally {
         // Selalu arahkan ke dashboard agar sesuai homeUrl baru
-        router.replace("/dashboard");
+        router.replace("/launch");
       }
     };
 

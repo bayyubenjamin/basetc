@@ -8,25 +8,25 @@ export async function POST(req: NextRequest) {
     const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || "https://basetc.vercel.app";
     let image = "img/basic.png";
     let buttonText = "Go to App";
-    let targetUrl = `${BASE_URL}/dashboard`; // Arahkan ke UI React
+    let targetUrl = `${BASE_URL}/launch`; // Arahkan ke UI React
 
     // Logika berdasarkan tombol yang ditekan
     if (buttonIndex === 1) {
       image = "img/basic.png"; // Gambar untuk Monitoring
       buttonText = "Go to Monitoring";
-      targetUrl = `${BASE_URL}/dashboard?tab=monitoring`;
+      targetUrl = `${BASE_URL}/launch?tab=monitoring`;
     } else if (buttonIndex === 2) {
       image = "img/pro.png"; // Gambar untuk Rakit
       buttonText = "Go to Rakit";
-      targetUrl = `${BASE_URL}/dashboard?tab=rakit`;
+      targetUrl = `${BASE_URL}/launch?tab=rakit`;
     } else if (buttonIndex === 3) {
       image = "img/legend.png"; // Gambar untuk Market
       buttonText = "Go to Market";
-      targetUrl = `${BASE_URL}/dashboard?tab=market`;
+      targetUrl = `${BASE_URL}/launch?tab=market`;
     } else if (buttonIndex === 4) {
       image = "img/supreme.png"; // Gambar untuk Profil
       buttonText = "Go to Profil";
-      targetUrl = `${BASE_URL}/dashboard?tab=profil`;
+      targetUrl = `${BASE_URL}/launch?tab=profil`;
     }
 
     const html = `<!DOCTYPE html>
