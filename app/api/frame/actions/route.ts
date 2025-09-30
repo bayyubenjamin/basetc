@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
     } else if (buttonIndex === 4) {
       image = "img/supreme.png"; // Gambar untuk Profil
       buttonText = "Go to Profil";
-      targetUrl = `${BASE_URL}/launch?tab=Monitoring`;
+      targetUrl = `${BASE_URL}/launch?tab=profil`;
     }
 
     const html = `<!DOCTYPE html>
