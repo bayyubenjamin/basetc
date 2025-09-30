@@ -1,42 +1,57 @@
-"use client";
+// app/layout.tsx
+import "./globals.css";
+import type { Metadata } from "next";
 
-import { useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
+const imageUrl = "https://basetc.vercel.app/img/feed.png";
+const launchUrl = "https://basetc.vercel.app/launch";
+const splashUrl = "https://basetc.vercel.app/s.png";
 
-export default function Page() {
-  const router = useRouter();
-  const didRun = useRef(false);
+const payload = {
+  version: "1",
+  imageUrl,
+  button: {
+    title: "Open BaseTC",
+    action: {
+      type: "launch_miniapp",
+      name: "BaseTC Mini App",
+      url: launchUrl,
+      splashImageUrl: splashUrl,
+      splashBackgroundColor: "#0b0b0b",
+    },
+  },
+};
 
-  useEffect(() => {
-    if (didRun.current) return;
-    didRun.current = true;
+export const metadata: Metadata = {
+  title: "BaseTC MiniApp",
+  description: "Farcaster mining console built with Next.js and Tailwind.",
+  other: {
+    // Spec baru (JSON tunggal)
+    "fc:miniapp": JSON.stringify(payload),
+    "fc:frame": JSON.stringify(payload),
 
-    const callReadyThenRedirect = async () => {
-      const withTimeout = <T,>(p: Promise<T>, ms = 1500) =>
-        Promise.race([
-          p,
-          new Promise<null>((resolve) => setTimeout(() => resolve(null), ms)),
-        ]);
+    // ---- LEGACY (vNext) — kompat maksimal ----
+    "fc:frame-legacy": "1", // penanda internal—abaikan, tidak akan dirender
+    "fc:frame (legacy format)": "vNext",
+    "fc:frame:image": imageUrl,
+    "fc:frame:post_url": "https://basetc.vercel.app/api/frame/actions",
 
-      try {
-        const mod = await import("@farcaster/miniapp-sdk").catch(() => null);
-        const sdk = mod?.sdk;
+    // Satu tombol "Open" yang langsung launch (link ke /launch)
+    "fc:frame:button:1": "Open BaseTC",
+    "fc:frame:button:1:action": "link",
+    "fc:frame:button:1:target": launchUrl,
 
-        if (sdk?.actions?.ready) {
-          try {
-            await withTimeout(sdk.actions.ready());
-          } catch {
-          }
-        }
-      } catch {
-      } finally {
-        router.replace("/launch");
-      }
-    };
+    // (Opsional) tombol kedua untuk “Open Monitoring”
+    // "fc:frame:button:2": "Monitoring",
+    // "fc:frame:button:2:action": "link",
+    // "fc:frame:button:2:target": `${launchUrl}?tab=monitoring`,
+  },
+};
 
-    void callReadyThenRedirect();
-  }, [router]);
-
-  return null;
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="en">
+      <body className="min-h-screen flex flex-col">{children}</body>
+    </html>
+  );
 }
 
