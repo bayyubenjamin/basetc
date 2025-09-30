@@ -1,18 +1,42 @@
 // app/api/referral/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { remainingClaims } from "./inviteMath"; // sesuaikan path relatif jika berbeda
 import { ethers } from "ethers";
 
+/* =========================
+   ⛳️ INLINE: Invite Tiering (tanpa import)
+   Aturan:
+   - 1 undangan pertama  → 1 NFT.
+   - Undangan #2..#11    → tiap 2 undangan = 1 NFT. (total 11 undangan = 6 NFT)
+   - Undangan #12+       → tiap 3 undangan = 1 NFT.
+   ========================= */
+function calculateMaxClaims(validInvites: number): number {
+  if (!Number.isFinite(validInvites) || validInvites <= 0) return 0;
+  const first = validInvites >= 1 ? 1 : 0;
+  const midInvites = Math.max(Math.min(validInvites, 11) - 1, 0); // invite #2..#11 → 0..10
+  const mid = Math.floor(midInvites / 2);
+  const tailInvites = Math.max(validInvites - 11, 0);             // invite #12+
+  const tail = Math.floor(tailInvites / 3);
+  return first + mid + tail;
+}
 
+function remainingClaims(validInvites: number, usedClaims: number): number {
+  const maxClaims = calculateMaxClaims(validInvites);
+  const used = Number.isFinite(usedClaims) ? Math.max(0, usedClaims) : 0;
+  return Math.max(0, maxClaims - used);
+}
+
+/* =========================
+   ENV VARS (sesuaikan)
+   ========================= */
 const SUPABASE_URL = process.env.SUPABASE_URL!;
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY!;
 
-const NEXT_PUBLIC_CHAIN_ID = Number(process.env.NEXT_PUBLIC_CHAIN_ID || "84532"); // Base Sepolia default
+const NEXT_PUBLIC_CHAIN_ID = Number(process.env.NEXT_PUBLIC_CHAIN_ID || "84532"); // Base Sepolia
 const RPC_URL = process.env.RPC_URL || "https://sepolia.base.org";
 
-const RIGSALE_ADDRESS = process.env.CONTRACT_RIGSALE || ""; // Jika mint via RigSaleFlexible
-const RIGNFT_ADDRESS  = process.env.CONTRACT_RIGNFT  || ""; // Jika mint langsung via RigNFT
+const RIGSALE_ADDRESS = process.env.CONTRACT_RIGSALE || ""; // jika mint via RigSaleFlexible
+const RIGNFT_ADDRESS  = process.env.CONTRACT_RIGNFT  || ""; // jika mint langsung via RigNFT
 const MINT_MODE = (process.env.REFERRAL_MINT_MODE || "none").toLowerCase(); 
 // opsi: "none" | "rigsale" | "rignft"
 
@@ -21,9 +45,9 @@ const BACKEND_SIGNER_PK = process.env.BACKEND_SIGNER_PK || ""; // jika backend y
 // Konstanta ID NFT Basic (samakan dengan kontrak)
 const BASIC_ID = 1;
 
-// Tabel yang dipakai (sesuaikan dengan skema kamu)
-const TABLE_REFERRALS = "referrals"; // kolom minimal: inviter (string), invitee_fid (string/number), status ("valid"/"pending"...)
-const TABLE_CLAIMS    = "claims";    // kolom minimal: inviter, type ("basic_free"), amount (int), tx_hash (string)
+// Nama tabel (samakan dengan skema DB kamu)
+const TABLE_REFERRALS = "referrals"; // kolom minimal: inviter, invitee_fid, status ("valid"/"pending")
+const TABLE_CLAIMS    = "claims";    // kolom minimal: inviter, type ("basic_free"), amount, tx_hash, created_at
 
 /* =========================
    Minimal ABI (sesuaikan)
