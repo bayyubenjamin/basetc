@@ -4,20 +4,25 @@ import { getSupabaseAdmin } from "../../lib/supabase/server";
 import { rigSaleAddress as rigSaleFromConfig } from "../../lib/web3Config";
 import { ethers } from "ethers";
 
-// Render dinamis agar perubahan ENV selalu terambil
 export const dynamic = "force-dynamic";
 
-// Helper env with sane defaults (Base Sepolia)
-const CHAIN_ID = Number(process.env.NEXT_PUBLIC_CHAIN_ID || "84532"); // 84532 = Base Sepolia
-const CONTRACT_RIGSALE =
-  (process.env.CONTRACT_RIGSALE as `0x${string}`) || (rigSaleFromConfig as `0x${string}`);
-const EIP712_NAME = process.env.EIP712_NAME_RIGSALE || "RigSale";
-const EIP712_VERSION = process.env.EIP712_VERSION_RIGSALE || "1";
-const SIGNER_PK = process.env.FID_SIGNER_PK || process.env.PRIVATE_KEY; // fallback ke PRIVATE_KEY jika perlu
+// Helper: cast string -> `0x${string}`
+const asHex = (s: string): `0x${string}` => s as `0x${string}`;
 
-// Validator addr
+// ENV (Base Sepolia)
+const CHAIN_ID = Number(process.env.NEXT_PUBLIC_CHAIN_ID || "84532"); // 84532 = Base Sepolia
+const CONTRACT_RIGSALE: `0x${string}` = process.env.CONTRACT_RIGSALE
+  ? asHex(process.env.CONTRACT_RIGSALE)
+  : asHex(rigSaleFromConfig); // fallback dari config
+const EIP712_NAME = process.env.EIP712_NAME_RIGSALE || "RigSaleFlexible";
+const EIP712_VERSION = process.env.EIP712_VERSION_RIGSALE || "1";
+const SIGNER_PK = process.env.FID_SIGNER_PK || process.env.PRIVATE_KEY;
+
+// Validator addr (perbaiki typing return)
 function normalizeAddr(addr?: string): `0x${string}` {
-  if (!addr || !/^0x[0-9a-fA-F]{40}$/.test(addr)) return ethers.ZeroAddress;
+  if (!addr || !/^0x[0-9a-fA-F]{40}$/.test(addr)) {
+    return ethers.ZeroAddress as `0x${string}`;
+  }
   return addr as `0x${string}`;
 }
 
@@ -45,7 +50,6 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ list: data ?? [] });
     }
 
-    // agg function contoh: claimed_rewards_for(p_inviter text)
     const { data: agg, error } = await sb
       .rpc("claimed_rewards_for", { p_inviter: inviter.toLowerCase() })
       .single();
@@ -60,8 +64,8 @@ export async function GET(req: NextRequest) {
 /* =========================================================
    POST:
    - free-sign   : buat signature EIP-712 utk claim gratis
-   - mark-valid  : tandai referral pending -> valid
-   - touch       : buat referral pending saat first-touch
+   - mark-valid  : pending -> valid
+   - touch       : create pending referral di first-touch
    ========================================================= */
 export async function POST(req: NextRequest) {
   try {
@@ -69,37 +73,24 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { mode } = body;
 
-    /* ------------ free-sign ------------ */
     if (mode === "free-sign") {
       const { fid, to, inviter } = body;
-
       if (!fid || !to) {
-        return NextResponse.json(
-          { error: "Missing fid or to address" },
-          { status: 400 }
-        );
+        return NextResponse.json({ error: "Missing fid or to address" }, { status: 400 });
       }
 
-      // Normalisasi parameter
       const fidBN = BigInt(fid);
       const toAddr = normalizeAddr(String(to));
       const inviterAddr = normalizeAddr(String(inviter));
+      const deadline = Math.floor(Date.now() / 1000) + 3600; // 1 jam
 
-      // (Opsional) kamu bisa tambahkan pre-check Supabase di sini
-      // untuk enforce mapping FID->wallet sebelum sign.
-
-      // Deadline 1 jam ke depan
-      const deadline = Math.floor(Date.now() / 1000) + 3600;
-
-      // Domain EIP-712: gunakan ENV *_RIGSALE + chain Sepolia
       const domain = {
         name: EIP712_NAME,
         version: EIP712_VERSION,
-        chainId: CHAIN_ID, // 84532
+        chainId: CHAIN_ID,
         verifyingContract: CONTRACT_RIGSALE,
       };
 
-      // Tipe harus cocok dengan kontrak RigSale
       const types = {
         FreeClaim: [
           { name: "fid", type: "uint256" },
@@ -122,7 +113,6 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Signer not configured" }, { status: 500 });
       }
 
-      // Signer backend (jangan expose ke client)
       const wallet = new ethers.Wallet(pk);
       const sig = await wallet.signTypedData(domain, types as any, value);
       const { r, s, v } = ethers.Signature.from(sig);
@@ -135,51 +125,39 @@ export async function POST(req: NextRequest) {
         v,
         r,
         s,
-        // (opsional) kirim balik domain info buat debug client:
-        // domain
       });
     }
 
-    /* ------------ mark-valid ------------ */
     if (mode === "mark-valid") {
       const { inviter, invitee_fid, invitee_wallet } = body;
       if (!inviter || !invitee_fid) {
-        return NextResponse.json(
-          { error: "Missing inviter or invitee_fid" },
-          { status: 400 }
-        );
+        return NextResponse.json({ error: "Missing inviter or invitee_fid" }, { status: 400 });
       }
 
       const { data, error } = await sb
         .from("referrals")
         .update({
           status: "valid",
-          invitee_wallet: invitee_wallet
-            ? String(invitee_wallet).toLowerCase()
-            : null,
+          invitee_wallet: invitee_wallet ? String(invitee_wallet).toLowerCase() : null,
         })
         .eq("inviter", String(inviter).toLowerCase())
         .eq("invitee_fid", Number(invitee_fid))
-        .eq("status", "pending") // hanya update yg pending
+        .eq("status", "pending")
         .select()
         .single();
 
-      // PGRST116 = "no rows found" → abaikan (idempotent)
       if (error && error.code !== "PGRST116") {
         return NextResponse.json({ error: error.message }, { status: 500 });
       }
       return NextResponse.json({ ok: true, data: data ?? null });
     }
 
-    /* ------------ touch ------------ */
     if (mode === "touch") {
       const { inviter, invitee_fid } = body;
       if (!inviter || !invitee_fid) {
-        return NextResponse.json(
-          { error: "Missing inviter or invitee_fid for touch" },
-          { status: 400 }
-        );
+        return NextResponse.json({ error: "Missing inviter or invitee_fid for touch" }, { status: 400 });
       }
+
       await sb.from("referrals").upsert(
         {
           inviter: String(inviter).toLowerCase(),
@@ -194,10 +172,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unknown mode" }, { status: 400 });
   } catch (e: any) {
     console.error("API referral error:", e);
-    return NextResponse.json(
-      { error: e?.message || "Server error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: e?.message || "Server error" }, { status: 500 });
   }
 }
 
