@@ -22,55 +22,60 @@ type MiniAppContext = {
   ready: boolean;
 };
 
-const FarcasterContext = createContext<MiniAppContext | undefined>(undefined);
+const FarcasterContext = createContext<MiniAppContext>({ ready: false });
+
+// Fungsi helper untuk membuat promise yang akan ditolak setelah timeout
+const withTimeout = <T>(promise: Promise<T>, ms: number): Promise<T> => {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`Promise timed out after ${ms} ms`));
+    }, ms);
+
+    promise
+      .then(value => {
+        clearTimeout(timer);
+        resolve(value);
+      })
+      .catch(err => {
+        clearTimeout(timer);
+        reject(err);
+      });
+  });
+};
+
 
 export function FarcasterProvider({ children }: { children: ReactNode }) {
   const [context, setContext] = useState<MiniAppContext>({ ready: false });
 
   useEffect(() => {
     let isCancelled = false;
-
     const initialize = async () => {
       try {
         const { sdk } = await import('@farcaster/miniapp-sdk');
         
-        // Polling cerdas untuk mendapatkan konteks
-        for (let i = 0; i < 30; i++) { // Coba selama 3 detik (30 x 100ms)
-          if (isCancelled) return;
-          
-          const ctx = await sdk.context;
-          
-          // Jika konteks berhasil didapatkan
-          if (ctx?.user?.fid) {
-            setContext({
-              user: {
-                fid: ctx.user.fid,
-                username: ctx.user.username,
-                displayName: ctx.user.displayName,
-                pfpUrl: ctx.user.pfpUrl,
-              },
-              ready: true, // --> Kunci #1: Set status ready
-            });
-            // Beri sinyal ke host bahwa app siap
-            sdk.actions.ready().catch(() => {}); // --> Kunci #2: Hilangkan spinner host
-            return; // Hentikan polling
-          }
-          
-          // Tunggu 100ms sebelum mencoba lagi
-          await new Promise((resolve) => setTimeout(resolve, 100));
-        }
-        
-        // Jika setelah 3 detik polling tetap gagal, anggap saja tidak ada konteks
-        if (!isCancelled) {
-            console.warn("Farcaster context not found after 3 seconds.");
-            setContext({ ready: true, user: undefined }); // --> Kunci #3: Jaminan keluar dari splash
-            sdk.actions.ready().catch(() => {});
-        }
+        // Meminta konteks dengan timeout 3 detik.
+        const ctx = await withTimeout(sdk.context, 3000).catch(err => {
+          console.warn("Farcaster context timed out or failed:", err.message);
+          return null; // Jika timeout atau error, kembalikan null
+        });
+
+        if (isCancelled) return;
+
+        // Set state dengan hasil yang didapat, baik berhasil maupun tidak.
+        setContext({
+          user: ctx?.user,
+          ready: true, // --> KUNCI UTAMA: `ready` dijamin menjadi `true`
+        });
+
+        // Tetap beri sinyal `ready` ke host, bahkan jika konteks gagal.
+        // Ini akan menghilangkan spinner loading dari sisi Warpcast.
+        sdk.actions.ready().catch(() => {});
 
       } catch (error) {
-        console.error('Farcaster SDK initialization failed:', error);
+        console.error('Farcaster SDK could not be imported or initialized:', error);
         if (!isCancelled) {
-          setContext({ ready: true, user: undefined });
+          // Jika SDK gagal total, tetap set `ready` ke true.
+          setContext({ user: undefined, ready: true });
         }
       }
     };
