@@ -92,7 +92,6 @@ export function FarcasterProvider({ children }: { children: ReactNode }) {
   );
 }
 
-// FIX: Pastikan `useFarcaster` di-export agar bisa digunakan di komponen lain.
 export function useFarcaster() {
   const context = useContext(FarcasterContext);
   if (context === undefined) {
