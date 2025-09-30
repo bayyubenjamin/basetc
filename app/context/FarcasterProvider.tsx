@@ -19,7 +19,7 @@ type FarcasterUser = {
 
 type MiniAppContext = {
   user?: FarcasterUser;
-  ready: boolean; // Flag untuk menandakan proses inisialisasi selesai
+  ready: boolean;
 };
 
 const FarcasterContext = createContext<MiniAppContext | undefined>(undefined);
@@ -29,44 +29,48 @@ export function FarcasterProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let isCancelled = false;
+
     const initialize = async () => {
       try {
         const { sdk } = await import('@farcaster/miniapp-sdk');
         
-        // Polling untuk mendapatkan konteks dengan cepat
-        for (let i = 0; i < 20; i++) { // Coba selama 2 detik
+        // Polling cerdas untuk mendapatkan konteks
+        for (let i = 0; i < 30; i++) { // Coba selama 3 detik (30 x 100ms)
           if (isCancelled) return;
+          
           const ctx = await sdk.context;
+          
+          // Jika konteks berhasil didapatkan
           if (ctx?.user?.fid) {
-            if (!isCancelled) {
-              setContext({
-                user: {
-                  fid: ctx.user.fid,
-                  username: ctx.user.username,
-                  displayName: ctx.user.displayName,
-                  pfpUrl: ctx.user.pfpUrl,
-                },
-                ready: true,
-              });
-              // Beri sinyal ke host Farcaster bahwa app siap
-              sdk.actions.ready().catch(() => {});
-            }
-            return;
+            setContext({
+              user: {
+                fid: ctx.user.fid,
+                username: ctx.user.username,
+                displayName: ctx.user.displayName,
+                pfpUrl: ctx.user.pfpUrl,
+              },
+              ready: true, // --> Kunci #1: Set status ready
+            });
+            // Beri sinyal ke host bahwa app siap
+            sdk.actions.ready().catch(() => {}); // --> Kunci #2: Hilangkan spinner host
+            return; // Hentikan polling
           }
+          
+          // Tunggu 100ms sebelum mencoba lagi
           await new Promise((resolve) => setTimeout(resolve, 100));
         }
         
-        // Jika setelah polling tetap tidak ada, set ready ke true
+        // Jika setelah 3 detik polling tetap gagal, anggap saja tidak ada konteks
         if (!isCancelled) {
-            setContext({ ready: true, user: undefined });
-            // Tetap panggil ready() agar host tahu kita tidak stuck
+            console.warn("Farcaster context not found after 3 seconds.");
+            setContext({ ready: true, user: undefined }); // --> Kunci #3: Jaminan keluar dari splash
             sdk.actions.ready().catch(() => {});
         }
 
       } catch (error) {
-        console.warn('Farcaster SDK not found or failed, running in standalone mode.', error);
+        console.error('Farcaster SDK initialization failed:', error);
         if (!isCancelled) {
-          setContext({ ready: true, user: undefined }); // Tandai siap bahkan jika SDK gagal
+          setContext({ ready: true, user: undefined });
         }
       }
     };
