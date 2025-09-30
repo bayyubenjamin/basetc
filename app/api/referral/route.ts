@@ -4,7 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 import { ethers } from "ethers";
 
 /* =========================
-   ⛳️ INLINE: Invite Tiering (tanpa import)
+   ✅ INLINE: Invite Tiering (tanpa import)
    Aturan:
    - 1 undangan pertama  → 1 NFT.
    - Undangan #2..#11    → tiap 2 undangan = 1 NFT. (total 11 undangan = 6 NFT)
@@ -132,13 +132,22 @@ async function recordClaim(inviter: string, amount: number, txHash: string) {
   if (error) throw new Error(`Gagal mencatat klaim: ${error.message}`);
 }
 
-async function trackReferral(inviter: string, invitee_fid: string, status: "pending" | "valid" = "pending") {
+/* ✅ FINAL FIX: pakai upsert (v2) tanpa 'returning' */
+async function trackReferral(
+  inviter: string,
+  invitee_fid: string,
+  status: "pending" | "valid" = "pending"
+) {
   const sb = supabaseAdmin();
   const { error } = await sb
     .from(TABLE_REFERRALS)
-    .insert(
+    .upsert(
       { inviter, invitee_fid, status },
-      { returning: "minimal" }
+      {
+        onConflict: "inviter,invitee_fid",
+        ignoreDuplicates: true, // jika sudah ada, tidak error
+        // defaultToNull: true, // opsional
+      }
     );
   if (error) throw new Error(`Gagal menyimpan referral: ${error.message}`);
 }
@@ -246,8 +255,8 @@ export async function POST(req: NextRequest) {
         } else if (MINT_MODE === "rignft") {
           txHash = await mintBasicViaRigNFT(receiver);
         } else {
-          // Jika kamu ingin mint dilakukan di frontend, bisa biarkan "none" dan hanya rekam klaim.
-          // Namun normalnya backend yang mint agar aman dari manipulasi.
+          // Jika ingin mint di frontend, bisa biarkan "none" dan hanya rekam klaim.
+          // Namun best-practice: backend yang mint agar aman.
           txHash = "0x000000000000000000000000000000000000000000000000000000000000BEEF";
         }
 
