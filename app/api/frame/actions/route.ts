@@ -6,7 +6,7 @@ export async function POST(req: NextRequest) {
     const buttonIndex = body?.untrustedData?.buttonIndex || 1;
 
     const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || "https://basetc.vercel.app";
-    let image = "img/basic.png";
+    let image = "img/logo.png";
     let buttonText = "Go to App";
     let targetUrl = `${BASE_URL}/launch`; // Arahkan ke UI React
 
@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
     } else if (buttonIndex === 4) {
       image = "img/supreme.png"; // Gambar untuk Profil
       buttonText = "Go to Profil";
-      targetUrl = `${BASE_URL}/launch?tab=profil`;
+      targetUrl = `${BASE_URL}/launch?tab=Monitoring`;
     }
 
     const html = `<!DOCTYPE html>
