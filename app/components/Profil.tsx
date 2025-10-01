@@ -176,12 +176,17 @@ export default function Profil() {
   }, [fcUser?.fid, address]);
 
   /** BOT-facing embed link → /share/[addr] + cache buster (untuk OG dinamis) */
-  const embedLink = useMemo(() => {
-    if (typeof window === "undefined" || !address) return "";
-    const base = window.location.origin || "";
-    const v = Date.now().toString(36);
-    return `${base}/share/${address}?v=${v}`;
-  }, [address]);
+const embedLink = useMemo(() => {
+  if (typeof window === "undefined" || !address) return "";
+  const base = window.location.origin || "";
+  const v = Date.now().toString(36); // setiap klik beda → recrawl
+  return `${base}/share/${address}?v=${v}`;
+}, [address]);
+
+await sdk.actions.composeCast({
+  text: CAST_PRESETS.valueForward(), // teks bersih
+  embeds: [embedLink],               // card dari /share → OG dinamis
+});
 
   /** Format reward/score */
   const prettyReward = useCallback((row: LbRow) => {

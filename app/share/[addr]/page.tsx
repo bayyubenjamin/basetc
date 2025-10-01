@@ -13,16 +13,21 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const base = `${proto}://${host}`;
 
   const addr = params.addr;
-  const v = Date.now().toString(36); // cache buster
-  const imageUrl = `${base}/api/og?user=${encodeURIComponent(addr)}&v=${v}`;
+  const v = Date.now().toString(36); // cache-buster untuk crawler
+  const search = new URLSearchParams({
+    user: addr,           // tampilkan alamat di card
+    // epoch: "2",        // isi kalau kamu punya nilai epoch saat render
+    v,
+  });
+  const imageUrl = `${base}/api/og?${search.toString()}`;
 
   const title = `BaseTC Invite – ${addr.slice(0, 6)}…${addr.slice(-4)}`;
   const description = "Claim a free Basic rig and start mining on BaseTC Console.";
 
   const payload = {
     version: "1",
-    imageUrl,             // OG dinamis
-    aspectRatio: "3:2",   // tambahkan agar jelas ke crawler
+    imageUrl,            // DINAMIS HANYA DI HALAMAN SHARE
+    aspectRatio: "3:2",
     button: {
       title: "Open BaseTC",
       action: {
@@ -40,15 +45,12 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     title,
     description,
     openGraph: {
-      title,
-      description,
+      title, description,
       images: [{ url: imageUrl, width: 1200, height: 800, alt: "BaseTC OG Card" }],
     },
     twitter: {
       card: "summary_large_image",
-      title,
-      description,
-      images: [imageUrl],
+      title, description, images: [imageUrl],
     },
     other: {
       "fc:miniapp": JSON.stringify(payload),
