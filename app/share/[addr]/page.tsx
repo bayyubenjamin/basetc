@@ -1,74 +1,88 @@
 // app/share/[addr]/page.tsx
-import type { Metadata } from "next";
+import type { Metadata, ResolvingMetadata } from "next";
 import { headers } from "next/headers";
+import { notFound } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
-type Props = { params: { addr: string } };
+type Props = { params: { addr: string }, searchParams?: Record<string, string | string[] | undefined> };
 
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const h = headers();
-  const host = h.get("x-forwarded-host") || h.get("host") || "basetc.vercel.app";
-  const proto = h.get("x-forwarded-proto") || "https";
-  const base = `${proto}://${host}`;
+function abs(url: string) {
+  // pastikan absolute URL (bukan relative), wajib untuk Farcaster
+  try {
+    const hdrs = headers();
+    const host = hdrs.get("x-forwarded-host") || hdrs.get("host") || "";
+    const proto = (hdrs.get("x-forwarded-proto") || "https").split(",")[0];
+    const base = `${proto}://${host}`;
+    return url.startsWith("http") ? url : `${base}${url}`;
+  } catch {
+    return url;
+  }
+}
 
+export async function generateMetadata(
+  { params }: Props,
+  _parent: ResolvingMetadata
+): Promise<Metadata> {
   const addr = params.addr;
-  const v = Date.now().toString(36); // cache-buster untuk crawler
-  const search = new URLSearchParams({
-    user: addr,           // tampilkan alamat di card
-    // epoch: "2",        // isi kalau kamu punya nilai epoch saat render
-    v,
-  });
-  const imageUrl = `${base}/api/og?${search.toString()}`;
+  if (!addr || !addr.startsWith("0x") || addr.length !== 42) {
+    return { title: "Share · BaseTC", robots: { index: false } };
+  }
 
-  const title = `BaseTC Invite – ${addr.slice(0, 6)}…${addr.slice(-4)}`;
-  const description = "Claim a free Basic rig and start mining on BaseTC Console.";
+  // Build image URL (3:2) dengan data dinamis
+  const name = "Miner";            // boleh kamu ganti kalau punya context user server-side
+  const fid = "";                  // opsional: inject kalau ada
+  const epoch = "";                // opsional: inject kalau ada
+  const v = Date.now().toString(36);
 
-  const payload = {
+  const imgUrl = abs(
+    `/api/og?ref=${encodeURIComponent(addr)}${fid ? `&fid=${fid}` : ""}&name=${encodeURIComponent(name)}${epoch ? `&epoch=${epoch}` : ""}&v=${v}`
+  );
+
+  const launchUrl = abs("/launch");
+
+  const miniapp = {
     version: "1",
-    imageUrl,            // DINAMIS HANYA DI HALAMAN SHARE
-    aspectRatio: "3:2",
+    imageUrl: imgUrl,
     button: {
       title: "Open BaseTC",
       action: {
         type: "launch_miniapp",
         name: "BaseTC Console",
-        url: `${base}/launch`,
-        splashImageUrl: `${base}/s.png`,
+        url: launchUrl,
+        splashImageUrl: abs("/s.png"),
         splashBackgroundColor: "#FFFFFF",
       },
     },
   };
 
   return {
-    metadataBase: new URL(base),
-    title,
-    description,
+    title: "BaseTC Share",
+    description: "Personalized BaseTC embed.",
+    // OG/Twitter fallback (tidak dipakai Mini Apps, tapi aman untuk klien lain)
     openGraph: {
-      title, description,
-      images: [{ url: imageUrl, width: 1200, height: 800, alt: "BaseTC OG Card" }],
+      images: [{ url: imgUrl, width: 1500, height: 1000 }],
     },
     twitter: {
       card: "summary_large_image",
-      title, description, images: [imageUrl],
+      images: [imgUrl],
     },
     other: {
-      "fc:miniapp": JSON.stringify(payload),
-      "fc:frame": JSON.stringify(payload),
+      "fc:miniapp": JSON.stringify(miniapp),
+      "fc:frame": JSON.stringify({ ...miniapp, button: { ...miniapp.button, action: { ...miniapp.button.action, type: "launch_frame" } } }),
     },
   };
 }
 
 export default function SharePage({ params }: Props) {
   const { addr } = params;
+  if (!addr || !addr.startsWith("0x") || addr.length !== 42) {
+    notFound();
+  }
+  // Halaman bisa kosong; yang penting HEAD metanya di-generate
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center bg-black text-white p-6">
-      <h1 className="text-2xl font-bold">BaseTC Invite</h1>
-      <p className="mt-2 opacity-80">Referral address:</p>
-      <code className="mt-1 px-2 py-1 bg-neutral-800 rounded">{addr}</code>
-      <a href="/launch" className="mt-6 px-4 py-2 rounded bg-indigo-600 hover:bg-indigo-500">
-        Open App
-      </a>
+    <main style={{ padding: 24, color: "#9CA3AF" }}>
+      <p>Share page ready. You can close this tab.</p>
     </main>
   );
 }
