@@ -1,55 +1,40 @@
 // app/share/[addr]/page.tsx
-import type { Metadata, ResolvingMetadata } from "next";
+import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
-type Props = { params: { addr: string }, searchParams?: Record<string, string | string[] | undefined> };
+type Props = { params: { addr: string } };
 
 function abs(url: string) {
-  // pastikan absolute URL (bukan relative), wajib untuk Farcaster
-  try {
-    const hdrs = headers();
-    const host = hdrs.get("x-forwarded-host") || hdrs.get("host") || "";
-    const proto = (hdrs.get("x-forwarded-proto") || "https").split(",")[0];
-    const base = `${proto}://${host}`;
-    return url.startsWith("http") ? url : `${base}${url}`;
-  } catch {
-    return url;
-  }
+  const hdrs = headers();
+  const host = hdrs.get("x-forwarded-host") || hdrs.get("host") || "basetc.vercel.app";
+  const proto = (hdrs.get("x-forwarded-proto") || "https").split(",")[0];
+  const base = `${proto}://${host}`;
+  return url.startsWith("http") ? url : `${base}${url}`;
 }
 
-export async function generateMetadata(
-  { params }: Props,
-  _parent: ResolvingMetadata
-): Promise<Metadata> {
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const addr = params.addr;
   if (!addr || !addr.startsWith("0x") || addr.length !== 42) {
-    return { title: "Share · BaseTC", robots: { index: false } };
+    notFound();
   }
 
-  // Build image URL (3:2) dengan data dinamis
-  const name = "Miner";            // boleh kamu ganti kalau punya context user server-side
-  const fid = "";                  // opsional: inject kalau ada
-  const epoch = "";                // opsional: inject kalau ada
   const v = Date.now().toString(36);
+  // param minimal ke OG (semakin sedikit → semakin kecil size)
+  const imageUrl = abs(`/api/og?ref=${encodeURIComponent(addr)}&name=Miner&v=${v}`);
 
-  const imgUrl = abs(
-    `/api/og?ref=${encodeURIComponent(addr)}${fid ? `&fid=${fid}` : ""}&name=${encodeURIComponent(name)}${epoch ? `&epoch=${epoch}` : ""}&v=${v}`
-  );
-
-  const launchUrl = abs("/launch");
-
-  const miniapp = {
+  const payload = {
     version: "1",
-    imageUrl: imgUrl,
+    imageUrl,                 // HARUS absolute
+    aspectRatio: "3:2",       // ← tambahkan ini
     button: {
       title: "Open BaseTC",
       action: {
         type: "launch_miniapp",
         name: "BaseTC Console",
-        url: launchUrl,
+        url: abs("/launch"),
         splashImageUrl: abs("/s.png"),
         splashBackgroundColor: "#FFFFFF",
       },
@@ -57,33 +42,24 @@ export async function generateMetadata(
   };
 
   return {
-    title: "BaseTC Share",
-    description: "Personalized BaseTC embed.",
-    // OG/Twitter fallback (tidak dipakai Mini Apps, tapi aman untuk klien lain)
+    title: `BaseTC Share`,
+    description: "Personalized share card",
     openGraph: {
-      images: [{ url: imgUrl, width: 1500, height: 1000 }],
+      images: [{ url: imageUrl, width: 1200, height: 800 }],
     },
     twitter: {
       card: "summary_large_image",
-      images: [imgUrl],
+      images: [imageUrl],
     },
     other: {
-      "fc:miniapp": JSON.stringify(miniapp),
-      "fc:frame": JSON.stringify({ ...miniapp, button: { ...miniapp.button, action: { ...miniapp.button.action, type: "launch_frame" } } }),
+      "fc:miniapp": JSON.stringify(payload),
+      "fc:frame": JSON.stringify(payload), // fallback
     },
   };
 }
 
-export default function SharePage({ params }: Props) {
-  const { addr } = params;
-  if (!addr || !addr.startsWith("0x") || addr.length !== 42) {
-    notFound();
-  }
-  // Halaman bisa kosong; yang penting HEAD metanya di-generate
-  return (
-    <main style={{ padding: 24, color: "#9CA3AF" }}>
-      <p>Share page ready. You can close this tab.</p>
-    </main>
-  );
+export default function SharePage() {
+  // Halaman ini boleh kosong—yang penting HEAD meta di atas
+  return null;
 }
 
