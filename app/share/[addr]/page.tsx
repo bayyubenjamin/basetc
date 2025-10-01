@@ -13,23 +13,23 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const base = `${proto}://${host}`;
 
   const addr = params.addr;
-  const v = Date.now().toString(36); // cache buster kecil untuk crawler
+  const v = Date.now().toString(36); // cache buster
   const imageUrl = `${base}/api/og?user=${encodeURIComponent(addr)}&v=${v}`;
 
   const title = `BaseTC Invite – ${addr.slice(0, 6)}…${addr.slice(-4)}`;
   const description = "Claim a free Basic rig and start mining on BaseTC Console.";
 
-  // Payload miniapp/frame sesuai dokumentasi Farcaster
   const payload = {
     version: "1",
-    imageUrl, // dinamis per user
+    imageUrl,             // OG dinamis
+    aspectRatio: "3:2",   // tambahkan agar jelas ke crawler
     button: {
       title: "Open BaseTC",
       action: {
-        type: "launch_miniapp",         // atau "launch_frame"
+        type: "launch_miniapp",
         name: "BaseTC Console",
-        url: `${base}/launch`,          // halaman mini app kamu
-        splashImageUrl: `${base}/s.png`,// 200x200 PNG/JPG absolut
+        url: `${base}/launch`,
+        splashImageUrl: `${base}/s.png`,
         splashBackgroundColor: "#FFFFFF",
       },
     },
@@ -39,11 +39,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     metadataBase: new URL(base),
     title,
     description,
-    // OG/Twitter (fallback non-Farcaster)
     openGraph: {
       title,
       description,
-      images: [{ url: imageUrl, width: 1200, height: 630, alt: "BaseTC OG Card" }],
+      images: [{ url: imageUrl, width: 1200, height: 800, alt: "BaseTC OG Card" }],
     },
     twitter: {
       card: "summary_large_image",
@@ -51,10 +50,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       description,
       images: [imageUrl],
     },
-    // Meta khusus Farcaster
     other: {
       "fc:miniapp": JSON.stringify(payload),
-      "fc:frame": JSON.stringify(payload), // fallback legacy
+      "fc:frame": JSON.stringify(payload),
     },
   };
 }
@@ -66,10 +64,7 @@ export default function SharePage({ params }: Props) {
       <h1 className="text-2xl font-bold">BaseTC Invite</h1>
       <p className="mt-2 opacity-80">Referral address:</p>
       <code className="mt-1 px-2 py-1 bg-neutral-800 rounded">{addr}</code>
-      <a
-        href="/launch"
-        className="mt-6 px-4 py-2 rounded bg-indigo-600 hover:bg-indigo-500"
-      >
+      <a href="/launch" className="mt-6 px-4 py-2 rounded bg-indigo-600 hover:bg-indigo-500">
         Open App
       </a>
     </main>
