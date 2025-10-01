@@ -273,7 +273,7 @@ return `${base}/share/${address}`;
 
             {/* share → OG card dari /share/[addr] */}
             <button
-              disabled={!embedLink || shareLoading}
+              disabled={!shareBaseUrl || shareLoading}
               onClick={onShareReferral}
               className="px-3 py-1.5 text-xs rounded-md bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white"
               aria-label="Share referral to Farcaster"
