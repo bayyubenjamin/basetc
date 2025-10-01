@@ -17,7 +17,7 @@ import {
 import { formatEther } from "viem";
 import { useFarcaster } from "../context/FarcasterProvider";
 
-// NEW: Mini App SDK for composeCast / openUrl fallback
+// Mini App SDK
 import { sdk } from "@farcaster/miniapp-sdk";
 
 type Achievement = { name: string; icon: string };
@@ -62,19 +62,12 @@ async function fetchLeaderboard(): Promise<LbRow[]> {
   }
 }
 
-// ---- Clean, non-cringey English presets for the Cast text ----
+/** === Clean EN presets (TANPA URL di teks) === */
 const CAST_PRESETS = {
-  concise: (refUrl: string) =>
-    `Join BaseTC Console and start mining with a free Basic rig.\n${refUrl}`,
-
-  invite: (refUrl: string) =>
-    `I’m mining on BaseTC Console—grab a free Basic rig and try it.\n${refUrl}`,
-
-  socialProof: (refUrl: string) =>
-    `Mining on BaseTC Console has been smooth so far. Free Basic rig to get started:\n${refUrl}`,
-
-  valueForward: (refUrl: string) =>
-    `BaseTC Console: simple mining, clear ROI targets, and a free Basic rig to begin.\n${refUrl}`,
+  concise: () => `Join BaseTC Console and start mining with a free Basic rig.`,
+  invite: () => `I’m trying BaseTC Console—free Basic rig to get started.`,
+  socialProof: () => `Mining on BaseTC Console has been smooth so far.`,
+  valueForward: () => `BaseTC Console: simple mining with clear ROI targets.`,
 };
 
 export default function Profil() {
@@ -161,26 +154,24 @@ export default function Profil() {
     return `${v.toFixed(3)} $BaseTC`;
   };
 
-  // ---- NEW: share-to-cast logic (normal feed, no channelKey) ----
+  /** === Share to Cast (link disembunyikan dari teks, hanya di embeds) === */
   const [shareLoading, setShareLoading] = useState(false);
 
-  const buildCastText = useCallback((refUrl: string) => {
-    // pick your default preset here; you can change to 'valueForward' or others
-    return CAST_PRESETS.valueForward(refUrl);
+  // pilih preset default yang kamu suka
+  const buildCastText = useCallback(() => {
+    return CAST_PRESETS.valueForward(); // text-only
   }, []);
 
   const onShareReferral = useCallback(async () => {
     if (!inviteLink) return;
-    const castText = buildCastText(inviteLink);
+    const castText = buildCastText();
     setShareLoading(true);
     try {
-      // Try native composer inside Farcaster client
       await sdk.actions.composeCast({
         text: castText,
-        embeds: [inviteLink],
+        embeds: [inviteLink], // URL hanya di embeds -> card muncul, link tidak terlihat di teks
       });
     } catch {
-      // Fallback: Warpcast universal compose link
       const composeUrl = `https://warpcast.com/~/compose?text=${encodeURIComponent(
         castText
       )}&embeds[]=${encodeURIComponent(inviteLink)}`;
@@ -217,7 +208,7 @@ export default function Profil() {
                 </button>
               </div>
             )}
-             {!!refAddr && (
+            {!!refAddr && (
               <div className="mt-1 inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-neutral-700 text-[10px]">
                 <span className="opacity-70">Referred By</span>
                 <span className="font-medium">{`${refAddr.slice(0,6)}…`}</span>
@@ -233,32 +224,36 @@ export default function Profil() {
       <div className="bg-neutral-800 rounded-lg p-3 space-y-3">
         <h2 className="font-semibold text-sm md:text-base">Invites</h2>
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
-            <div className="flex gap-2 w-full">
-                <div className="flex-1">
-                    <div className="text-[11px] text-neutral-400">Total Invited (valid)</div>
-                    <div className="text-lg font-semibold">{totalInvitesValid}</div>
-                </div>
-                <div className="flex-1">
-                    <div className="text-[11px] text-neutral-400">Your $BaseTC</div>
-                    <div className="text-lg font-semibold">{Number(baseReadable).toLocaleString()}</div>
-                </div>
+          <div className="flex gap-2 w-full">
+            <div className="flex-1">
+              <div className="text-[11px] text-neutral-400">Total Invited (valid)</div>
+              <div className="text-lg font-semibold">{totalInvitesValid}</div>
             </div>
-            <div className="flex items-center gap-2">
-                <input readOnly value={inviteLink} className="bg-neutral-900 border border-neutral-700 rounded-md px-2 py-1 text-xs w-full md:w-[260px]" />
-                <button disabled={!inviteLink} onClick={() => inviteLink && copy(inviteLink)} className="px-3 py-1.5 text-xs rounded-md bg-neutral-700 hover:bg-neutral-600 disabled:opacity-50">
-                    {copied ? "Copied!" : "Copy Link"}
-                </button>
+            <div className="flex-1">
+              <div className="text-[11px] text-neutral-400">Your $BaseTC</div>
+              <div className="text-lg font-semibold">{Number(baseReadable).toLocaleString()}</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <input readOnly value={inviteLink} className="bg-neutral-900 border border-neutral-700 rounded-md px-2 py-1 text-xs w-full md:w-[260px]" />
+            <button
+              disabled={!inviteLink}
+              onClick={() => inviteLink && copy(inviteLink)}
+              className="px-3 py-1.5 text-xs rounded-md bg-neutral-700 hover:bg-neutral-600 disabled:opacity-50"
+            >
+              {copied ? "Copied!" : "Copy Link"}
+            </button>
 
-                {/* NEW: Share to Farcaster Cast (normal feed) */}
-                <button
-                  disabled={!inviteLink || shareLoading}
-                  onClick={onShareReferral}
-                  className="px-3 py-1.5 text-xs rounded-md bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white"
-                  aria-label="Share referral to Farcaster"
-                >
-                  {shareLoading ? "Opening…" : "Share referral to Cast"}
-                </button>
-            </div>
+            {/* Share to Farcaster (teks bersih, card dari embeds) */}
+            <button
+              disabled={!inviteLink || shareLoading}
+              onClick={onShareReferral}
+              className="px-3 py-1.5 text-xs rounded-md bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white"
+              aria-label="Share referral to Farcaster"
+            >
+              {shareLoading ? "Opening…" : "Share referral to Cast"}
+            </button>
+          </div>
         </div>
 
         <div className="space-y-2">
@@ -275,9 +270,7 @@ export default function Profil() {
                 {loadingInvites ? (
                   <tr><td className="px-2 py-2 text-neutral-500" colSpan={2}>Loading…</td></tr>
                 ) : invites.length === 0 ? (
-                  <tr><td className="px-2 py-2 text-neutral-500" colSpan={2}>
-                    No recent invite data found.
-                  </td></tr>
+                  <tr><td className="px-2 py-2 text-neutral-500" colSpan={2}>No recent invite data found.</td></tr>
                 ) : (
                   invites.slice(0, 5).map((u, i) => (
                     <tr key={`${u.fid ?? "x"}-${i}`} className="border-t border-neutral-700">

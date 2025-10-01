@@ -228,7 +228,7 @@ export default function Rakit() {
   return (
     <div className="space-y-4 px-4 pt-4 pb-8">
       <header className="space-y-1">
-        <h1 className="text-xl font-semibold">Workshop / Rakit</h1>
+        <h1 className="text-xl font-semibold">Build Rig</h1>
         <p className="text-sm text-neutral-400">Upgrade &amp; Merge your rigs</p>
       </header>
 
