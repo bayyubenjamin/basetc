@@ -3,7 +3,7 @@ import { ImageResponse } from "next/og";
 
 export const runtime = "edge";
 
-// Simple hash → hue 0..360 untuk warna solid yang konsisten per address
+/** Stabil hue 0..360 per address (buat warna personal) */
 function hueFrom(str: string) {
   let h = 0;
   for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0;
@@ -13,25 +13,22 @@ function hueFrom(str: string) {
 export async function GET(req: NextRequest) {
   const { searchParams: sp } = new URL(req.url);
 
-  const name  = (sp.get("name")  || "Miner").slice(0, 32);
+  // Data dinamis (dipangkas biar aman dari overflow)
+  const name  = (sp.get("name")  || "Miner").slice(0, 24);
   const ref   = (sp.get("ref")   || "").toLowerCase();
   const epoch = (sp.get("epoch") || "")?.slice(0, 12);
 
   const shortRef =
     ref && ref.startsWith("0x") && ref.length >= 10
       ? `${ref.slice(0, 6)}…${ref.slice(-4)}`
-      : ref.slice(0, 12);
+      : "";
 
-  // warna latar stabil per address, fallback kalau kosong → 210 (biru)
-  const hue = ref ? hueFrom(ref) : 210;
-
-  // OPTIONAL: muat font system (biar aman tanpa fetch)
-  // (ImageResponse default pakai sans-serif; cukup untuk performa & kompatibilitas)
+  const hue = ref ? hueFrom(ref) : 210; // default biru
 
   const width = 1200;
   const height = 630;
 
-  const res = new ImageResponse(
+  return new ImageResponse(
     (
       <div
         style={{
@@ -40,35 +37,33 @@ export async function GET(req: NextRequest) {
           display: "flex",
           flexDirection: "column",
           justifyContent: "space-between",
-          padding: 56,
+          padding: "60px 80px",
           boxSizing: "border-box",
-          background: `hsl(${hue} 70% 16%)`,
+          background: `linear-gradient(180deg, hsl(${hue} 65% 18%) 0%, hsl(${hue} 65% 14%) 100%)`,
           color: "white",
-          fontFamily: "ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica Neue, Arial",
+          fontFamily:
+            "ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica Neue, Arial",
         }}
       >
         {/* Header */}
-        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          {/* pakai emoji sebagai “logo” agar tidak perlu fetch gambar eksternal */}
+        <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
           <div
             style={{
-              width: 72,
-              height: 72,
-              borderRadius: 16,
-              background: "rgba(255,255,255,.12)",
+              width: 80,
+              height: 80,
+              borderRadius: 20,
+              background: "rgba(255,255,255,.14)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              fontSize: 44,
+              fontSize: 42,
             }}
           >
             ⛏️
           </div>
           <div style={{ display: "flex", flexDirection: "column" }}>
-            <div style={{ fontSize: 44, fontWeight: 800, letterSpacing: 0.2 }}>
-              BaseTC Console
-            </div>
-            <div style={{ fontSize: 22, opacity: 0.8 }}>
+            <div style={{ fontSize: 44, fontWeight: 800 }}>BaseTC Console</div>
+            <div style={{ fontSize: 22, opacity: 0.85 }}>
               Simple mining • clear ROI targets
             </div>
           </div>
@@ -78,40 +73,50 @@ export async function GET(req: NextRequest) {
         <div
           style={{
             flex: 1,
-            marginTop: 32,
-            marginBottom: 32,
-            borderRadius: 28,
-            background: "rgba(0,0,0,.28)",
+            marginTop: 40,
+            marginBottom: 40,
+            borderRadius: 24,
+            background: "rgba(0,0,0,.30)",
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
-            padding: 40,
+            padding: "42px 54px",
           }}
         >
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            <div style={{ fontSize: 32, opacity: 0.85 }}>Shared by</div>
-            <div style={{ fontSize: 70, fontWeight: 800, lineHeight: 1.05 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <div style={{ fontSize: 28, opacity: 0.85 }}>Shared by</div>
+            <div
+              style={{
+                fontSize: 60,
+                fontWeight: 800,
+                lineHeight: 1.1,
+                wordBreak: "break-word",
+                maxWidth: 760,
+              }}
+            >
               {name}
             </div>
-            {shortRef ? (
-              <div style={{ fontSize: 26, opacity: 0.85 }}>Address: {shortRef}</div>
-            ) : null}
-            {epoch ? (
-              <div style={{ fontSize: 26, opacity: 0.85 }}>Epoch: {epoch}</div>
-            ) : null}
+            {shortRef && (
+              <div style={{ fontSize: 24, opacity: 0.9 }}>
+                Address: {shortRef}
+              </div>
+            )}
+            {epoch && (
+              <div style={{ fontSize: 24, opacity: 0.9 }}>Epoch {epoch}</div>
+            )}
           </div>
 
-          {/* Badge */}
           <div
             style={{
-              padding: "18px 28px",
+              padding: "20px 28px",
               borderRadius: 16,
-              background: "rgba(255,255,255,.12)",
+              background: "rgba(255,255,255,.16)",
               fontSize: 28,
               fontWeight: 700,
+              whiteSpace: "nowrap",
             }}
           >
-            Free Basic rig
+            Free Basic Rig
           </div>
         </div>
 
@@ -121,21 +126,23 @@ export async function GET(req: NextRequest) {
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
-            opacity: 0.9,
+            fontSize: 24,
+            opacity: 0.92,
           }}
         >
-          <div style={{ fontSize: 26 }}>basetc.vercel.app</div>
-          <div style={{ fontSize: 26 }}>Start mining on Base</div>
+          <div>basetc.vercel.app</div>
+          <div>Start mining on Base</div>
         </div>
       </div>
     ),
-    { width, height }
+    {
+      width,
+      height,
+      headers: {
+        // biar crawler recrawl cepat; tombol share kamu sudah kasih ?v=...
+        "Cache-Control": "public, max-age=0, s-maxage=60",
+      },
+    }
   );
-
-  // Cache tipis (crawler Warpcast suka nge-cache lama). Kamu juga
-  // sudah kasih parameter `?v=` di URL dari tombol share.
-  res.headers.set("Cache-Control", "public, max-age=0, s-maxage=60");
-
-  return res;
 }
 

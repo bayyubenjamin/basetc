@@ -1,48 +1,44 @@
 import type { Metadata } from "next";
 
-export const dynamic = "force-dynamic";
-
 type Props = {
   params: { addr: string };
-  searchParams: { name?: string; epoch?: string; v?: string };
+  searchParams: { v?: string; name?: string; epoch?: string };
 };
 
-export async function generateMetadata(
-  { params, searchParams }: Props
-): Promise<Metadata> {
+export function generateMetadata({ params, searchParams }: Props): Metadata {
   const addr = params.addr || "";
-  const name = searchParams.name || "Miner";
-  const epoch = searchParams.epoch || "";
-  // cache-buster: jika tidak ada `v` dari client, tambahkan di server
-  const v = searchParams.v || Date.now().toString(36);
+  const name = (searchParams.name || "Miner").slice(0, 24);
+  const epoch = (searchParams.epoch || "").slice(0, 12);
+  const v = searchParams.v || Math.random().toString(36).slice(2);
 
-  const og = `https://basetc.vercel.app/api/og?ref=${encodeURIComponent(
-    addr
-  )}&name=${encodeURIComponent(name)}${epoch ? `&epoch=${encodeURIComponent(epoch)}` : ""}&v=${v}`;
+  const og = new URL("https://basetc.vercel.app/api/og");
+  og.searchParams.set("name", name);
+  og.searchParams.set("ref", addr);
+  if (epoch) og.searchParams.set("epoch", epoch);
+  og.searchParams.set("v", v);
+
+  const title = "BaseTC Share";
+  const desc = "Personalized share card";
 
   return {
-    title: "BaseTC Share",
-    description: "Personalized share card",
+    title,
+    description: desc,
     openGraph: {
-      title: "BaseTC Share",
-      description: "Personalized share card",
-      images: [{ url: og, width: 1200, height: 630 }],
+      title,
+      description: desc,
+      images: [{ url: og.toString(), width: 1200, height: 630 }],
     },
     twitter: {
       card: "summary_large_image",
-      title: "BaseTC Share",
-      description: "Personalized share card",
-      images: [og],
-    },
-    other: {
-      // (opsional) bagi miniapp/frames – tapi tidak wajib untuk OG
-      "fc:frame:post_url": "https://basetc.vercel.app/launch",
+      title,
+      description: desc,
+      images: [og.toString()],
     },
   };
 }
 
 export default function SharePage() {
-  // Halaman ini tidak perlu render apapun; meta saja yang penting
+  // tidak perlu render UI — halaman ini hanya untuk meta OG
   return null;
 }
 
