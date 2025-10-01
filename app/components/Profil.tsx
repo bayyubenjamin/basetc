@@ -201,28 +201,14 @@ export default function Profil() {
     return `${base}?${refQuery}${fidQuery}`;
   }, [fcUser?.fid, address]);
 
-  /** BOT-facing embed link → goes to /share for dynamic OG (card) */
-  const embedLink = useMemo(() => {
-    if (typeof window === "undefined" || !address) return "";
-    const base = window.location.origin || "";
-    const nameParam = encodeURIComponent(fcUser?.displayName || fcUser?.username || "Miner");
-    const fidParam = fcUser?.fid ? String(fcUser.fid) : "";
-    const epochParam = ""; // fill if you have an epoch value
+/** BOT-facing embed link → /share/[addr] + cache buster (supaya crawler refresh) */
+const embedLink = useMemo(() => {
+  if (typeof window === "undefined" || !address) return "";
+  const base = window.location.origin || "";
+  const v = Date.now().toString(36); // cache buster kecil
+  return `${base}/share/${address}?v=${v}`;
+}, [address]);
 
-    const q = new URLSearchParams();
-    q.set("ref", address);
-    if (fidParam) q.set("fid", fidParam);
-    q.set("name", nameParam);
-    if (epochParam) q.set("epoch", epochParam);
-
-    return `${base}/share?${q.toString()}`;
-  }, [fcUser?.displayName, fcUser?.username, fcUser?.fid, address]);
-
-  const prettyReward = (row: LbRow) => {
-    const v = row.score ?? row.total_rewards ?? row.rewards ?? null;
-    if (v === null || typeof v !== "number") return "-";
-    return `${v.toFixed(3)} $BaseTC`;
-  };
 
   /** === Share to Cast (text clean; card from embeds only) === */
   const [shareLoading, setShareLoading] = useState(false);
