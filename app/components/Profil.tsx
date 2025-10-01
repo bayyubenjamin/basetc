@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import type { FC } from "react";
 import Image from "next/image";
 import { useAccount, useReadContract } from "wagmi";
@@ -16,6 +16,9 @@ import {
 } from "../lib/web3Config";
 import { formatEther } from "viem";
 import { useFarcaster } from "../context/FarcasterProvider";
+
+// NEW: Mini App SDK for composeCast / openUrl fallback
+import { sdk } from "@farcaster/miniapp-sdk";
 
 type Achievement = { name: string; icon: string };
 type LbRow = {
@@ -58,6 +61,21 @@ async function fetchLeaderboard(): Promise<LbRow[]> {
     return [];
   }
 }
+
+// ---- Clean, non-cringey English presets for the Cast text ----
+const CAST_PRESETS = {
+  concise: (refUrl: string) =>
+    `Join BaseTC Console and start mining with a free Basic rig.\n${refUrl}`,
+
+  invite: (refUrl: string) =>
+    `I’m mining on BaseTC Console—grab a free Basic rig and try it.\n${refUrl}`,
+
+  socialProof: (refUrl: string) =>
+    `Mining on BaseTC Console has been smooth so far. Free Basic rig to get started:\n${refUrl}`,
+
+  valueForward: (refUrl: string) =>
+    `BaseTC Console: simple mining, clear ROI targets, and a free Basic rig to begin.\n${refUrl}`,
+};
 
 export default function Profil() {
   const { address } = useAccount();
@@ -143,6 +161,39 @@ export default function Profil() {
     return `${v.toFixed(3)} $BaseTC`;
   };
 
+  // ---- NEW: share-to-cast logic (normal feed, no channelKey) ----
+  const [shareLoading, setShareLoading] = useState(false);
+
+  const buildCastText = useCallback((refUrl: string) => {
+    // pick your default preset here; you can change to 'valueForward' or others
+    return CAST_PRESETS.valueForward(refUrl);
+  }, []);
+
+  const onShareReferral = useCallback(async () => {
+    if (!inviteLink) return;
+    const castText = buildCastText(inviteLink);
+    setShareLoading(true);
+    try {
+      // Try native composer inside Farcaster client
+      await sdk.actions.composeCast({
+        text: castText,
+        embeds: [inviteLink],
+      });
+    } catch {
+      // Fallback: Warpcast universal compose link
+      const composeUrl = `https://warpcast.com/~/compose?text=${encodeURIComponent(
+        castText
+      )}&embeds[]=${encodeURIComponent(inviteLink)}`;
+      try {
+        await sdk.actions.openUrl(composeUrl);
+      } catch {
+        window.open(composeUrl, "_blank");
+      }
+    } finally {
+      setShareLoading(false);
+    }
+  }, [inviteLink, buildCastText]);
+
   return (
     <div className="space-y-4 px-4 pt-4 pb-8">
       <div className="flex items-center justify-between bg-neutral-800 rounded-lg p-3">
@@ -178,6 +229,7 @@ export default function Profil() {
           <div className="px-2 py-1 rounded-md text-[10px] bg-purple-700/30 border border-purple-600/40">Supreme</div>
         )}
       </div>
+
       <div className="bg-neutral-800 rounded-lg p-3 space-y-3">
         <h2 className="font-semibold text-sm md:text-base">Invites</h2>
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
@@ -196,8 +248,19 @@ export default function Profil() {
                 <button disabled={!inviteLink} onClick={() => inviteLink && copy(inviteLink)} className="px-3 py-1.5 text-xs rounded-md bg-neutral-700 hover:bg-neutral-600 disabled:opacity-50">
                     {copied ? "Copied!" : "Copy Link"}
                 </button>
+
+                {/* NEW: Share to Farcaster Cast (normal feed) */}
+                <button
+                  disabled={!inviteLink || shareLoading}
+                  onClick={onShareReferral}
+                  className="px-3 py-1.5 text-xs rounded-md bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white"
+                  aria-label="Share referral to Farcaster"
+                >
+                  {shareLoading ? "Opening…" : "Share referral to Cast"}
+                </button>
             </div>
         </div>
+
         <div className="space-y-2">
           <div className="text-xs text-neutral-400">Invited Users (recent pending/valid)</div>
           <div className="overflow-hidden rounded-md border border-neutral-700">
@@ -234,6 +297,7 @@ export default function Profil() {
           </div>
         </div>
       </div>
+
       <div className="bg-neutral-800 rounded-lg p-3 space-y-2">
         <h2 className="font-semibold text-sm md:text-base">Achievements</h2>
         {achievements.length === 0 ? (
@@ -249,6 +313,7 @@ export default function Profil() {
           </div>
         )}
       </div>
+
       <div className="bg-neutral-800 rounded-lg p-3 space-y-2">
         <h2 className="font-semibold text-sm md:text-base">Leaderboard</h2>
         {lbLoading ? (
@@ -283,3 +348,4 @@ export default function Profil() {
     </div>
   );
 }
+
