@@ -1,4 +1,3 @@
-// app/share/[addr]/page.tsx
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
@@ -16,19 +15,19 @@ function abs(url: string) {
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const addr = params.addr;
+  const { addr } = params;
   if (!addr || !addr.startsWith("0x") || addr.length !== 42) {
     notFound();
   }
 
+  // super simpel — kasih 2 param aja + cache buster
   const v = Date.now().toString(36);
-  // param minimal ke OG (semakin sedikit → semakin kecil size)
-  const imageUrl = abs(`/api/og?ref=${encodeURIComponent(addr)}&name=Miner&v=${v}`);
+  const imageUrl = abs(`/api/og?name=Miner&ref=${encodeURIComponent(addr)}&v=${v}`);
 
   const payload = {
     version: "1",
-    imageUrl,                 // HARUS absolute
-    aspectRatio: "3:2",       // ← tambahkan ini
+    imageUrl,
+    aspectRatio: "3:2",
     button: {
       title: "Open BaseTC",
       action: {
@@ -42,7 +41,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 
   return {
-    title: `BaseTC Share`,
+    title: "BaseTC Share",
     description: "Personalized share card",
     openGraph: {
       images: [{ url: imageUrl, width: 1200, height: 800 }],
@@ -53,13 +52,12 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     },
     other: {
       "fc:miniapp": JSON.stringify(payload),
-      "fc:frame": JSON.stringify(payload), // fallback
+      "fc:frame": JSON.stringify(payload),
     },
   };
 }
 
 export default function SharePage() {
-  // Halaman ini boleh kosong—yang penting HEAD meta di atas
-  return null;
+  return null; // cukup meta-nya
 }
 
