@@ -22,8 +22,8 @@ const payload = {
 };
 
 export const metadata: Metadata = {
-  title: "BaseTC MiniApp",
-  description: "Farcaster mining console built with Next.js and Tailwind.",
+  title: "BaseTC Console",
+  description: "Farcaster BaseTC mining console.",
   other: {
     // Spec baru (JSON tunggal)
     "fc:miniapp": JSON.stringify(payload),
