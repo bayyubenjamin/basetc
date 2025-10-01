@@ -1,3 +1,4 @@
+// app/share/[addr]/page.tsx
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
@@ -20,13 +21,16 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     notFound();
   }
 
-  // super simpel — kasih 2 param aja + cache buster
+  // cache buster untuk force re-scrape
   const v = Date.now().toString(36);
+
+  // OG image absolute URL → menunjuk ke /api/og dengan param minimal
   const imageUrl = abs(`/api/og?name=Miner&ref=${encodeURIComponent(addr)}&v=${v}`);
 
+  // Farcaster Miniapp payload (disarankan menambahkan aspectRatio 3:2)
   const payload = {
     version: "1",
-    imageUrl,
+    imageUrl,              // absolute
     aspectRatio: "3:2",
     button: {
       title: "Open BaseTC",
@@ -44,20 +48,32 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     title: "BaseTC Share",
     description: "Personalized share card",
     openGraph: {
-      images: [{ url: imageUrl, width: 1200, height: 800 }],
+      title: "BaseTC Share",
+      description: "Personalized share card",
+      images: [
+        {
+          url: imageUrl,
+          width: 1200,         // ← tambahkan eksplisit
+          height: 800,         // ← tambahkan eksplisit
+          alt: "BaseTC Share Card",
+        },
+      ],
     },
     twitter: {
       card: "summary_large_image",
+      title: "BaseTC Share",
+      description: "Personalized share card",
       images: [imageUrl],
     },
     other: {
       "fc:miniapp": JSON.stringify(payload),
-      "fc:frame": JSON.stringify(payload),
+      "fc:frame": JSON.stringify(payload), // fallback
     },
   };
 }
 
 export default function SharePage() {
-  return null; // cukup meta-nya
+  // boleh kosong—yang penting meta HEAD di atas
+  return null;
 }
 
