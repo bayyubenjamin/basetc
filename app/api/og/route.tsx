@@ -1,5 +1,5 @@
-// app/api/og/route.ts
-import { ImageResponse } from 'next/server'
+// app/api/og/route.tsx
+import { ImageResponse } from 'next/og'   // ⬅️ ganti ini (bukan 'next/server')
 
 export const runtime = 'edge'
 export const contentType = 'image/png'
@@ -22,7 +22,7 @@ export function GET(req: Request) {
           <div style={{ fontSize: 40, fontWeight: 800 }}>BaseTC Console</div>
           <div style={{
             padding: '8px 14px', borderRadius: 999, background: 'rgba(99,102,241,.15)',
-            border: '1px solid rgba(99,102,241,.4)', fontSize: 20
+            border:'1px solid rgba(99,102,241,.4)', fontSize: 20
           }}>
             Epoch {epoch}
           </div>
