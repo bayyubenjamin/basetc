@@ -1,32 +1,60 @@
 // app/share/[addr]/page.tsx
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 
-type Props = {
-  params: { addr: string };
-};
+export const dynamic = "force-dynamic";
 
-// metadata dinamis
+type Props = { params: { addr: string } };
+
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const h = headers();
+  const host = h.get("x-forwarded-host") || h.get("host") || "basetc.vercel.app";
+  const proto = h.get("x-forwarded-proto") || "https";
+  const base = `${proto}://${host}`;
+
   const addr = params.addr;
+  const v = Date.now().toString(36); // cache buster kecil untuk crawler
+  const imageUrl = `${base}/api/og?user=${encodeURIComponent(addr)}&v=${v}`;
+
+  const title = `BaseTC Invite – ${addr.slice(0, 6)}…${addr.slice(-4)}`;
+  const description = "Claim a free Basic rig and start mining on BaseTC Console.";
+
+  // Payload miniapp/frame sesuai dokumentasi Farcaster
+  const payload = {
+    version: "1",
+    imageUrl, // dinamis per user
+    button: {
+      title: "Open BaseTC",
+      action: {
+        type: "launch_miniapp",         // atau "launch_frame"
+        name: "BaseTC Console",
+        url: `${base}/launch`,          // halaman mini app kamu
+        splashImageUrl: `${base}/s.png`,// 200x200 PNG/JPG absolut
+        splashBackgroundColor: "#FFFFFF",
+      },
+    },
+  };
+
   return {
-    title: `BaseTC Invite - ${addr.slice(0, 6)}…${addr.slice(-4)}`,
-    description: "Start mining with a free Basic rig on BaseTC Console.",
+    metadataBase: new URL(base),
+    title,
+    description,
+    // OG/Twitter (fallback non-Farcaster)
     openGraph: {
-      title: "BaseTC Console",
-      description: "Claim your free rig and start mining.",
-      images: [
-        {
-          url: `https://basetc.vercel.app/api/og?user=${addr}`, // arahkan ke OG API dinamis
-          width: 1200,
-          height: 630,
-        },
-      ],
+      title,
+      description,
+      images: [{ url: imageUrl, width: 1200, height: 630, alt: "BaseTC OG Card" }],
     },
     twitter: {
       card: "summary_large_image",
-      title: "BaseTC Console",
-      description: "Claim your free rig and start mining.",
-      images: [`https://basetc.vercel.app/api/og?user=${addr}`],
+      title,
+      description,
+      images: [imageUrl],
+    },
+    // Meta khusus Farcaster
+    other: {
+      "fc:miniapp": JSON.stringify(payload),
+      "fc:frame": JSON.stringify(payload), // fallback legacy
     },
   };
 }
@@ -34,9 +62,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default function SharePage({ params }: Props) {
   const { addr } = params;
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-black text-white">
+    <main className="min-h-screen flex flex-col items-center justify-center bg-black text-white p-6">
       <h1 className="text-2xl font-bold">BaseTC Invite</h1>
-      <p className="mt-2">Referral address:</p>
+      <p className="mt-2 opacity-80">Referral address:</p>
       <code className="mt-1 px-2 py-1 bg-neutral-800 rounded">{addr}</code>
       <a
         href="/launch"
@@ -44,7 +72,7 @@ export default function SharePage({ params }: Props) {
       >
         Open App
       </a>
-    </div>
+    </main>
   );
 }
 

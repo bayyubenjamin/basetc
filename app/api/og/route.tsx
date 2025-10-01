@@ -1,12 +1,11 @@
 // app/api/og/route.tsx
 import { ImageResponse } from "next/og";
 
-export const runtime = "edge"; // wajib untuk ImageResponse performa bagus
+export const runtime = "edge";
+export const revalidate = 0; // jangan cache
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
-
-  // Ambil param dinamis dari URL (jangan import state/hook dari client)
   const user  = (searchParams.get("user")  || "Miner").slice(0, 42);
   const epoch = (searchParams.get("epoch") || "—").slice(0, 12);
   const hint  = (searchParams.get("hint")  || "Free Basic rig • Start mining").slice(0, 80);
