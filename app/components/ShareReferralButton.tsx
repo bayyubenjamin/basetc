@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { shareReferral, CAST_PRESETS } from '@/lib/shareReferral'
+import { shareReferral, CAST_PRESETS } from '../lib/shareReferral'
 
 type Props = {
   referralUrl: string

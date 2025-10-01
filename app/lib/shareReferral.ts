@@ -1,16 +1,16 @@
-// shareReferral.ts
+// app/lib/shareReferral.ts
 // Utility to open the Farcaster composer with prefilled text + embed.
 // Uses @farcaster/miniapp-sdk when available; falls back to Warpcast deep link.
 
 import { sdk } from '@farcaster/miniapp-sdk'
 
-/** Lean, non-cringey presets (pick one or build your own) */
+/** Clean, non-cringey English presets */
 export const CAST_PRESETS = {
   concise: (refUrl: string) =>
     `Join BaseTC Console and start mining with a free Basic rig.\n${refUrl}`,
 
   invite: (refUrl: string) =>
-    `I’m mining on BaseTC Console—grab a free Basic rig and try it yourself.\n${refUrl}`,
+    `I’m mining on BaseTC Console—grab a free Basic rig and try it.\n${refUrl}`,
 
   socialProof: (refUrl: string) =>
     `Mining on BaseTC Console has been smooth so far. Free Basic rig to get started:\n${refUrl}`,
@@ -29,8 +29,7 @@ type ShareReferralOptions = {
 export async function shareReferral({ referralUrl, text }: ShareReferralOptions) {
   if (!referralUrl) throw new Error('Missing referralUrl')
 
-  const castText =
-    text ?? CAST_PRESETS.concise(referralUrl) // default preset
+  const castText = text ?? CAST_PRESETS.concise(referralUrl) // default preset
 
   // Try native Mini App composer first
   try {
@@ -47,7 +46,9 @@ export async function shareReferral({ referralUrl, text }: ShareReferralOptions)
     try {
       await sdk.actions.openUrl(composeUrl) // inside Mini App
     } catch {
-      window.open(composeUrl, '_blank') // plain browser
+      if (typeof window !== 'undefined') {
+        window.open(composeUrl, '_blank') // plain browser
+      }
     }
   }
 }
