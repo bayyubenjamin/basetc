@@ -6,7 +6,7 @@
 },
 "frame": {
 "version": "1",
-"name": "BaseTC Mini App",
+"name": "BaseTC Console",
 "iconUrl": "https://basetc.vercel.app/img/logo.png",
 "homeUrl": "https://basetc.vercel.app/launch",
 "imageUrl": "https://basetc.vercel.app/img/splash.gif",
