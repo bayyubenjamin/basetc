@@ -1,11 +1,7 @@
 {
   "compilerOptions": {
     "target": "ES2020",
-    "lib": [
-      "ES2020",
-      "DOM",
-      "DOM.Iterable"
-    ],
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "jsx": "preserve",
@@ -18,22 +14,20 @@
     "incremental": true,
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
-    "plugins": [
-      {
-        "name": "next"
-      }
-    ],
-    "strict": false
+    "plugins": [{ "name": "next" }],
+    "strict": false,
+
+    // ⬇⬇⬇ Tambahkan baris ini
+    "typeRoots": ["./node_modules/@types", "./app/types"]
   },
   "include": [
     "next-env.d.ts",
     "**/*.ts",
     "**/*.tsx",
-    ".next/types/**/*.ts"
+    ".next/types/**/*.ts",
+    // ⬇⬇⬇ Tambahkan baris ini
+    "**/*.d.ts"
   ],
-  "exclude": [
-    "node_modules",
-    ".next",
-    "supabase/functions/**"
-  ]
+  "exclude": ["node_modules", ".next", "supabase/functions/**"]
 }
+
