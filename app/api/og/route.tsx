@@ -1,52 +1,46 @@
-// app/api/og/route.tsx
-import { ImageResponse } from 'next/og'   // ⬅️ ganti ini (bukan 'next/server')
+/* app/api/og/route.tsx */
+import { ImageResponse } from "next/og";
 
-export const runtime = 'edge'
-export const contentType = 'image/png'
-export const size = { width: 1200, height: 630 }
+// Dynamic OG endpoint
+export const runtime = "edge";
 
-export function GET(req: Request) {
-  const sp = new URL(req.url).searchParams
-  const name  = (sp.get('name')  || 'Miner').slice(0, 30)
-  const fid   = (sp.get('fid')   || '').slice(0, 12)
-  const epoch = (sp.get('epoch') || '—')
-  const hint  = sp.get('hint') || 'Free Basic rig • Start mining'
+export async function GET(req: Request) {
+  const { searchParams } = new URL(req.url);
+
+  const user = searchParams.get("user") || "Miner";
+  const epoch = searchParams.get("epoch") || "Epoch 1";
+  const hint = searchParams.get("hint") || "Free Basic rig • Start mining";
 
   return new ImageResponse(
     (
-      <div style={{
-        width: '1200px', height: '630px', display: 'flex', flexDirection: 'column',
-        background: '#0b0f1a', color: '#e5e7eb', padding: '48px', justifyContent: 'space-between'
-      }}>
-        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-          <div style={{ fontSize: 40, fontWeight: 800 }}>BaseTC Console</div>
-          <div style={{
-            padding: '8px 14px', borderRadius: 999, background: 'rgba(99,102,241,.15)',
-            border:'1px solid rgba(99,102,241,.4)', fontSize: 20
-          }}>
-            Epoch {epoch}
-          </div>
+      <div
+        style={{
+          width: "1200px",
+          height: "630px",
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "center",
+          alignItems: "center",
+          background: "#0b0f1a",
+          color: "#e5e7eb",
+          fontSize: 48,
+          fontWeight: "bold",
+          padding: "40px",
+        }}
+      >
+        <div style={{ fontSize: 64, marginBottom: "20px", color: "#60a5fa" }}>
+          BaseTC Console
         </div>
-
-        <div style={{ fontSize: 56, fontWeight: 900, lineHeight: 1.05 }}>
-          Real-time on-chain monitoring
-        </div>
-
-        <div style={{ display:'flex', gap: 12 }}>
-          <div style={{
-            fontSize: 22, padding: '6px 12px', background:'rgba(16,185,129,.15)',
-            border:'1px solid rgba(16,185,129,.35)', borderRadius: 10
-          }}>
-            {name}{fid ? ` • FID ${fid}` : ''}
-          </div>
-        </div>
-
-        <div style={{ fontSize: 22, color: '#9CA3AF' }}>
-          basetc.vercel.app
+        <div>{hint}</div>
+        <div style={{ fontSize: 36, marginTop: "40px", opacity: 0.8 }}>
+          {user} — {epoch}
         </div>
       </div>
     ),
-    { ...size }
-  )
+    {
+      width: 1200,
+      height: 630,
+    }
+  );
 }
 
