@@ -183,11 +183,6 @@ const embedLink = useMemo(() => {
   return `${base}/share/${address}?v=${v}`;
 }, [address]);
 
-await sdk.actions.composeCast({
-  text: CAST_PRESETS.valueForward(), // teks bersih
-  embeds: [embedLink],               // card dari /share → OG dinamis
-});
-
   /** Format reward/score */
   const prettyReward = useCallback((row: LbRow) => {
     const v = row.score ?? row.total_rewards ?? row.rewards;
