@@ -1,48 +1,24 @@
-// app/share/[addr]/page.tsx
 import type { Metadata } from "next";
-import { headers } from "next/headers";
-import { notFound } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
-type Props = { params: { addr: string } };
+type Props = {
+  params: { addr: string };
+  searchParams: { name?: string; epoch?: string; v?: string };
+};
 
-function abs(url: string) {
-  const hdrs = headers();
-  const host = hdrs.get("x-forwarded-host") || hdrs.get("host") || "basetc.vercel.app";
-  const proto = (hdrs.get("x-forwarded-proto") || "https").split(",")[0];
-  const base = `${proto}://${host}`;
-  return url.startsWith("http") ? url : `${base}${url}`;
-}
+export async function generateMetadata(
+  { params, searchParams }: Props
+): Promise<Metadata> {
+  const addr = params.addr || "";
+  const name = searchParams.name || "Miner";
+  const epoch = searchParams.epoch || "";
+  // cache-buster: jika tidak ada `v` dari client, tambahkan di server
+  const v = searchParams.v || Date.now().toString(36);
 
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const { addr } = params;
-  if (!addr || !addr.startsWith("0x") || addr.length !== 42) {
-    notFound();
-  }
-
-  // cache buster untuk force re-scrape
-  const v = Date.now().toString(36);
-
-  // OG image absolute URL → menunjuk ke /api/og dengan param minimal
-  const imageUrl = abs(`/api/og?name=Miner&ref=${encodeURIComponent(addr)}&v=${v}`);
-
-  // Farcaster Miniapp payload (disarankan menambahkan aspectRatio 3:2)
-  const payload = {
-    version: "1",
-    imageUrl,              // absolute
-    aspectRatio: "3:2",
-    button: {
-      title: "Open BaseTC",
-      action: {
-        type: "launch_miniapp",
-        name: "BaseTC Console",
-        url: abs("/launch"),
-        splashImageUrl: abs("/s.png"),
-        splashBackgroundColor: "#FFFFFF",
-      },
-    },
-  };
+  const og = `https://basetc.vercel.app/api/og?ref=${encodeURIComponent(
+    addr
+  )}&name=${encodeURIComponent(name)}${epoch ? `&epoch=${encodeURIComponent(epoch)}` : ""}&v=${v}`;
 
   return {
     title: "BaseTC Share",
@@ -50,30 +26,23 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     openGraph: {
       title: "BaseTC Share",
       description: "Personalized share card",
-      images: [
-        {
-          url: imageUrl,
-          width: 1200,         // ← tambahkan eksplisit
-          height: 800,         // ← tambahkan eksplisit
-          alt: "BaseTC Share Card",
-        },
-      ],
+      images: [{ url: og, width: 1200, height: 630 }],
     },
     twitter: {
       card: "summary_large_image",
       title: "BaseTC Share",
       description: "Personalized share card",
-      images: [imageUrl],
+      images: [og],
     },
     other: {
-      "fc:miniapp": JSON.stringify(payload),
-      "fc:frame": JSON.stringify(payload), // fallback
+      // (opsional) bagi miniapp/frames – tapi tidak wajib untuk OG
+      "fc:frame:post_url": "https://basetc.vercel.app/launch",
     },
   };
 }
 
 export default function SharePage() {
-  // boleh kosong—yang penting meta HEAD di atas
+  // Halaman ini tidak perlu render apapun; meta saja yang penting
   return null;
 }
 
