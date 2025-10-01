@@ -7,10 +7,10 @@ export default function Head() {
       title: "Open BaseTC",
       action: {
         type: "launch_miniapp",
-        name: "BaseTC Mini App",
+        name: "BaseTC Console",
         url: "https://basetc.vercel.app/launch",
         splashImageUrl: "/s.png",
-        splashBackgroundColor: "#0b0b0b"
+        splashBackgroundColor: "#FFFFFF"
       }
     }
   };
