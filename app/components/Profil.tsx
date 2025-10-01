@@ -176,11 +176,10 @@ export default function Profil() {
   }, [fcUser?.fid, address]);
 
   /** BOT-facing embed link → /share/[addr] + cache buster (untuk OG dinamis) */
-const embedLink = useMemo(() => {
+const shareBaseUrl = useMemo(() => {
   if (typeof window === "undefined" || !address) return "";
-  const base = window.location.origin || "";
-  const v = Date.now().toString(36); // setiap klik beda → recrawl
-  return `${base}/share/${address}?v=${v}`;
+   const base = window.location.origin || "";
+return `${base}/share/${address}`;
 }, [address]);
 
   /** Format reward/score */
@@ -198,13 +197,16 @@ const embedLink = useMemo(() => {
   }, []);
 
   const onShareReferral = useCallback(async () => {
-    if (!embedLink) return;
+    if (!shareBaseUrl) return;
     const castText = buildCastText();
     setShareLoading(true);
     try {
-      await sdk.actions.composeCast({ text: castText, embeds: [embedLink] });
+    const v = Date.now().toString(36);
+    const finalLink = `${shareBaseUrl}?v=${v}`;
+      await sdk.actions.composeCast({ text: castText, embeds: [finalLink] });
     } catch {
-      const composeUrl = `https://warpcast.com/~/compose?text=${encodeURIComponent(castText)}&embeds[]=${encodeURIComponent(embedLink)}`;
+    const finalLink = `${shareBaseUrl}?v=${Date.now().toString(36)}`;
+      const composeUrl = `https://warpcast.com/~/compose?text=${encodeURIComponent(castText)}&embeds[]=${encodeURIComponent(finalLink)}`;
       try {
         await sdk.actions.openUrl(composeUrl);
       } catch {
@@ -213,7 +215,7 @@ const embedLink = useMemo(() => {
     } finally {
       setShareLoading(false);
     }
-  }, [embedLink, buildCastText]);
+  }, [shareBaseUrl, buildCastText]);
 
   return (
     <div className="space-y-4 px-4 pt-4 pb-8">
