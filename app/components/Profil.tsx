@@ -249,7 +249,7 @@ export default function Profil() {
               disabled={!inviteLink || shareLoading}
               onClick={onShareReferral}
               className="px-3 py-1.5 text-xs rounded-md bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white"
-              aria-label="Share referral to Farcaster"
+              aria-label="Share Invitations"
             >
               {shareLoading ? "Opening…" : "Share referral to Cast"}
             </button>
