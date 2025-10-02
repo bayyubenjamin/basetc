@@ -1,34 +1,75 @@
+// app/api/frame/route.ts
 import { NextResponse } from "next/server";
 
+const CORS = {
+  "Access-Control-Allow-Origin": "https://basetc.xyz",
+  "Access-Control-Allow-Methods": "GET,POST,HEAD,OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type",
+};
+
 /**
- * Webhook handler untuk Frame.
- * - Farcaster/Infra akan ngirim POST ke endpoint ini
- * - Balasan minimal harus 200 OK biar dianggap valid
- * - Bisa dipakai juga buat validasi signature / logging event user
+ * Health check (validator sering GET ke webhook)
+ */
+export async function GET() {
+  return new NextResponse("ok", {
+    status: 200,
+    headers: {
+      "Content-Type": "text/plain",
+      ...CORS,
+    },
+  });
+}
+
+/**
+ * Beberapa validator melakukan HEAD
+ */
+export async function HEAD() {
+  return new NextResponse(null, {
+    status: 200,
+    headers: {
+      ...CORS,
+    },
+  });
+}
+
+/**
+ * Preflight CORS
+ */
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 204,
+    headers: {
+      ...CORS,
+    },
+  });
+}
+
+/**
+ * Webhook frame action (tetap POST 200)
  */
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}));
-
-    // 🔎 Contoh log event (opsional, hapus kalau nggak mau)
     console.log("Webhook hit /api/frame:", body);
 
-    // TODO:
-    // - kalau mau, lo bisa verifikasi signature (pakai Neynar SDK)
-    // - bisa juga simpan event ke DB (Supabase dsb)
+    // TODO: verifikasi signature / simpan event (opsional)
 
-    // ✅ wajib balas 200
-    return NextResponse.json({ ok: true });
+    return new NextResponse(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: {
+        "Content-Type": "application/json",
+        ...CORS,
+      },
+    });
   } catch (err) {
     console.error("Error /api/frame:", err);
-    return NextResponse.json({ ok: false }, { status: 500 });
+    return new NextResponse(JSON.stringify({ ok: false }), {
+      status: 500,
+      headers: {
+        "Content-Type": "application/json",
+        ...CORS,
+      },
+    });
   }
 }
 
-/**
- * (Opsional) GET untuk health check
- * Bisa dipanggil manual buat cek endpoint hidup
- */
-export async function GET() {
-  return NextResponse.json({ status: "frame webhook alive" });
-}
