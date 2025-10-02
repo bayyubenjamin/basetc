@@ -60,7 +60,6 @@ async function fetchLeaderboard(): Promise<LbRow[]> {
   }
 }
 
-/** Presets (text only, URL masuk via embeds agar tidak “nampak” di teks) */
 const CAST_PRESETS = {
   concise: () => `Join BaseTC Console and start mining with a free Basic rig.`,
   invite: () => `I’m trying BaseTC Console—free Basic rig to get started.`,
@@ -166,7 +165,7 @@ export default function Profil() {
     } catch {}
   };
 
-  /** Human-facing referral link (untuk input Copy Link) */
+  /** Referral asli (?ref=...&fid=...) */
   const inviteLink = useMemo(() => {
     if (typeof window === "undefined" || !address) return "";
     const base = window.location.origin || "";
@@ -175,37 +174,18 @@ export default function Profil() {
     return `${base}?${refQuery}${fidQuery}`;
   }, [fcUser?.fid, address]);
 
-  /** BOT-facing embed link → /share/[addr] + cache buster (untuk OG dinamis) */
-const shareBaseUrl = useMemo(() => {
-  if (typeof window === "undefined" || !address) return "";
-   const base = window.location.origin || "";
-return `${base}/share/${address}`;
-}, [address]);
-
-  /** Format reward/score */
-  const prettyReward = useCallback((row: LbRow) => {
-    const v = row.score ?? row.total_rewards ?? row.rewards;
-    if (typeof v !== "number" || Number.isNaN(v)) return "–";
-    return `${v.toFixed(3)} $BaseTC`;
-  }, []);
-
-  /** Share to Cast (text bersih; URL hanya di embeds agar link “hidden”) */
   const [shareLoading, setShareLoading] = useState(false);
-
-  const buildCastText = useCallback(() => {
-    return CAST_PRESETS.valueForward();
-  }, []);
+  const buildCastText = useCallback(() => CAST_PRESETS.valueForward(), []);
 
   const onShareReferral = useCallback(async () => {
-    if (!shareBaseUrl) return;
+    if (!inviteLink) return;
     const castText = buildCastText();
     setShareLoading(true);
     try {
-    const v = Date.now().toString(36);
-    const finalLink = `${shareBaseUrl}?v=${v}`;
+      const finalLink = `${inviteLink}&v=${Date.now().toString(36)}`;
       await sdk.actions.composeCast({ text: castText, embeds: [finalLink] });
     } catch {
-    const finalLink = `${shareBaseUrl}?v=${Date.now().toString(36)}`;
+      const finalLink = `${inviteLink}&v=${Date.now().toString(36)}`;
       const composeUrl = `https://warpcast.com/~/compose?text=${encodeURIComponent(castText)}&embeds[]=${encodeURIComponent(finalLink)}`;
       try {
         await sdk.actions.openUrl(composeUrl);
@@ -215,10 +195,11 @@ return `${base}/share/${address}`;
     } finally {
       setShareLoading(false);
     }
-  }, [shareBaseUrl, buildCastText]);
+  }, [inviteLink, buildCastText]);
 
   return (
     <div className="space-y-4 px-4 pt-4 pb-8">
+      {/* header profile */}
       <div className="flex items-center justify-between bg-neutral-800 rounded-lg p-3">
         <div className="flex items-center space-x-3">
           <div className="w-12 h-12 bg-neutral-700 rounded-full overflow-hidden flex items-center justify-center">
@@ -251,6 +232,7 @@ return `${base}/share/${address}`;
         {isSupreme && <div className="px-2 py-1 rounded-md text-[10px] bg-purple-700/30 border border-purple-600/40">Supreme</div>}
       </div>
 
+      {/* invites */}
       <div className="bg-neutral-800 rounded-lg p-3 space-y-3">
         <h2 className="font-semibold text-sm md:text-base">Invites</h2>
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
@@ -265,15 +247,15 @@ return `${base}/share/${address}`;
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {/* human-facing link (referral) */}
+            {/* Copy link */}
             <input readOnly value={inviteLink} className="bg-neutral-900 border border-neutral-700 rounded-md px-2 py-1 text-xs w-full md:w-[260px]" />
             <button disabled={!inviteLink} onClick={() => inviteLink && copy(inviteLink)} className="px-3 py-1.5 text-xs rounded-md bg-neutral-700 hover:bg-neutral-600 disabled:opacity-50">
               {copied ? "Copied!" : "Copy Link"}
             </button>
 
-            {/* share → OG card dari /share/[addr] */}
+            {/* Share referral */}
             <button
-              disabled={!shareBaseUrl || shareLoading}
+              disabled={!inviteLink || shareLoading}
               onClick={onShareReferral}
               className="px-3 py-1.5 text-xs rounded-md bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white"
               aria-label="Share referral to Farcaster"
@@ -318,6 +300,7 @@ return `${base}/share/${address}`;
         </div>
       </div>
 
+      {/* achievements */}
       <div className="bg-neutral-800 rounded-lg p-3 space-y-2">
         <h2 className="font-semibold text-sm md:text-base">Achievements</h2>
         {achievements.length === 0 ? (
@@ -334,6 +317,7 @@ return `${base}/share/${address}`;
         )}
       </div>
 
+      {/* leaderboard */}
       <div className="bg-neutral-800 rounded-lg p-3 space-y-2">
         <h2 className="font-semibold text-sm md:text-base">Leaderboard</h2>
         {lbLoading ? (
