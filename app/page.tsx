@@ -2,9 +2,9 @@
 import "./globals.css";
 import type { Metadata } from "next";
 
-const imageUrl = "https://basetc.vercel.app/img/feed.png";
-const launchUrl = "https://basetc.vercel.app/launch";
-const splashUrl = "https://basetc.vercel.app/s.png";
+const imageUrl = "https://basetc.xyz/img/feed.png";
+const launchUrl = "https://basetc.xyz/launch";
+const splashUrl = "https://basetc.xyz/s.png";
 
 const payload = {
   version: "1",
@@ -33,7 +33,7 @@ export const metadata: Metadata = {
     "fc:frame-legacy": "1", // penanda internal—abaikan, tidak akan dirender
     "fc:frame (legacy format)": "vNext",
     "fc:frame:image": imageUrl,
-    "fc:frame:post_url": "https://basetc.vercel.app/api/frame/actions",
+    "fc:frame:post_url": "https://basetc.xyz/api/frame/actions",
 
     // Satu tombol "Open" yang langsung launch (link ke /launch)
     "fc:frame:button:1": "Open BaseTC",
