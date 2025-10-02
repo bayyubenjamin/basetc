@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 export async function GET() {
   // Pastikan BASE_URL sesuai dengan domain Vercel Anda
-  const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || "https://basetc.vercel.app";
+  const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || "https://basetc.xyz";
   const img = `${BASE_URL}/img/basic.png`;
 
   const html = `<!doctype html><html><head>
