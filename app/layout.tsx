@@ -11,7 +11,6 @@ const fcPayload = {
     action: {
       type: "launch_miniapp",
       name: "BaseTC Console",
-      // HARUS match dengan homeUrl di farcaster.json untuk hindari splash stuck
       url: "https://basetc.xyz/launch",
       splashImageUrl: "https://basetc.xyz/s.png",
       splashBackgroundColor: "#FFFFFF",

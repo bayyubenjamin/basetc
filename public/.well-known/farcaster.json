@@ -10,7 +10,7 @@
     "iconUrl": "https://basetc.xyz/img/logo.png",
     "homeUrl": "https://basetc.xyz/launch",
     "imageUrl": "https://basetc.xyz/img/feed.png",
-    "splashImageUrl": "https://basetc.xyz/s.png",
+    "splashImageUrl": "https://basetc.xyz/img/splash.gif",
     "splashBackgroundColor": "#FFFFFF",
     "buttonTitle": "Open BaseTC",
     "webhookUrl": "https://basetc.xyz/api/frame"
