@@ -164,6 +164,13 @@ export default function Profil() {
       setTimeout(() => setCopied(false), 1000);
     } catch {}
   };
+  
+// Format reward/score agar aman bila null/undefined
+const prettyReward = useCallback((row: LbRow) => {
+  const v = row.score ?? row.total_rewards ?? row.rewards;
+  if (typeof v !== "number" || Number.isNaN(v)) return "–";
+  return `${v.toFixed(3)} $BaseTC`;
+}, []);
 
   /** Referral asli (?ref=...&fid=...) */
   const inviteLink = useMemo(() => {
