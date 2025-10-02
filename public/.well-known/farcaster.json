@@ -7,12 +7,12 @@
 "frame": {
 "version": "1",
 "name": "BaseTC Console",
-"iconUrl": "https://basetc.vercel.app/img/logo.png",
-"homeUrl": "https://basetc.vercel.app/launch",
-"imageUrl": "https://basetc.vercel.app/img/splash.gif",
+"iconUrl": "https://basetc.xyz/img/logo.png",
+"homeUrl": "https://basetc.xyz/launch",
+"imageUrl": "https://basetc.xyz/img/splash.gif",
 "buttonTitle": "Open BaseTC",
-"splashImageUrl": "https://basetc.vercel.app/img/splash.gif",
+"splashImageUrl": "https://basetc.xyz/img/splash.gif",
 "splashBackgroundColor": "#FFFFFF",
-"webhookUrl": "https://basetc.vercel.app/api/frame"
+"webhookUrl": "https://basetc.xyz/api/frame"
  }
 }
