@@ -1,3 +1,4 @@
+// app/page.jsx
 "use client";
 
 import { Suspense, useEffect, useMemo, useState } from "react";
@@ -5,7 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
-// Universal Link MiniApp kamu
+// Universal Link MiniApp kamu (untuk browser biasa)
 const UNIVERSAL_LINK = "https://farcaster.xyz/miniapps/PkHG0AuDhXrd/basetc-console";
 const FARCASTER_HINTS = ["Warpcast", "Farcaster", "V2Frame"];
 
@@ -21,7 +22,7 @@ function RedirectIfReferral() {
   }, [searchParams]);
 
   useEffect(() => {
-    if (didHandle) return;
+    if (didHandle || !hasReferral) return;
 
     const ua = navigator.userAgent || "";
     const isFarcaster = FARCASTER_HINTS.some((k) => ua.includes(k));
@@ -29,16 +30,14 @@ function RedirectIfReferral() {
     const ref = searchParams.get("ref");
     const fid = searchParams.get("fid");
 
-    if (!hasReferral) return; // ❗️Tidak ada referral → TIDAK redirect
-
     if (isFarcaster) {
-      // Dalam Farcaster → lempar ke /launch + query referral
+      // Dalam Farcaster → lempar ke /launch + param agar tracking referral tetap jalan
       router.replace("/launch" + window.location.search);
       setDidHandle(true);
       return;
     }
 
-    // Di browser → lempar ke Universal Link + referral
+    // Di browser → lempar ke Universal Link + referral (buka Farcaster)
     const url = new URL(UNIVERSAL_LINK);
     if (ref) url.searchParams.set("ref", ref);
     if (fid) url.searchParams.set("fid", fid);
@@ -46,7 +45,7 @@ function RedirectIfReferral() {
     setDidHandle(true);
   }, [router, searchParams, hasReferral, didHandle]);
 
-  return null; // komponen ini tidak merender UI
+  return null;
 }
 
 function Landing() {
@@ -107,19 +106,28 @@ function Landing() {
         </div>
 
         <p style={{ opacity: 0.6, marginTop: 12, fontSize: 12 }}>
-          Tip: bagikan tautan referral seperti <code>https://basetc.xyz?ref=0x...&amp;fid=...</code> — akan otomatis terbuka di Farcaster.
+          Tip: bagikan referral seperti <code>https://basetc.xyz?ref=0x...&amp;fid=...</code> — akan otomatis terbuka di Farcaster.
         </p>
       </div>
     </main>
   );
 }
 
+function RootContent() {
+  return (
+    <>
+      {/* Redirect HANYA jika ada param referral */}
+      <RedirectIfReferral />
+      {/* Tanpa referral → tampil landing, TIDAK direct */}
+      <Landing />
+    </>
+  );
+}
+
 export default function Home() {
   return (
     <Suspense fallback={<Landing />}>
-      {/* Hanya redirect jika ada referral; kalau tidak, tampilkan landing */}
-      <RedirectIfReferral />
-      <Landing />
+      <RootContent />
     </Suspense>
   );
 }

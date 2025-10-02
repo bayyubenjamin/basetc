@@ -2,6 +2,23 @@
 import "./globals.css";
 import type { Metadata } from "next";
 
+// Payload Mini App — berlaku global agar card muncul untuk URL apa pun yang dicast
+const fcPayload = {
+  version: "1",
+  imageUrl: "https://basetc.xyz/img/feed.png",
+  button: {
+    title: "Open BaseTC",
+    action: {
+      type: "launch_miniapp",
+      name: "BaseTC Console",
+      // HARUS match dengan homeUrl di farcaster.json untuk hindari splash stuck
+      url: "https://basetc.xyz/launch",
+      splashImageUrl: "https://basetc.xyz/s.png",
+      splashBackgroundColor: "#FFFFFF",
+    },
+  },
+};
+
 export const metadata: Metadata = {
   metadataBase: new URL("https://basetc.xyz"),
   alternates: { canonical: "https://basetc.xyz/" },
@@ -12,15 +29,19 @@ export const metadata: Metadata = {
     url: "https://basetc.xyz/",
     title: "BaseTC Console",
     description: "Start mining with a free Basic rig onchain.",
-    images: [{ url: "/img/feed.png", width: 1200, height: 630, alt: "BaseTC Console" }]
+    images: [{ url: "/img/feed.png", width: 1200, height: 630, alt: "BaseTC Console" }],
   },
   twitter: {
     card: "summary_large_image",
     title: "BaseTC Console",
     description: "Start mining with a free Basic rig onchain.",
-    images: ["/img/feed.png"]
-  }
-  // ❌ Jangan taruh "other": { fc:miniapp / fc:frame } di GLOBAL layout.
+    images: ["/img/feed.png"],
+  },
+  // ❗️Taruh fc:miniapp / fc:frame di global supaya CAST URL APA PUN ada card
+  other: {
+    "fc:miniapp": JSON.stringify(fcPayload),
+    "fc:frame": JSON.stringify(fcPayload),
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
