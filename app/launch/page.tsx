@@ -1,9 +1,9 @@
-// app/dashboard/page.tsx
+// app/launch/page.tsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { useAccount } from "wagmi";
-import { Providers } from "../Providers"; // <-- Provider Wagmi utama
+import { Providers } from "../Providers";
 import { FarcasterProvider, useFarcaster } from "../context/FarcasterProvider";
 import Navigation, { type TabName } from "../components/Navigation";
 import Monitoring from "../components/Monitoring";
@@ -119,18 +119,19 @@ function AppInitializer() {
     );
   }
 
-  if (resolvedFid) {
-    return <MainApp />;
-  }
-  
-  return <FidInput setFid={(fid) => {
-    localStorage.setItem("basetc_fid", String(fid));
-    setResolvedFid(fid);
-  }} />;
+  if (resolvedFid) return <MainApp />;
+
+  return (
+    <FidInput
+      setFid={(fid) => {
+        localStorage.setItem("basetc_fid", String(fid));
+        setResolvedFid(fid);
+      }}
+    />
+  );
 }
 
-// Komponen utama yang akan di-render untuk /dashboard
-export default function Page() {
+export default function LaunchPage() {
   return (
     <Providers>
       <FarcasterProvider>
@@ -139,3 +140,4 @@ export default function Page() {
     </Providers>
   );
 }
+
