@@ -5,7 +5,7 @@
     "signature": "MHg1ZDdiNDYzZjM0NTk5MzY3YjFjMThlYjc3YmM3MGU4YTkyM2E4ZjY4Y2QwYzQ3YzFkYjIwMWU1OTM3N2ZiMzZmMmFlOGVjMjFmZjhmNDI2M2EzMzBjY2RjYTNkNjI2MWY3MjAwMzVlY2E0NTgwMzk4YmI3ZTA4ODFkZjIyMDRmZTFj"
 },
   "frame": {
-    "version": "vNext",
+    "version": "1",
     "name": "BaseTC Console",
     "iconUrl": "https://basetc.xyz/img/logo.png",
     "homeUrl": "https://basetc.xyz/launch",
