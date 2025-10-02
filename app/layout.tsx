@@ -4,14 +4,14 @@ import type { Metadata } from "next";
 
 const payload = {
   version: "1",
-  imageUrl: "https://basetc.vercel.app/api/og", // fallback OG dynamic
+  imageUrl: "https://basetc.xyz/api/og", // fallback OG dynamic
   button: {
     title: "Open BaseTC",
     action: {
       type: "launch_miniapp",
       name: "BaseTC Console",
-      url: "https://basetc.vercel.app/launch",
-      splashImageUrl: "https://basetc.vercel.app/s.png",
+      url: "https://basetc.xyz/launch",
+      splashImageUrl: "https://basetc.xyz/s.png",
       splashBackgroundColor: "#FFFFFF",
     },
   },
@@ -25,7 +25,7 @@ export const metadata: Metadata = {
     description: "Start mining with a free Basic rig onchain.",
     images: [
       {
-        url: "https://basetc.vercel.app/api/og", // dynamic endpoint
+        url: "https://basetc.xyz/api/og", // dynamic endpoint
         width: 1200,
         height: 630,
       },
@@ -35,7 +35,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "BaseTC Console",
     description: "Start mining with a free Basic rig onchain.",
-    images: ["https://basetc.vercel.app/api/og"],
+    images: ["https://basetc.xyz/api/og"],
   },
   other: {
     "fc:miniapp": JSON.stringify(payload),

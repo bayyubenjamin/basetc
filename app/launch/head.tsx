@@ -2,13 +2,13 @@
 export default function Head() {
   const miniapp = {
     version: "1",
-    imageUrl: "https://basetc.vercel.app/img/feed.png",
+    imageUrl: "https://basetc.xyz/img/feed.png",
     button: {
       title: "Open BaseTC",
       action: {
         type: "launch_miniapp",
         name: "BaseTC Console",
-        url: "https://basetc.vercel.app/launch",
+        url: "https://basetc.xyz/launch",
         splashImageUrl: "/s.png",
         splashBackgroundColor: "#FFFFFF"
       }

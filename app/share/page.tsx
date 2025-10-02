@@ -12,7 +12,7 @@ export async function generateMetadata({ searchParams }: Props): Promise<Metadat
     Object.entries(searchParams || {}).map(([k, v]) => [k, Array.isArray(v) ? v[0] : (v ?? '')])
   )
 
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://basetc.vercel.app'
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://basetc.xyz'
   const title = 'BaseTC Console — simple mining, clear ROI targets'
   const description = 'Claim a free Basic rig and start mining on BaseTC Console.'
 
