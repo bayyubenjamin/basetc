@@ -3,7 +3,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useAccount } from "wagmi";
-import { Providers } from "../Providers";
+import { Providers } from "../Providers"; // <-- Provider Wagmi utama
 import { FarcasterProvider, useFarcaster } from "../context/FarcasterProvider";
 import Navigation, { type TabName } from "../components/Navigation";
 import Monitoring from "../components/Monitoring";
@@ -119,19 +119,18 @@ function AppInitializer() {
     );
   }
 
-  if (resolvedFid) return <MainApp />;
-
-  return (
-    <FidInput
-      setFid={(fid) => {
-        localStorage.setItem("basetc_fid", String(fid));
-        setResolvedFid(fid);
-      }}
-    />
-  );
+  if (resolvedFid) {
+    return <MainApp />;
+  }
+  
+  return <FidInput setFid={(fid) => {
+    localStorage.setItem("basetc_fid", String(fid));
+    setResolvedFid(fid);
+  }} />;
 }
 
-export default function LaunchPage() {
+// Komponen utama yang akan di-render untuk /dashboard
+export default function Page() {
   return (
     <Providers>
       <FarcasterProvider>
@@ -140,4 +139,3 @@ export default function LaunchPage() {
     </Providers>
   );
 }
-
