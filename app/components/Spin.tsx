@@ -1,15 +1,17 @@
 // app/components/Spin.tsx
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import type { FC } from "react";
 import { useAccount, useReadContract, useWriteContract, usePublicClient } from "wagmi";
-import { baseSepolia } from "viem/chains"; // <-- Impor baseSepolia
-import { formatEther } from "viem"; // <-- Impor formatEther
-import { spinVaultAddress, spinVaultABI, rigNftAddress, rigNftABI } from "../lib/web3Config";
+import { baseSepolia } from "viem/chains";
+import { formatEther, parseEther } from "viem";
+import { spinVaultAddress, spinVaultABI } from "../lib/web3Config";
+import { useFarcaster } from "../context/FarcasterProvider";
 
 const Spin: FC = () => {
   const { address } = useAccount();
+  const { user: fcUser } = useFarcaster(); // Ambil data user Farcaster
   const publicClient = usePublicClient();
   const { writeContractAsync } = useWriteContract();
   
@@ -28,7 +30,7 @@ const Spin: FC = () => {
     address: spinVaultAddress,
     abi: spinVaultABI as any,
     functionName: "claimed",
-    args: [epoch, address],
+    args: epoch !== undefined && address ? [epoch, address] : undefined,
     query: { enabled: !!address && epoch !== undefined },
   });
 
@@ -40,17 +42,23 @@ const Spin: FC = () => {
     query: { enabled: !!address },
   });
 
-  const canClaim = !claimed;
+  const canClaim = useMemo(() => !claimed, [claimed]);
 
   // --- Action ---
   const handleSpin = async () => {
-    if (!address || !canClaim) return;
+    if (!address || !canClaim || !fcUser?.fid) {
+        setStatus("Connect wallet and ensure FID is available.");
+        return;
+    };
     setLoading(true);
     setStatus("Preparing your daily spin...");
     setSpinResult(null);
 
     try {
-        const nonce = (await refetchNonces()).data;
+        const nonceResult = await refetchNonces();
+        const nonce = nonceResult.data;
+        if (nonce === undefined) throw new Error("Could not fetch nonce.");
+
         const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600); // 1 hour
 
         setStatus("Requesting signature...");
@@ -61,6 +69,7 @@ const Spin: FC = () => {
                 vault: "spin",
                 action: "claim",
                 user: address,
+                fid: fcUser.fid, // <-- FIX: Kirim FID ke backend
                 nonce: String(nonce),
                 deadline: String(deadline),
             }),
@@ -75,8 +84,8 @@ const Spin: FC = () => {
             abi: spinVaultABI as any,
             functionName: "claimWithSig",
             args: [address, nonce, deadline, sigData.signature],
-            account: address, // <-- FIX: Tambahkan account
-            chain: baseSepolia, // <-- FIX: Tambahkan chain
+            account: address,
+            chain: baseSepolia,
         });
 
         const receipt = await publicClient?.waitForTransactionReceipt({ hash: txHash });
@@ -88,8 +97,8 @@ const Spin: FC = () => {
         }
         
         setStatus("Spin successful!");
-        refetchClaimed();
-        refetchEpoch();
+        await Promise.all([refetchClaimed(), refetchEpoch(), refetchNonces()]);
+
     } catch (e: any) {
         setStatus(e?.shortMessage || e?.message || "An error occurred.");
     } finally {
@@ -110,7 +119,7 @@ const Spin: FC = () => {
                 disabled={loading || !canClaim || !address}
                 className="px-8 py-4 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 text-white font-bold text-lg shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-105 transition-transform"
             >
-                {loading ? "Spinning..." : (canClaim ? "Spin Now!" : "Already Claimed")}
+                {loading ? "Spinning..." : (canClaim ? "Spin Now!" : "Already Claimed for this Epoch")}
             </button>
         </div>
 

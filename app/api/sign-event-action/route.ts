@@ -108,14 +108,13 @@ export async function POST(req: Request) {
             primaryType: "UserAction",
             message: { user, nonce: BigInt(nonce), deadline: BigInt(deadline) },
         });
-
+        
         // --- Integrasi Leaderboard ---
-        // Panggil Edge Function untuk menambahkan poin setelah signature dibuat.
         if (SUPABASE_URL && SUPABASE_ANON_KEY && fid) {
             const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
             supabase.functions.invoke('add-spin-points', {
                 body: { fid: fid }
-            }).catch(console.error); // Fire-and-forget
+            }).catch(console.error);
         }
         // ----------------------------
 
