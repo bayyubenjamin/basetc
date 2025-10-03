@@ -13,6 +13,21 @@
     "splashImageUrl": "https://basetc.xyz/img/splash.gif",
     "splashBackgroundColor": "#FFFFFF",
     "buttonTitle": "Open BaseTC",
-    "webhookUrl": "https://basetc.xyz/api/frame"
+    "webhookUrl": "https://basetc.xyz/api/frame",
+
+    "canonicalDomain": "basetc.xyz", 
+    "subtitle": "Mining NFT Game on Base",
+    "description": "BaseTC Console adalah Farcaster Mini App untuk mining NFT rigs di jaringan Base. Klaim rig gratis, merge tier Pro & Legend, dan hasilkan token $BaseTC onchain.",
+    "tagline": "Mine $BaseTC onchain with NFTs",
+    "tags": ["Base", "NFT", "mining", "game", "crypto", "airdrop"],
+    "heroImageUrl": "https://basetc.xyz/img/feed.png",
+    "screenshotUrls": [
+      "https://basetc.xyz/img/screenshot1.png",
+      "https://basetc.xyz/img/screenshot2.png"
+    ],
+    "ogTitle": "BaseTC Console • Farcaster Mining Mini App",
+    "ogDescription": "Bangun rig, upgrade ke Legend, hasilkan $BaseTC. Gratis klaim rig Basic pertama!",
+    "ogImageUrl": "https://basetc.xyz/img/feed.png",
+    "castShareUrl": "https://basetc.xyz/launch"
   }
 }
