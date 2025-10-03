@@ -10,7 +10,7 @@ import { spinVaultAddress, spinVaultABI } from "../lib/web3Config";
 import { useFarcaster } from "../context/FarcasterProvider";
 
 const Spin: FC = () => {
-  const { address } = useAccount();
+  const { address, isConnected } = useAccount();
   const { user: fcUser } = useFarcaster();
   const publicClient = usePublicClient();
   const { writeContractAsync } = useWriteContract();
@@ -24,7 +24,6 @@ const Spin: FC = () => {
     address: spinVaultAddress,
     abi: spinVaultABI as any,
     functionName: "epochNow",
-    // Hook ini tidak bergantung pada pengguna, jadi bisa langsung jalan
   });
 
   const { data: claimed, refetch: refetchClaimed } = useReadContract({
@@ -32,48 +31,39 @@ const Spin: FC = () => {
     abi: spinVaultABI as any,
     functionName: "claimed",
     args: epoch !== undefined && address ? [epoch, address] : undefined,
-    query: { 
-      // Hanya aktifkan jika 'address' dan 'epoch' sudah ada nilainya
-      enabled: !!address && epoch !== undefined 
-    },
+    query: { enabled: !!address && epoch !== undefined },
   });
 
-   const { data: nonces, refetch: refetchNonces } = useReadContract({
+   const { data: nonceValue, refetch: refetchNonces } = useReadContract({
     address: spinVaultAddress,
     abi: spinVaultABI as any,
     functionName: "nonces",
     args: address ? [address] : undefined,
-    query: { 
-      // Hanya aktifkan jika 'address' sudah ada
-      enabled: !!address 
-    },
+    query: { enabled: !!address },
   });
 
-  const canClaim = useMemo(() => address && !claimed, [address, claimed]);
+  const canClaim = useMemo(() => isConnected && address && !claimed, [isConnected, address, claimed]);
 
   // --- Action ---
   const handleSpin = async () => {
-    if (!address || !canClaim || !fcUser?.fid) {
-        setStatus("Connect wallet and ensure FID is available.");
+    if (!canClaim || !fcUser?.fid) {
+        setStatus("Connect wallet, ensure FID is available, and check if you have already claimed.");
         return;
     };
     setLoading(true);
-    setStatus("Preparing your daily spin...");
+    setStatus("1/4: Fetching latest nonce...");
     setSpinResult(null);
 
     try {
-        // Panggil refetch secara eksplisit untuk mendapatkan nilai nonce terbaru
-        const nonceResult = await refetchNonces();
-        const nonce = nonceResult.data;
-
-        // Validasi bahwa nonce berhasil didapatkan sebelum lanjut
-        if (nonce === undefined || nonce === null) {
+        // Langkah 1: Paksa refetch nonce dan tunggu hasilnya.
+        const { data: currentNonce, isSuccess } = await refetchNonces();
+        if (!isSuccess || currentNonce === undefined || currentNonce === null) {
             throw new Error("Could not fetch a valid nonce. Please try again.");
         }
-
+        
+        setStatus("2/4: Requesting signature from backend...");
         const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600); // 1 jam
 
-        setStatus("Requesting signature from backend...");
         const sigRes = await fetch("/api/sign-event-action", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -82,7 +72,7 @@ const Spin: FC = () => {
                 action: "claim",
                 user: address,
                 fid: fcUser.fid,
-                nonce: String(nonce),
+                nonce: String(currentNonce),
                 deadline: String(deadline),
             }),
         });
@@ -90,32 +80,30 @@ const Spin: FC = () => {
         const sigData = await sigRes.json();
         if (!sigRes.ok) throw new Error(sigData.error || "Failed to get signature.");
 
-        setStatus("Awaiting transaction confirmation...");
+        setStatus("3/4: Awaiting transaction confirmation...");
         const txHash = await writeContractAsync({
             address: spinVaultAddress,
             abi: spinVaultABI as any,
             functionName: "claimWithSig",
-            args: [address, nonce, deadline, sigData.signature],
-            account: address,
+            args: [address, currentNonce, deadline, sigData.signature],
+            account: address!,
             chain: baseSepolia,
         });
 
+        setStatus("4/4: Verifying transaction...");
         const receipt = await publicClient?.waitForTransactionReceipt({ hash: txHash });
 
-        // Temukan event untuk menampilkan hasil spin
         const claimEvent = receipt?.logs.find(log => log.address.toLowerCase() === spinVaultAddress.toLowerCase());
         if (claimEvent) {
-            // Ambil jumlah reward dari data event
             const amountWon = BigInt(claimEvent.data); 
             setSpinResult(Number(formatEther(amountWon)).toFixed(4));
         }
         
         setStatus("Spin successful!");
-        // Refresh semua data yang relevan setelah berhasil
         await Promise.all([refetchClaimed(), refetchEpoch(), refetchNonces()]);
 
     } catch (e: any) {
-        setStatus(e?.shortMessage || e?.message || "An error occurred.");
+        setStatus(`Error: ${e?.shortMessage || e?.message || "An unknown error occurred."}`);
     } finally {
         setLoading(false);
     }
@@ -144,7 +132,7 @@ const Spin: FC = () => {
             </div>
         )}
 
-        {status && <p className="text-xs text-neutral-400 pt-2">{status}</p>}
+        {status && <p className="text-xs text-neutral-400 pt-2 break-all">{status}</p>}
     </div>
   );
 };
