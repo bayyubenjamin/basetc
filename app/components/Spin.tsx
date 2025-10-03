@@ -36,18 +36,13 @@ const Spin: FC = () => {
   const [spinResult, setSpinResult] = useState<string | null>(null);
 
   // ---------- Reads ----------
-  // Current epoch
   const { data: epoch } = useReadContract({
     address: spinVaultAddress,
     abi: spinVaultABI as any,
     functionName: "epochNow",
   });
 
-  // Claimed this epoch?
-  const {
-    data: claimed,
-    refetch: refetchClaimed,
-  } = useReadContract({
+  const { data: claimed, refetch: refetchClaimed } = useReadContract({
     address: spinVaultAddress,
     abi: spinVaultABI as any,
     functionName: "claimed",
@@ -58,11 +53,7 @@ const Spin: FC = () => {
     query: { enabled: Boolean(address && epoch !== undefined) },
   });
 
-  // Referral tickets available (from SpinVault → RigSale.inviteCount - used)
-  const {
-    data: tickets,
-    refetch: refetchTickets,
-  } = useReadContract({
+  const { data: tickets, refetch: refetchTickets } = useReadContract({
     address: spinVaultAddress,
     abi: spinVaultABI as any,
     functionName: "availableTickets",
@@ -70,11 +61,7 @@ const Spin: FC = () => {
     query: { enabled: Boolean(address) },
   });
 
-  // Nonce for EIP-712
-  const {
-    data: nonceValue,
-    refetch: refetchNonces,
-  } = useReadContract({
+  const { data: nonceValue, refetch: refetchNonces } = useReadContract({
     address: spinVaultAddress,
     abi: spinVaultABI as any,
     functionName: "nonces",
@@ -82,18 +69,14 @@ const Spin: FC = () => {
     query: { enabled: Boolean(address) },
   });
 
-  // Real-time SpinVault pool balance (BaseTC)
-  const {
-    data: vaultBalance,
-    refetch: refetchVaultBalance,
-  } = useReadContract({
+  const { data: vaultBalance, refetch: refetchVaultBalance } = useReadContract({
     address: baseTcAddress,
-    abi: baseTcABI as any, // must expose balanceOf(address)
+    abi: baseTcABI as any,
     functionName: "balanceOf",
     args: [spinVaultAddress],
   });
 
-  // Periodic refreshes (pool & tickets)
+  // Refreshes
   useEffect(() => {
     const t = setInterval(() => {
       refetchVaultBalance();
@@ -108,9 +91,6 @@ const Spin: FC = () => {
   );
 
   const canClaim = useMemo(() => {
-    // Allow click if:
-    // - not yet claimed this epoch, OR
-    // - already claimed but has referral tickets > 0
     if (!isConnected || !address) return false;
     if (claimed === false) return true;
     if (claimed === true && ticketNum > 0) return true;
@@ -138,7 +118,7 @@ const Spin: FC = () => {
       return;
     }
     if (!canClaim) {
-      setStatus("Already claimed & no referral tickets.");
+      setStatus("No spins left. Invite friends for Bonus Tickets!");
       return;
     }
 
@@ -147,7 +127,6 @@ const Spin: FC = () => {
     setSpinResult(null);
 
     try {
-      // Fresh nonce (fallback to cached)
       const nonceHook = (nonceValue as bigint | undefined) ?? 0n;
       const ref = await refetchNonces();
       const currentNonce = (ref?.data as bigint | undefined) ?? nonceHook;
@@ -155,9 +134,8 @@ const Spin: FC = () => {
         throw new Error("Could not fetch a valid nonce. Try again.");
       }
 
-      // Ask backend for EIP-712 signature (Spin)
       setStatus("2/4: Requesting signature…");
-      const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600); // 1 hour
+      const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600);
       const sigRes = await fetch("/api/sign-event-action", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -175,29 +153,21 @@ const Spin: FC = () => {
         throw new Error(sigData?.error || "Failed to get signature.");
       }
 
-      // Send tx (user pays gas)
       setStatus("3/4: Sending transaction…");
       const txHash = await writeContractAsync({
         address: spinVaultAddress,
         abi: spinVaultABI as any,
         functionName: "claimWithSig",
-        args: [
-          address as `0x${string}`,
-          currentNonce,
-          deadline,
-          sigData.signature as `0x${string}`,
-        ],
-        account: address as `0x${string}`,
+        args: [address, currentNonce, deadline, sigData.signature],
+        account: address,
         chain: baseSepolia,
       });
 
-      // Wait & parse event
       setStatus("4/4: Waiting for confirmation…");
       const receipt = await publicClient!.waitForTransactionReceipt({
         hash: txHash,
       });
 
-      // Try strict event parsing first
       let wonStr: string | null = null;
       try {
         const events = (parseEventLogs({
@@ -205,33 +175,27 @@ const Spin: FC = () => {
           logs: receipt.logs as any,
           eventName: "ClaimedSpin",
         }) || []) as any[];
-
         const amt: bigint | undefined = events?.[0]?.args?.amount;
         if (typeof amt === "bigint") {
-          wonStr = Number(formatEther(amt)).toFixed(6); // finer display for small rewards
+          wonStr = Number(formatEther(amt)).toFixed(6);
         }
       } catch {
-        // Fallback: decode first log from SpinVault address
         const log = receipt.logs.find(
           (l) => l.address.toLowerCase() === spinVaultAddress.toLowerCase()
         );
         if (log) {
           try {
-            const [amountOut /*, tierOut*/] = decodeAbiParameters(
+            const [amountOut] = decodeAbiParameters(
               [{ type: "uint256" }, { type: "uint8" }] as const,
               log.data as Hex
             );
             wonStr = Number(formatEther(amountOut as bigint)).toFixed(6);
-          } catch {
-            // ignore
-          }
+          } catch {}
         }
       }
 
       setSpinResult(wonStr);
       setStatus("Spin successful!");
-
-      // Refresh post-claim state
       await Promise.all([
         refetchClaimed(),
         refetchNonces(),
@@ -245,16 +209,16 @@ const Spin: FC = () => {
     }
   };
 
-  // ---------- Calm blue spin animation ----------
+  // ---------- Animation ----------
   const SpinAnimation = () => (
     <div className="mx-auto my-2 h-20 w-20 rounded-full bg-[conic-gradient(at_70%_70%,#3b82f6,#06b6d4,#22d3ee,#3b82f6)] animate-spin shadow-lg" />
   );
 
   return (
-    <div className="space-y-4 rounded-lg bg-neutral-900/50 p-4 border border-neutral-700 text-center">
-      <h2 className="text-lg font-semibold">Daily Spin</h2>
+    <div className="space-y-5 rounded-lg bg-neutral-900/50 p-5 border border-neutral-700 text-center">
+      <h2 className="text-lg font-semibold">Free Spin (every 8 hours)</h2>
       <p className="text-sm text-neutral-400">
-        Spin once per epoch to win $BaseTC rewards. Extra spins come from referrals.
+        Try your luck to win $BaseTC. Each spin gives you rewards based on your rigs.
       </p>
 
       {/* Pool balance */}
@@ -268,15 +232,15 @@ const Spin: FC = () => {
         </div>
       </div>
 
-      {/* Tickets */}
+      {/* Bonus tickets */}
       {isConnected && (
         <div className="text-sm text-neutral-300">
-          Tickets available:{" "}
-          <span className="font-semibold">{ticketNum}</span>
+          Bonus Tickets:{" "}
+          <span className="font-semibold text-sky-400">{ticketNum}</span>
         </div>
       )}
 
-      {/* Spin button + animation */}
+      {/* Spin button */}
       <div className="py-6">
         {loading && <SpinAnimation />}
         <button
@@ -288,7 +252,7 @@ const Spin: FC = () => {
             ? "Spinning…"
             : canClaim
             ? "Spin Now!"
-            : "No spins left this epoch"}
+            : "No spins available"}
         </button>
       </div>
 
@@ -298,9 +262,14 @@ const Spin: FC = () => {
         </div>
       )}
 
-      {status && (
-        <p className="text-xs text-neutral-400 pt-2 break-all">{status}</p>
-      )}
+      {status && <p className="text-xs text-neutral-400 pt-2">{status}</p>}
+
+      {/* Info footer */}
+      <div className="mt-6 text-xs text-neutral-400 space-y-1">
+        <p>• Spins increase your leaderboard points.</p>
+        <p>• 1 friend invited = 1 Bonus Ticket.</p>
+        <p>• Spin pool is funded from 10% of leftover rewards each epoch.</p>
+      </div>
     </div>
   );
 };
