@@ -4,6 +4,8 @@
 import { useState, useMemo } from "react";
 import type { FC } from "react";
 import { useAccount, useReadContract, useWriteContract, usePublicClient } from "wagmi";
+import { baseSepolia } from "viem/chains"; // <-- Impor baseSepolia
+import { formatEther } from "viem"; // <-- Impor formatEther
 import { spinVaultAddress, spinVaultABI, rigNftAddress, rigNftABI } from "../lib/web3Config";
 
 const Spin: FC = () => {
@@ -18,13 +20,13 @@ const Spin: FC = () => {
   // --- Contract Reads ---
   const { data: epoch, refetch: refetchEpoch } = useReadContract({
     address: spinVaultAddress,
-    abi: spinVaultABI,
+    abi: spinVaultABI as any,
     functionName: "epochNow",
   });
 
   const { data: claimed, refetch: refetchClaimed } = useReadContract({
     address: spinVaultAddress,
-    abi: spinVaultABI,
+    abi: spinVaultABI as any,
     functionName: "claimed",
     args: [epoch, address],
     query: { enabled: !!address && epoch !== undefined },
@@ -32,7 +34,7 @@ const Spin: FC = () => {
 
    const { data: nonces, refetch: refetchNonces } = useReadContract({
     address: spinVaultAddress,
-    abi: spinVaultABI,
+    abi: spinVaultABI as any,
     functionName: "nonces",
     args: [address],
     query: { enabled: !!address },
@@ -70,19 +72,18 @@ const Spin: FC = () => {
         setStatus("Awaiting transaction confirmation...");
         const txHash = await writeContractAsync({
             address: spinVaultAddress,
-            abi: spinVaultABI,
+            abi: spinVaultABI as any,
             functionName: "claimWithSig",
             args: [address, nonce, deadline, sigData.signature],
+            account: address, // <-- FIX: Tambahkan account
+            chain: baseSepolia, // <-- FIX: Tambahkan chain
         });
 
         const receipt = await publicClient?.waitForTransactionReceipt({ hash: txHash });
 
-        // Find the event to show the result
-        // (Note: This is a simplified client-side event parsing)
         const claimEvent = receipt?.logs.find(log => log.address.toLowerCase() === spinVaultAddress.toLowerCase());
         if(claimEvent) {
-            // A simple way to get amount from event data for ERC20 Transfer
-            const amount = BigInt(claimEvent.data.slice(0, 66)); // First data slot is usually amount
+            const amount = BigInt(claimEvent.data.slice(0, 66)); 
             setSpinResult(Number(formatEther(amount)).toFixed(4));
         }
         
@@ -124,4 +125,4 @@ const Spin: FC = () => {
   );
 };
 
-export default Spin; // <-- TAMBAHKAN BARIS INI
+export default Spin;

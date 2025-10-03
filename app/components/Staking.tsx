@@ -21,7 +21,7 @@ const Staking: FC = () => {
   // --- Contract Reads ---
   const { data: nonces, refetch: refetchNonces } = useReadContract({
     address: stakingVaultAddress,
-    abi: stakingVaultABI,
+    abi: stakingVaultABI as any,
     functionName: "nonces",
     args: [address],
     query: { enabled: !!address },
@@ -29,7 +29,7 @@ const Staking: FC = () => {
 
   const { data: position, refetch: refetchPosition } = useReadContract({
     address: stakingVaultAddress,
-    abi: stakingVaultABI,
+    abi: stakingVaultABI as any,
     functionName: "pos",
     args: [address],
     query: { enabled: !!address },
@@ -37,7 +37,7 @@ const Staking: FC = () => {
 
   const { data: pendingRewards, refetch: refetchPending } = useReadContract({
     address: stakingVaultAddress,
-    abi: stakingVaultABI,
+    abi: stakingVaultABI as any,
     functionName: "pending",
     args: [address],
     query: { enabled: !!address },
@@ -45,7 +45,7 @@ const Staking: FC = () => {
 
   const { data: baseTcBalance, refetch: refetchBalance } = useReadContract({
     address: baseTcAddress,
-    abi: baseTcABI,
+    abi: baseTcABI as any,
     functionName: "balanceOf",
     args: [address],
     query: { enabled: !!address },
@@ -53,13 +53,13 @@ const Staking: FC = () => {
   
   const { data: allowance, refetch: refetchAllowance } = useReadContract({
     address: baseTcAddress,
-    abi: baseTcABI,
+    abi: baseTcABI as any,
     functionName: "allowance",
     args: [address, stakingVaultAddress],
     query: { enabled: !!address },
   });
 
-  const stakedAmount = useMemo(() => (position ? Number(formatEther(position[0] as bigint)) : 0), [position]);
+  const stakedAmount = useMemo(() => (position ? Number(formatEther((position as any)[0] as bigint)) : 0), [position]);
   const rewards = useMemo(() => (pendingRewards ? Number(formatEther(pendingRewards as bigint)) : 0), [pendingRewards]);
 
   // --- Actions ---
@@ -73,23 +73,23 @@ const Staking: FC = () => {
         if (action === "stake" && stakeAmount <= 0n) throw new Error("Amount must be greater than 0.");
         if (action === "stake" && stakeAmount > (baseTcBalance as bigint)) throw new Error("Insufficient balance.");
 
-        // 1. Approve if needed (for stake)
         if (action === "stake" && (allowance as bigint) < stakeAmount) {
             setStatus("Approving $BaseTC...");
             const approveHash = await writeContractAsync({
                 address: baseTcAddress,
-                abi: baseTcABI,
+                abi: baseTcABI as any,
                 functionName: "approve",
                 args: [stakingVaultAddress, stakeAmount],
+                account: address,
+                chain: baseSepolia,
             });
             await publicClient?.waitForTransactionReceipt({ hash: approveHash });
-            refetchAllowance();
+            await refetchAllowance();
             setStatus("Approval successful. Preparing to stake...");
         }
 
-        // 2. Get signature from backend
         const nonce = (await refetchNonces()).data;
-        const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600); // 1 hour
+        const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600);
         
         const sigRes = await fetch("/api/sign-event-action", {
             method: "POST",
@@ -98,7 +98,7 @@ const Staking: FC = () => {
                 vault: "staking",
                 action,
                 user: address,
-                amount: action === "unstake" ? stakedAmount.toString() : amount,
+                amount: action === "stake" ? amount : parseEther(stakedAmount.toString()).toString(),
                 lockType,
                 nonce: String(nonce),
                 deadline: String(deadline),
@@ -108,7 +108,6 @@ const Staking: FC = () => {
         const sigData = await sigRes.json();
         if (!sigRes.ok) throw new Error(sigData.error || "Failed to get signature.");
 
-        // 3. Call contract with signature
         let functionName: "stakeWithSig" | "harvestWithSig" | "unstakeWithSig";
         let args: any[];
 
@@ -118,7 +117,7 @@ const Staking: FC = () => {
         } else if (action === "harvest") {
             functionName = "harvestWithSig";
             args = [address, nonce, deadline, sigData.signature];
-        } else { // unstake
+        } else {
             functionName = "unstakeWithSig";
             args = [address, parseEther(stakedAmount.toString()), nonce, deadline, sigData.signature];
         }
@@ -126,18 +125,23 @@ const Staking: FC = () => {
         setStatus("Awaiting transaction confirmation...");
         const txHash = await writeContractAsync({
             address: stakingVaultAddress,
-            abi: stakingVaultABI,
+            abi: stakingVaultABI as any,
             functionName,
             args,
+            account: address,
+            chain: baseSepolia,
         });
 
         await publicClient?.waitForTransactionReceipt({ hash: txHash });
 
         setStatus(`${action.charAt(0).toUpperCase() + action.slice(1)} successful!`);
-        refetchNonces();
-        refetchPosition();
-        refetchPending();
-        refetchBalance();
+        await Promise.all([
+          refetchNonces(),
+          refetchPosition(),
+          refetchPending(),
+          refetchBalance(),
+        ]);
+
     } catch (e: any) {
         setStatus(e?.shortMessage || e?.message || "An error occurred.");
     } finally {
@@ -194,4 +198,4 @@ const Staking: FC = () => {
   );
 };
 
-export default Staking; // <-- TAMBAHKAN BARIS INI
+export default Staking;
