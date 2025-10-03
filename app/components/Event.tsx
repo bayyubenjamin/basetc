@@ -2,10 +2,10 @@
 "use client";
 
 import { useState, type FC } from "react";
-// Komponen-komponen ini akan kita buat selanjutnya
-// import Staking from "./Staking";
-// import Spin from "./Spin";
-// import Leaderboard from "./Leaderboard";
+// Impor komponen-komponen yang baru dibuat
+import Staking from "./Staking";
+import Spin from "./Spin";
+import Leaderboard from "./Leaderboard";
 
 type EventTab = "staking" | "spin" | "leaderboard";
 
@@ -14,18 +14,14 @@ const Event: FC = () => {
 
   const renderContent = () => {
     switch (activeTab) {
-      // case "staking":
-      //   return <Staking />;
-      // case "spin":
-      //   return <Spin />;
-      // case "leaderboard":
-      //   return <Leaderboard />;
+      case "staking":
+        return <Staking />;
+      case "spin":
+        return <Spin />;
+      case "leaderboard":
+        return <Leaderboard />;
       default:
-        return (
-          <div className="p-4 text-center text-neutral-400">
-            <p>Fitur sedang dalam pengembangan.</p>
-          </div>
-        );
+        return null;
     }
   };
 
