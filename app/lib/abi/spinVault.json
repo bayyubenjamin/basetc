@@ -3,28 +3,13 @@
 		"inputs": [
 			{
 				"internalType": "contract IERC20",
-				"name": "baseTc",
-				"type": "address"
-			},
-			{
-				"internalType": "contract IRigNFTLite",
-				"name": "_rig",
+				"name": "_token",
 				"type": "address"
 			},
 			{
 				"internalType": "address",
 				"name": "admin",
 				"type": "address"
-			},
-			{
-				"internalType": "uint256",
-				"name": "_startTime",
-				"type": "uint256"
-			},
-			{
-				"internalType": "uint256",
-				"name": "_epochLength",
-				"type": "uint256"
 			}
 		],
 		"stateMutability": "nonpayable",
@@ -79,59 +64,20 @@
 		"type": "error"
 	},
 	{
-		"inputs": [
-			{
-				"internalType": "address",
-				"name": "token",
-				"type": "address"
-			}
-		],
-		"name": "SafeERC20FailedOperation",
+		"inputs": [],
+		"name": "InvalidShortString",
 		"type": "error"
 	},
 	{
-		"anonymous": false,
 		"inputs": [
 			{
-				"indexed": false,
-				"internalType": "uint16",
-				"name": "budgetBps",
-				"type": "uint16"
-			},
-			{
-				"indexed": false,
-				"internalType": "uint256",
-				"name": "maxDaily",
-				"type": "uint256"
+				"internalType": "string",
+				"name": "str",
+				"type": "string"
 			}
 		],
-		"name": "BudgetConfigSet",
-		"type": "event"
-	},
-	{
-		"anonymous": false,
-		"inputs": [
-			{
-				"indexed": true,
-				"internalType": "uint256",
-				"name": "epoch",
-				"type": "uint256"
-			},
-			{
-				"indexed": false,
-				"internalType": "uint256",
-				"name": "dailyBudget",
-				"type": "uint256"
-			},
-			{
-				"indexed": false,
-				"internalType": "uint256",
-				"name": "newAccountedBalance",
-				"type": "uint256"
-			}
-		],
-		"name": "BudgetRolled",
-		"type": "event"
+		"name": "StringTooLong",
+		"type": "error"
 	},
 	{
 		"anonymous": false,
@@ -143,7 +89,7 @@
 				"type": "address"
 			},
 			{
-				"indexed": true,
+				"indexed": false,
 				"internalType": "uint256",
 				"name": "epoch",
 				"type": "uint256"
@@ -166,100 +112,8 @@
 	},
 	{
 		"anonymous": false,
-		"inputs": [
-			{
-				"indexed": false,
-				"internalType": "uint256",
-				"name": "startTime",
-				"type": "uint256"
-			},
-			{
-				"indexed": false,
-				"internalType": "uint256",
-				"name": "epochLength",
-				"type": "uint256"
-			}
-		],
-		"name": "EpochConfigSet",
-		"type": "event"
-	},
-	{
-		"anonymous": false,
-		"inputs": [
-			{
-				"components": [
-					{
-						"internalType": "uint128",
-						"name": "minAmt",
-						"type": "uint128"
-					},
-					{
-						"internalType": "uint128",
-						"name": "maxAmt",
-						"type": "uint128"
-					}
-				],
-				"indexed": false,
-				"internalType": "struct SpinVault.Range",
-				"name": "basic",
-				"type": "tuple"
-			},
-			{
-				"components": [
-					{
-						"internalType": "uint128",
-						"name": "minAmt",
-						"type": "uint128"
-					},
-					{
-						"internalType": "uint128",
-						"name": "maxAmt",
-						"type": "uint128"
-					}
-				],
-				"indexed": false,
-				"internalType": "struct SpinVault.Range",
-				"name": "pro",
-				"type": "tuple"
-			},
-			{
-				"components": [
-					{
-						"internalType": "uint128",
-						"name": "minAmt",
-						"type": "uint128"
-					},
-					{
-						"internalType": "uint128",
-						"name": "maxAmt",
-						"type": "uint128"
-					}
-				],
-				"indexed": false,
-				"internalType": "struct SpinVault.Range",
-				"name": "legend",
-				"type": "tuple"
-			},
-			{
-				"components": [
-					{
-						"internalType": "uint128",
-						"name": "minAmt",
-						"type": "uint128"
-					},
-					{
-						"internalType": "uint128",
-						"name": "maxAmt",
-						"type": "uint128"
-					}
-				],
-				"indexed": false,
-				"internalType": "struct SpinVault.Range",
-				"name": "supreme",
-				"type": "tuple"
-			}
-		],
-		"name": "RangesSet",
+		"inputs": [],
+		"name": "EIP712DomainChanged",
 		"type": "event"
 	},
 	{
@@ -338,32 +192,6 @@
 		"type": "event"
 	},
 	{
-		"anonymous": false,
-		"inputs": [
-			{
-				"indexed": false,
-				"internalType": "uint256",
-				"name": "amount",
-				"type": "uint256"
-			}
-		],
-		"name": "Skimmed",
-		"type": "event"
-	},
-	{
-		"inputs": [],
-		"name": "ACTION_TYPEHASH",
-		"outputs": [
-			{
-				"internalType": "bytes32",
-				"name": "",
-				"type": "bytes32"
-			}
-		],
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
 		"inputs": [],
 		"name": "DEFAULT_ADMIN_ROLE",
 		"outputs": [
@@ -378,33 +206,7 @@
 	},
 	{
 		"inputs": [],
-		"name": "EIP712_NAME",
-		"outputs": [
-			{
-				"internalType": "string",
-				"name": "",
-				"type": "string"
-			}
-		],
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"inputs": [],
-		"name": "EIP712_VERSION",
-		"outputs": [
-			{
-				"internalType": "string",
-				"name": "",
-				"type": "string"
-			}
-		],
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"inputs": [],
-		"name": "MANAGER_ROLE",
+		"name": "SIGNER_ROLE",
 		"outputs": [
 			{
 				"internalType": "bytes32",
@@ -416,21 +218,14 @@
 		"type": "function"
 	},
 	{
-		"inputs": [],
-		"name": "RELAYER_ROLE",
-		"outputs": [
+		"inputs": [
 			{
-				"internalType": "bytes32",
-				"name": "",
-				"type": "bytes32"
+				"internalType": "address",
+				"name": "user",
+				"type": "address"
 			}
 		],
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"inputs": [],
-		"name": "accountedBalance",
+		"name": "availableTickets",
 		"outputs": [
 			{
 				"internalType": "uint256",
@@ -460,19 +255,6 @@
 		"type": "function"
 	},
 	{
-		"inputs": [],
-		"name": "budgetBps",
-		"outputs": [
-			{
-				"internalType": "uint16",
-				"name": "",
-				"type": "uint16"
-			}
-		],
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
 		"inputs": [
 			{
 				"internalType": "address",
@@ -491,7 +273,7 @@
 			},
 			{
 				"internalType": "bytes",
-				"name": "relayerSig",
+				"name": "sig",
 				"type": "bytes"
 			}
 		],
@@ -526,6 +308,49 @@
 	},
 	{
 		"inputs": [],
+		"name": "eip712Domain",
+		"outputs": [
+			{
+				"internalType": "bytes1",
+				"name": "fields",
+				"type": "bytes1"
+			},
+			{
+				"internalType": "string",
+				"name": "name",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "version",
+				"type": "string"
+			},
+			{
+				"internalType": "uint256",
+				"name": "chainId",
+				"type": "uint256"
+			},
+			{
+				"internalType": "address",
+				"name": "verifyingContract",
+				"type": "address"
+			},
+			{
+				"internalType": "bytes32",
+				"name": "salt",
+				"type": "bytes32"
+			},
+			{
+				"internalType": "uint256[]",
+				"name": "extensions",
+				"type": "uint256[]"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [],
 		"name": "epochLength",
 		"outputs": [
 			{
@@ -552,7 +377,7 @@
 	},
 	{
 		"inputs": [],
-		"name": "epochRemaining",
+		"name": "genesis",
 		"outputs": [
 			{
 				"internalType": "uint256",
@@ -580,19 +405,6 @@
 			}
 		],
 		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "address",
-				"name": "r",
-				"type": "address"
-			}
-		],
-		"name": "grantRelayer",
-		"outputs": [],
-		"stateMutability": "nonpayable",
 		"type": "function"
 	},
 	{
@@ -639,19 +451,6 @@
 	},
 	{
 		"inputs": [],
-		"name": "lastBudgetEpoch",
-		"outputs": [
-			{
-				"internalType": "uint256",
-				"name": "",
-				"type": "uint256"
-			}
-		],
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"inputs": [],
 		"name": "legendRange",
 		"outputs": [
 			{
@@ -669,8 +468,14 @@
 		"type": "function"
 	},
 	{
-		"inputs": [],
-		"name": "maxDaily",
+		"inputs": [
+			{
+				"internalType": "address",
+				"name": "",
+				"type": "address"
+			}
+		],
+		"name": "nonces",
 		"outputs": [
 			{
 				"internalType": "uint256",
@@ -685,11 +490,11 @@
 		"inputs": [
 			{
 				"internalType": "address",
-				"name": "",
+				"name": "user",
 				"type": "address"
 			}
 		],
-		"name": "nonces",
+		"name": "pendingReward",
 		"outputs": [
 			{
 				"internalType": "uint256",
@@ -739,37 +544,6 @@
 	{
 		"inputs": [
 			{
-				"internalType": "address",
-				"name": "to",
-				"type": "address"
-			},
-			{
-				"internalType": "uint256",
-				"name": "amount",
-				"type": "uint256"
-			}
-		],
-		"name": "rescue",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "address",
-				"name": "r",
-				"type": "address"
-			}
-		],
-		"name": "revokeRelayer",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
 				"internalType": "bytes32",
 				"name": "role",
 				"type": "bytes32"
@@ -787,10 +561,23 @@
 	},
 	{
 		"inputs": [],
-		"name": "rig",
+		"name": "rigNFT",
 		"outputs": [
 			{
-				"internalType": "contract IRigNFTLite",
+				"internalType": "contract IRigNFT",
+				"name": "",
+				"type": "address"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "rigSale",
+		"outputs": [
+			{
+				"internalType": "contract IRigSale",
 				"name": "",
 				"type": "address"
 			}
@@ -801,35 +588,12 @@
 	{
 		"inputs": [
 			{
-				"internalType": "uint16",
-				"name": "_budgetBps",
-				"type": "uint16"
-			},
-			{
 				"internalType": "uint256",
-				"name": "_maxDaily",
+				"name": "len",
 				"type": "uint256"
 			}
 		],
-		"name": "setBudget",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "uint256",
-				"name": "_startTime",
-				"type": "uint256"
-			},
-			{
-				"internalType": "uint256",
-				"name": "_epochLength",
-				"type": "uint256"
-			}
-		],
-		"name": "setEpochConfig",
+		"name": "setEpochLength",
 		"outputs": [],
 		"stateMutability": "nonpayable",
 		"type": "function"
@@ -911,16 +675,29 @@
 		"type": "function"
 	},
 	{
-		"inputs": [],
-		"name": "startTime",
-		"outputs": [
+		"inputs": [
 			{
-				"internalType": "uint256",
-				"name": "",
-				"type": "uint256"
+				"internalType": "address",
+				"name": "_rigNFT",
+				"type": "address"
 			}
 		],
-		"stateMutability": "view",
+		"name": "setRigNFT",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "address",
+				"name": "_rigSale",
+				"type": "address"
+			}
+		],
+		"name": "setRigSale",
+		"outputs": [],
+		"stateMutability": "nonpayable",
 		"type": "function"
 	},
 	{
@@ -968,6 +745,25 @@
 				"internalType": "contract IERC20",
 				"name": "",
 				"type": "address"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "address",
+				"name": "",
+				"type": "address"
+			}
+		],
+		"name": "usedTickets",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
 			}
 		],
 		"stateMutability": "view",

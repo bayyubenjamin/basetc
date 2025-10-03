@@ -10,7 +10,12 @@ import {
   usePublicClient,
 } from "wagmi";
 import { baseSepolia } from "viem/chains";
-import { formatEther, decodeAbiParameters } from "viem";
+import {
+  formatEther,
+  decodeAbiParameters,
+  parseEventLogs,
+} from "viem";
+import type { Hex } from "viem";
 import {
   spinVaultAddress,
   spinVaultABI,
@@ -38,8 +43,11 @@ const Spin: FC = () => {
     functionName: "epochNow",
   });
 
-  // Already claimed this epoch?
-  const { data: claimed, refetch: refetchClaimed } = useReadContract({
+  // Claimed this epoch?
+  const {
+    data: claimed,
+    refetch: refetchClaimed,
+  } = useReadContract({
     address: spinVaultAddress,
     abi: spinVaultABI as any,
     functionName: "claimed",
@@ -50,8 +58,23 @@ const Spin: FC = () => {
     query: { enabled: Boolean(address && epoch !== undefined) },
   });
 
+  // Referral tickets available (from SpinVault → RigSale.inviteCount - used)
+  const {
+    data: tickets,
+    refetch: refetchTickets,
+  } = useReadContract({
+    address: spinVaultAddress,
+    abi: spinVaultABI as any,
+    functionName: "availableTickets",
+    args: address ? [address as `0x${string}`] : undefined,
+    query: { enabled: Boolean(address) },
+  });
+
   // Nonce for EIP-712
-  const { data: nonceValue, refetch: refetchNonces } = useReadContract({
+  const {
+    data: nonceValue,
+    refetch: refetchNonces,
+  } = useReadContract({
     address: spinVaultAddress,
     abi: spinVaultABI as any,
     functionName: "nonces",
@@ -59,35 +82,46 @@ const Spin: FC = () => {
     query: { enabled: Boolean(address) },
   });
 
-  // Real-time pool balance (BaseTC tokens held by SpinVault)
+  // Real-time SpinVault pool balance (BaseTC)
   const {
     data: vaultBalance,
     refetch: refetchVaultBalance,
   } = useReadContract({
     address: baseTcAddress,
-    abi: baseTcABI as any, // ERC20 ABI with balanceOf(address)
+    abi: baseTcABI as any, // must expose balanceOf(address)
     functionName: "balanceOf",
     args: [spinVaultAddress],
   });
 
-  // Auto refresh pool balance every 15s (lightweight)
+  // Periodic refreshes (pool & tickets)
   useEffect(() => {
     const t = setInterval(() => {
       refetchVaultBalance();
+      refetchTickets();
     }, 15000);
     return () => clearInterval(t);
-  }, [refetchVaultBalance]);
+  }, [refetchVaultBalance, refetchTickets]);
 
-  const canClaim = useMemo(
-    () => Boolean(isConnected && address && claimed === false),
-    [isConnected, address, claimed]
+  const ticketNum = useMemo(
+    () => (typeof tickets === "bigint" ? Number(tickets) : 0),
+    [tickets]
   );
 
-  // Nicely formatted pool balance
+  const canClaim = useMemo(() => {
+    // Allow click if:
+    // - not yet claimed this epoch, OR
+    // - already claimed but has referral tickets > 0
+    if (!isConnected || !address) return false;
+    if (claimed === false) return true;
+    if (claimed === true && ticketNum > 0) return true;
+    return false;
+  }, [isConnected, address, claimed, ticketNum]);
+
   const poolBalanceStr = useMemo(() => {
-    if (vaultBalance === undefined) return "—";
     try {
-      return Number(formatEther(vaultBalance as bigint)).toFixed(4);
+      return vaultBalance !== undefined
+        ? Number(formatEther(vaultBalance as bigint)).toFixed(4)
+        : "—";
     } catch {
       return "—";
     }
@@ -104,7 +138,7 @@ const Spin: FC = () => {
       return;
     }
     if (!canClaim) {
-      setStatus("Already claimed this epoch or data not ready yet.");
+      setStatus("Already claimed & no referral tickets.");
       return;
     }
 
@@ -113,7 +147,7 @@ const Spin: FC = () => {
     setSpinResult(null);
 
     try {
-      // Get a fresh nonce (fallback to hook value)
+      // Fresh nonce (fallback to cached)
       const nonceHook = (nonceValue as bigint | undefined) ?? 0n;
       const ref = await refetchNonces();
       const currentNonce = (ref?.data as bigint | undefined) ?? nonceHook;
@@ -121,7 +155,7 @@ const Spin: FC = () => {
         throw new Error("Could not fetch a valid nonce. Try again.");
       }
 
-      // Ask backend for EIP-712 relayer signature
+      // Ask backend for EIP-712 signature (Spin)
       setStatus("2/4: Requesting signature…");
       const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600); // 1 hour
       const sigRes = await fetch("/api/sign-event-action", {
@@ -141,44 +175,69 @@ const Spin: FC = () => {
         throw new Error(sigData?.error || "Failed to get signature.");
       }
 
-      // Send on-chain tx (user pays gas)
+      // Send tx (user pays gas)
       setStatus("3/4: Sending transaction…");
       const txHash = await writeContractAsync({
         address: spinVaultAddress,
         abi: spinVaultABI as any,
         functionName: "claimWithSig",
-        args: [address as `0x${string}`, currentNonce, deadline, sigData.signature as `0x${string}`],
+        args: [
+          address as `0x${string}`,
+          currentNonce,
+          deadline,
+          sigData.signature as `0x${string}`,
+        ],
         account: address as `0x${string}`,
         chain: baseSepolia,
       });
 
-      // Wait for confirmation & decode reward from log
+      // Wait & parse event
       setStatus("4/4: Waiting for confirmation…");
-      const receipt = await publicClient!.waitForTransactionReceipt({ hash: txHash });
+      const receipt = await publicClient!.waitForTransactionReceipt({
+        hash: txHash,
+      });
 
-      // event ClaimedSpin(address indexed user, uint256 indexed epoch, uint256 amount, uint8 tier)
-      // -> data contains only [amount:uint256, tier:uint8] because user & epoch are indexed
+      // Try strict event parsing first
       let wonStr: string | null = null;
-      const claimLog = receipt.logs.find(
-        (l) => l.address.toLowerCase() === spinVaultAddress.toLowerCase()
-      );
-      if (claimLog) {
-        try {
-          const [amountOut /*, tierOut*/] = decodeAbiParameters(
-            [{ type: "uint256" }, { type: "uint8" }] as const,
-            claimLog.data as `0x${string}`
-          );
-          wonStr = Number(formatEther(amountOut as bigint)).toFixed(4);
-        } catch {
-          // keep wonStr as null if decoding failed
+      try {
+        const events = (parseEventLogs({
+          abi: spinVaultABI as any,
+          logs: receipt.logs as any,
+          eventName: "ClaimedSpin",
+        }) || []) as any[];
+
+        const amt: bigint | undefined = events?.[0]?.args?.amount;
+        if (typeof amt === "bigint") {
+          wonStr = Number(formatEther(amt)).toFixed(6); // finer display for small rewards
+        }
+      } catch {
+        // Fallback: decode first log from SpinVault address
+        const log = receipt.logs.find(
+          (l) => l.address.toLowerCase() === spinVaultAddress.toLowerCase()
+        );
+        if (log) {
+          try {
+            const [amountOut /*, tierOut*/] = decodeAbiParameters(
+              [{ type: "uint256" }, { type: "uint8" }] as const,
+              log.data as Hex
+            );
+            wonStr = Number(formatEther(amountOut as bigint)).toFixed(6);
+          } catch {
+            // ignore
+          }
         }
       }
 
       setSpinResult(wonStr);
       setStatus("Spin successful!");
 
-      // Refresh claim state, nonce, and pool balance
-      await Promise.all([refetchClaimed(), refetchNonces(), refetchVaultBalance()]);
+      // Refresh post-claim state
+      await Promise.all([
+        refetchClaimed(),
+        refetchNonces(),
+        refetchTickets(),
+        refetchVaultBalance(),
+      ]);
     } catch (e: any) {
       setStatus(`Error: ${e?.shortMessage || e?.message || "Unknown error"}`);
     } finally {
@@ -186,26 +245,36 @@ const Spin: FC = () => {
     }
   };
 
-  // ---------- Small, classy spin animation ----------
-  // A simple spinning gradient disc shown while "loading"
+  // ---------- Calm blue spin animation ----------
   const SpinAnimation = () => (
-    <div className="mx-auto my-2 h-20 w-20 rounded-full bg-[conic-gradient(at_70%_70%,#8b5cf6,#06b6d4,#22d3ee,#8b5cf6)] animate-spin shadow-lg" />
+    <div className="mx-auto my-2 h-20 w-20 rounded-full bg-[conic-gradient(at_70%_70%,#3b82f6,#06b6d4,#22d3ee,#3b82f6)] animate-spin shadow-lg" />
   );
 
   return (
     <div className="space-y-4 rounded-lg bg-neutral-900/50 p-4 border border-neutral-700 text-center">
       <h2 className="text-lg font-semibold">Daily Spin</h2>
       <p className="text-sm text-neutral-400">
-        Spin once per epoch to win $BaseTC rewards based on your highest rig tier.
+        Spin once per epoch to win $BaseTC rewards. Extra spins come from referrals.
       </p>
 
-      {/* Pool balance card */}
+      {/* Pool balance */}
       <div className="mx-auto max-w-md rounded-lg border border-neutral-700 bg-neutral-800/60 px-4 py-3 text-left">
-        <div className="text-xs uppercase tracking-wide text-neutral-400">Spin Pool (real-time)</div>
+        <div className="text-xs uppercase tracking-wide text-neutral-400">
+          Spin Pool (real-time)
+        </div>
         <div className="mt-1 text-2xl font-semibold">
-          {poolBalanceStr} <span className="text-base text-neutral-400">$BaseTC</span>
+          {poolBalanceStr}{" "}
+          <span className="text-base text-neutral-400">$BaseTC</span>
         </div>
       </div>
+
+      {/* Tickets */}
+      {isConnected && (
+        <div className="text-sm text-neutral-300">
+          Tickets available:{" "}
+          <span className="font-semibold">{ticketNum}</span>
+        </div>
+      )}
 
       {/* Spin button + animation */}
       <div className="py-6">
@@ -213,9 +282,13 @@ const Spin: FC = () => {
         <button
           onClick={handleSpin}
           disabled={loading || !canClaim}
-          className="px-8 py-4 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 text-white font-bold text-lg shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-105 transition-transform"
+          className="px-8 py-4 rounded-full bg-gradient-to-br from-blue-500 to-sky-600 text-white font-bold text-lg shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-105 transition-transform"
         >
-          {loading ? "Spinning…" : canClaim ? "Spin Now!" : "Already Claimed for this Epoch"}
+          {loading
+            ? "Spinning…"
+            : canClaim
+            ? "Spin Now!"
+            : "No spins left this epoch"}
         </button>
       </div>
 
