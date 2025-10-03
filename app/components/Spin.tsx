@@ -1,3 +1,4 @@
+// app/components/Spin.tsx
 "use client";
 
 import { useState, useMemo } from "react";
@@ -35,7 +36,6 @@ const Spin: FC = () => {
     address: spinVaultAddress,
     abi: spinVaultABI as any,
     functionName: "claimed",
-    // jalankan hanya kalau epoch & address tersedia
     args:
       epoch !== undefined && address
         ? [epoch as bigint, address as `0x${string}`]
@@ -52,7 +52,6 @@ const Spin: FC = () => {
   });
 
   const canClaim = useMemo(() => {
-    // boleh claim kalau: connected, ada address, sudah tahu claimed === false
     if (!isConnected || !address) return false;
     if (claimed === undefined) return false;
     return claimed === false;
@@ -78,9 +77,9 @@ const Spin: FC = () => {
     setSpinResult(null);
 
     try {
-      // Ambil nonce dari hook; lalu (opsional) override dengan hasil refetch agar fresh
+      // Ambil nonce dari hook; override dengan refetch agar fresh
       const nonceHook = (nonceValue as bigint | undefined) ?? 0n;
-      const ref = await refetchNonces(); // wagmi refetch() => { data }
+      const ref = await refetchNonces(); // wagmi refetch -> { data }
       const currentNonce =
         (ref?.data as bigint | undefined) ?? nonceHook;
 
@@ -99,8 +98,7 @@ const Spin: FC = () => {
           action: "claim",
           user: address,
           fid: fcUser.fid,
-          // kirim sebagai string supaya aman di JSON
-          nonce: currentNonce.toString(),
+          nonce: currentNonce.toString(), // kirim sebagai string
           deadline: deadline.toString(),
         }),
       });
@@ -118,8 +116,12 @@ const Spin: FC = () => {
         address: spinVaultAddress,
         abi: spinVaultABI as any,
         functionName: "claimWithSig",
-        // kirim ke kontrak pakai bigint
-        args: [address as `0x${string}`, currentNonce, deadline, sigData.signature as `0x${string}`],
+        args: [
+          address as `0x${string}`,
+          currentNonce,
+          deadline,
+          sigData.signature as `0x${string}`,
+        ],
         account: address as `0x${string}`,
         chain: baseSepolia,
       });
@@ -129,15 +131,27 @@ const Spin: FC = () => {
         hash: txHash,
       });
 
-      // Decode event untuk ambil amount
+      // --- Decode event yang kompatibel tipe (tanpa error topics) ---
       let won: bigint | null = null;
-      for (const log of receipt.logs) {
-        if (log.address.toLowerCase() !== spinVaultAddress.toLowerCase()) continue;
+
+      for (const raw of receipt.logs) {
+        // Beberapa versi typing viem/wagmi tidak expose .topics -> cast ke any
+        const log: any = raw as any;
+        if (
+          (log?.address as string)?.toLowerCase() !==
+          spinVaultAddress.toLowerCase()
+        ) {
+          continue;
+        }
+        const topics = (log?.topics ?? []) as string[];
+        const data = (log?.data ?? "0x") as `0x${string}`;
+        if (!Array.isArray(topics) || topics.length === 0) continue;
+
         try {
           const decoded = decodeEventLog({
             abi: spinVaultABI as any,
-            data: log.data,
-            topics: log.topics,
+            data,
+            topics: topics as `0x${string}`[],
           });
           if (decoded.eventName === "ClaimedSpin") {
             // event ClaimedSpin(address user, uint256 epoch, uint256 amount, uint8 tier)
@@ -146,19 +160,19 @@ const Spin: FC = () => {
             break;
           }
         } catch {
-          // skip log yang bukan event kita
+          // skip kalau bukan event kita
         }
       }
 
       if (won !== null) {
         setSpinResult(Number(formatEther(won)).toFixed(4));
+        setStatus("Spin sukses!");
       } else {
         setSpinResult(null);
+        setStatus("Spin sukses! (amount tidak ter-decode, cek explorer)");
       }
 
-      setStatus("Spin sukses!");
       await Promise.all([refetchClaimed(), refetchNonces()]);
-
     } catch (e: any) {
       setStatus(`Error: ${e?.shortMessage || e?.message || "Unknown error"}`);
     } finally {
@@ -179,7 +193,7 @@ const Spin: FC = () => {
           disabled={loading || !canClaim}
           className="px-8 py-4 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 text-white font-bold text-lg shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-105 transition-transform"
         >
-          {loading ? "Spinning..." : (canClaim ? "Spin Now!" : "Already Claimed / Not Ready")}
+          {loading ? "Spinning..." : canClaim ? "Spin Now!" : "Already Claimed / Not Ready"}
         </button>
       </div>
 
