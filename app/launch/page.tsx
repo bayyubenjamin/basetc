@@ -10,6 +10,7 @@ import Monitoring from "../components/Monitoring";
 import Rakit from "../components/Rakit";
 import Market from "../components/Market";
 import Profil from "../components/Profil";
+import Event from "../components/Event"; // <-- Impor komponen baru
 import FidInput from "../components/FidInput";
 
 const DEFAULT_TAB: TabName = "monitoring";
@@ -23,7 +24,7 @@ function MainApp() {
     try {
       const url = new URL(window.location.href);
       const q = (url.searchParams.get("tab") || "").toLowerCase();
-      const validTabs: TabName[] = ["monitoring", "rakit", "market", "profil"];
+      const validTabs: TabName[] = ["monitoring", "rakit", "market", "profil", "event"]; // <-- Tambahkan 'event'
       const fromQuery = validTabs.includes(q as TabName) ? (q as TabName) : null;
       const fromStorage = localStorage.getItem(TAB_KEY) as TabName;
       const initial = fromQuery || (validTabs.includes(fromStorage) ? fromStorage : DEFAULT_TAB);
@@ -53,6 +54,7 @@ function MainApp() {
       case "rakit": return <Rakit />;
       case "market": return <Market />;
       case "profil": return <Profil />;
+      case "event": return <Event />; // <-- Render komponen Event
       default: return <Monitoring />;
     }
   }, [activeTab]);

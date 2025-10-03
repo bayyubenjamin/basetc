@@ -1,13 +1,9 @@
 // app/lib/web3Config.ts
-//
-// Alasan Perbaikan Definitif: Memperbaiki build error "Property 'referral' does not exist".
-// Mengganti nama key `referralClaimer` menjadi `referral` di dalam objek `CFG.abis`.
-// Ini untuk menyelaraskan dengan nama properti yang diharapkan oleh file `app/lib/contracts.ts`.
 import { http, createConfig } from "wagmi";
 import { baseSepolia } from "wagmi/chains";
 import farcaster from "@farcaster/miniapp-wagmi-connector";
 
-// ABIs diimpor dari file JSON
+// ABIs
 import baseTcABI from "./abi/baseTc.json";
 import rigNftABI from "./abi/rigNft.json";
 import rigSaleABI from "./abi/rigSale.json";
@@ -15,8 +11,11 @@ import gameCoreABI from "./abi/gameCore.json";
 import rewardsVaultABI from "./abi/rewardsVault.json";
 import treasuryVaultABI from "./abi/treasuryVault.json";
 import referralABI from "./abi/referralClaimer.json";
+import stakingVaultABI from "./abi/stakingVault.json"; // <-- ABI Baru
+import spinVaultABI from "./abi/spinVault.json"; // <-- ABI Baru
+import leaderboardAuthVaultABI from "./abi/leaderboardAuthVault.json"; // <-- ABI Baru
 
-// Alamat kontrak dan detail chain
+// Alamat kontrak
 export const ADDR = {
   BASETC:        "0x6F1d3aEB43beE9337dbeA4574dACC22AE0a0B7FB",
   RIGNFT:        "0x18cb04711f100fC3d108825476c294eaed6EA173",
@@ -26,6 +25,10 @@ export const ADDR = {
   TREASURY:      "0x8eC2Ca3fdea29C1658c7ecF8b8dCE7EC09Fa7E55",
   USDC:          "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
   REFERRAL:      "0x8f75cB6135F106C45f2B7B8841ecA92dD25e47B5",
+  // Alamat Event
+  LEADERBOARD:   "0x3Fc4C865b0EE650085F6C2A1441Cd944231FD1A7",
+  SPIN_VAULT:    "0xbb51D2e8e8DB1456cC5eb89363d5a975dEb4A824",
+  STAKING_VAULT: "0x4bD10FB51609D064DE96BBa8411b4e5452014752",
 } as const;
 
 export const CHAIN = {
@@ -33,7 +36,6 @@ export const CHAIN = {
   rpcUrl: "https://sepolia.base.org",
 } as const;
 
-// Ekspor alamat dan ABI secara individual untuk kemudahan penggunaan di client-side
 export const {
     BASETC: baseTcAddress,
     RIGNFT: rigNftAddress,
@@ -43,14 +45,17 @@ export const {
     TREASURY: treasuryVaultAddress,
     USDC: usdcAddress,
     REFERRAL: referralAddress,
+    LEADERBOARD: leaderboardAddress,
+    SPIN_VAULT: spinVaultAddress,
+    STAKING_VAULT: stakingVaultAddress,
 } = ADDR;
 
 export {
   baseTcABI, rigNftABI, rigSaleABI, gameCoreABI,
   rewardsVaultABI, treasuryVaultABI, referralABI,
+  stakingVaultABI, spinVaultABI, leaderboardAuthVaultABI
 };
 
-// Konfigurasi Wagmi baru untuk digunakan oleh Providers.tsx
 export const config = createConfig({
   chains: [baseSepolia],
   connectors: [farcaster()],
@@ -59,7 +64,6 @@ export const config = createConfig({
   },
 });
 
-// Ekspor lama untuk kompatibilitas
 export const chainId = CHAIN.id;
 export const BASE_CHAIN_ID = CHAIN.id;
 
@@ -73,9 +77,9 @@ export const CFG = {
         gameCore: gameCoreABI,
         rewardsVault: rewardsVaultABI,
         treasuryVault: treasuryVaultABI,
-        // --- FIX FINAL DI SINI ---
-        referral: referralABI, // Nama properti diubah dari 'referralClaimer' menjadi 'referral'
+        referral: referralABI,
+        stakingVault: stakingVaultABI,
+        spinVault: spinVaultABI,
+        leaderboardAuthVault: leaderboardAuthVaultABI,
     }
 };
-
-
