@@ -4,6 +4,8 @@
 import { useState, useEffect, type FC } from "react";
 import Image from "next/image";
 
+// Tipe data ini sudah sesuai dengan apa yang dikirim oleh
+// Supabase view (termasuk 'rank' yang sudah berurutan).
 type LeaderboardEntry = {
   rank: number;
   fid: number;
@@ -27,6 +29,9 @@ const Leaderboard: FC = () => {
           throw new Error("Failed to fetch leaderboard data.");
         }
         const data = await response.json();
+        // Data 'data.items' yang diterima dari API sudah memiliki
+        // peringkat yang berurutan (1, 2, 3, ...) berkat
+        // ROW_NUMBER() di Supabase view.
         setLeaderboardData(data.items);
       } catch (err: any) {
         setError(err.message);
@@ -71,6 +76,8 @@ const Leaderboard: FC = () => {
               !error &&
               leaderboardData.map((entry) => (
                 <tr key={entry.fid} className="border-b border-neutral-800 hover:bg-neutral-800/50">
+                  {/* Bagian ini hanya menampilkan 'entry.rank' yang sudah benar */}
+                  {/* dari backend. Tidak perlu logika tambahan di sini. */}
                   <td className="px-4 py-2 font-medium">{entry.rank}</td>
                   <td className="px-4 py-2 flex items-center gap-3">
                     {entry.pfp_url ? (
@@ -99,3 +106,4 @@ const Leaderboard: FC = () => {
 };
 
 export default Leaderboard;
+
