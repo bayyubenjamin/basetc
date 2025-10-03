@@ -18,7 +18,7 @@
   "canonicalDomain": "basetc.xyz",
   "subtitle": "Mining NFT Game on Base",
 
-  "description": "BaseTC Console adalah Farcaster Mini App untuk mining NFT rigs di jaringan Base. Klaim rig gratis, merge tier Pro dan Legend, dan hasilkan token BaseTC onchain.",
+  "description": "BaseTC Console is a Farcaster Mini App for mining NFT rigs on the Base network. Claim a free rig, merge into Pro and Legend tiers, and earn BaseTC tokens onchain.",
 
   "tagline": "Mine BaseTC onchain with NFTs",
 
@@ -31,7 +31,7 @@
   ],
 
   "ogTitle": "BaseTC Console Mini App",
-  "ogDescription": "Bangun rig, upgrade ke Legend, hasilkan BaseTC. Gratis klaim rig Basic pertama!",
+  "ogDescription": "Build rigs, upgrade to Legend, and earn BaseTC. Claim your first Basic rig for free!",
   "ogImageUrl": "https://basetc.xyz/img/feed.png",
 
   "castShareUrl": "https://basetc.xyz/launch"
