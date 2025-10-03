@@ -1,11 +1,15 @@
 // app/api/sign-event-action/route.ts
 import { NextResponse } from "next/server";
 import { privateKeyToAccount } from "viem/accounts";
+import { createClient } from "@supabase/supabase-js";
 import { stakingVaultAddress, spinVaultAddress } from "../../lib/web3Config";
+import { parseEther } from "viem";
 
 export const runtime = "nodejs";
 
 const CHAIN_ID = Number(process.env.NEXT_PUBLIC_CHAIN_ID || 84532);
+const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 // --- EIP-712 Definitions (MUST match contracts) ---
 const STAKING_VAULT_DOMAIN = {
@@ -61,7 +65,7 @@ export async function POST(req: Request) {
     const account = privateKeyToAccount(pk);
 
     const body = await req.json();
-    const { vault, action, user, nonce, deadline, amount, lockType } = body;
+    const { vault, action, user, nonce, deadline, amount, lockType, fid } = body;
 
     if (!vault || !action || !user || !nonce || !deadline) {
       return NextResponse.json({ error: "bad_request: missing required fields" }, { status: 400 });
@@ -74,14 +78,16 @@ export async function POST(req: Request) {
       let message: any;
 
       if (action === "stake") {
+        if (!amount || !lockType) throw new Error("Missing amount or lockType for staking");
         primaryType = "StakeAction";
-        message = { user, amount: BigInt(amount), lockType: Number(lockType), nonce: BigInt(nonce), deadline: BigInt(deadline) };
+        message = { user, amount: parseEther(amount), lockType: Number(lockType), nonce: BigInt(nonce), deadline: BigInt(deadline) };
       } else if (action === "harvest") {
         primaryType = "HarvestAction";
         message = { user, nonce: BigInt(nonce), deadline: BigInt(deadline) };
       } else if (action === "unstake") {
+         if (!amount) throw new Error("Missing amount for unstaking");
         primaryType = "UnstakeAction";
-        message = { user, amount: BigInt(amount), nonce: BigInt(nonce), deadline: BigInt(deadline) };
+        message = { user, amount: parseEther(amount), nonce: BigInt(nonce), deadline: BigInt(deadline) };
       } else {
         throw new Error("Invalid staking action");
       }
@@ -102,6 +108,16 @@ export async function POST(req: Request) {
             primaryType: "UserAction",
             message: { user, nonce: BigInt(nonce), deadline: BigInt(deadline) },
         });
+
+        // --- Integrasi Leaderboard ---
+        // Panggil Edge Function untuk menambahkan poin setelah signature dibuat.
+        if (SUPABASE_URL && SUPABASE_ANON_KEY && fid) {
+            const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            supabase.functions.invoke('add-spin-points', {
+                body: { fid: fid }
+            }).catch(console.error); // Fire-and-forget
+        }
+        // ----------------------------
 
     } else {
       throw new Error("Invalid vault type");

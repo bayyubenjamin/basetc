@@ -2,19 +2,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { ethers } from "ethers";
+import { getSupabaseAdmin } from "../../lib/supabase/server";
 
 /* =========================
-   ✅ INLINE: Invite Tiering (tanpa import)
+   Invite Tiering
    ========================= */
 function calculateMaxClaims(validInvites: number): number {
   if (!Number.isFinite(validInvites) || validInvites <= 0) return 0;
   const first = validInvites >= 1 ? 1 : 0;
-  const midInvites = Math.max(Math.min(validInvites, 11) - 1, 0); // #2..#11 → 0..10
+  const midInvites = Math.max(Math.min(validInvites, 11) - 1, 0);
   const mid = Math.floor(midInvites / 2);
-  const tailInvites = Math.max(validInvites - 11, 0);             // #12+
+  const tailInvites = Math.max(validInvites - 11, 0);
   const tail = Math.floor(tailInvites / 3);
   return first + mid + tail;
 }
+
 function remainingClaims(validInvites: number, usedClaims: number): number {
   const maxClaims = calculateMaxClaims(validInvites);
   const used = Number.isFinite(usedClaims) ? Math.max(0, usedClaims) : 0;
@@ -22,65 +24,26 @@ function remainingClaims(validInvites: number, usedClaims: number): number {
 }
 
 /* =========================
-   ENV VARS (dengan fallback nama yang kamu pakai)
+   ENV VARS & Constants
    ========================= */
-// URL Supabase: pakai SUPABASE_URL → fallback ke NEXT_PUBLIC_SUPABASE_URL
-const SUPABASE_URL =
-  process.env.SUPABASE_URL ||
-  process.env.NEXT_PUBLIC_SUPABASE_URL;
-
-// Service Role Key: dukung banyak nama yang kamu sebutkan
-const SUPABASE_SERVICE_KEY =
-  process.env.SUPABASE_SERVICE_KEY ||
-  process.env.SUPABASE_SERVICE_ROLE_KEY ||
-  process.env.SUPABASE_SERVICE_ROLE;
-
-if (!SUPABASE_URL) {
-  console.error("Missing SUPABASE_URL / NEXT_PUBLIC_SUPABASE_URL");
-}
-if (!SUPABASE_SERVICE_KEY) {
-  console.error("Missing SUPABASE_SERVICE_KEY / SUPABASE_SERVICE_ROLE_KEY / SUPABASE_SERVICE_ROLE");
-}
-
-const NEXT_PUBLIC_CHAIN_ID = Number(process.env.NEXT_PUBLIC_CHAIN_ID || process.env.CHAIN_ID || "84532"); // Base Sepolia
-const RPC_URL = process.env.RPC_URL || "https://sepolia.base.org";
-
+const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const MINT_MODE = (process.env.REFERRAL_MINT_MODE || "none").toLowerCase();
+const BACKEND_SIGNER_PK = process.env.BACKEND_SIGNER_PK || process.env.RELAYER_PRIVATE_KEY || "";
 const RIGSALE_ADDRESS = process.env.CONTRACT_RIGSALE || "";
 const RIGNFT_ADDRESS  = process.env.CONTRACT_RIGNFT  || "";
-const MINT_MODE = (process.env.REFERRAL_MINT_MODE || "none").toLowerCase(); // "none" | "rigsale" | "rignft"
-
-const BACKEND_SIGNER_PK =
-  process.env.BACKEND_SIGNER_PK ||
-  process.env.RELAYER_PRIVATE_KEY || // dukung nama lain yg kamu pakai
-  "";
-
+const RPC_URL = process.env.RPC_URL || "https://sepolia.base.org";
 const BASIC_ID = 1;
 
 const TABLE_REFERRALS = "referrals";
 const TABLE_CLAIMS    = "claims";
 
-/* =========================
-   Minimal ABI
-   ========================= */
-const ABI_RIGSALE = [
-  "function mintBySale(address to, uint256 id, uint256 amount) external"
-];
-const ABI_RIGNFT = [
-  "function mintByGame(address to, uint256 id, uint256 amount) external",
-];
+const ABI_RIGSALE = ["function mintBySale(address to, uint256 id, uint256 amount) external"];
+const ABI_RIGNFT = ["function mintByGame(address to, uint256 id, uint256 amount) external"];
 
 /* =========================
-   Utility: Supabase & Ethers
+   Utility Functions
    ========================= */
-function supabaseAdmin() {
-  if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
-    throw new Error("Supabase env missing: SUPABASE_URL / SUPABASE_SERVICE_KEY (or ROLE_KEY/ROLE).");
-  }
-  return createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
-    auth: { persistSession: false },
-  });
-}
-
 function getProviderAndSigner() {
   if (!BACKEND_SIGNER_PK) return { provider: null, signer: null };
   const provider = new ethers.JsonRpcProvider(RPC_URL);
@@ -88,9 +51,6 @@ function getProviderAndSigner() {
   return { provider, signer };
 }
 
-/* =========================
-   Validasi input sederhana
-   ========================= */
 function requireString(value: unknown, name: string) {
   if (typeof value !== "string" || value.trim().length === 0) {
     throw new Error(`Field "${name}" wajib diisi (string).`);
@@ -102,37 +62,28 @@ function requireAddress(value: string, name: string) {
   }
 }
 
-/* =========================
-   Query Helper (Supabase)
-   ========================= */
 async function countValidInvites(inviter: string) {
-  const sb = supabaseAdmin();
-  const { count, error } = await sb
+  const { count, error } = await getSupabaseAdmin()
     .from(TABLE_REFERRALS)
     .select("*", { count: "exact", head: true })
     .eq("inviter", inviter)
     .eq("status", "valid");
-
   if (error) throw new Error(`Gagal hitung valid invites: ${error.message}`);
   return count ?? 0;
 }
 
 async function sumUsedClaims(inviter: string) {
-  const sb = supabaseAdmin();
-  const { data, error } = await sb
+  const { data, error } = await getSupabaseAdmin()
     .from(TABLE_CLAIMS)
     .select("amount")
     .eq("inviter", inviter)
     .eq("type", "basic_free");
-
   if (error) throw new Error(`Gagal ambil used claims: ${error.message}`);
-  const used = (data || []).reduce((acc: number, r: any) => acc + (Number(r.amount) || 0), 0);
-  return used;
+  return (data || []).reduce((acc: number, r: any) => acc + (Number(r.amount) || 0), 0);
 }
 
 async function recordClaim(inviter: string, amount: number, txHash: string) {
-  const sb = supabaseAdmin();
-  const { error } = await sb.from(TABLE_CLAIMS).insert({
+  const { error } = await getSupabaseAdmin().from(TABLE_CLAIMS).insert({
     inviter,
     type: "basic_free",
     amount,
@@ -141,28 +92,13 @@ async function recordClaim(inviter: string, amount: number, txHash: string) {
   if (error) throw new Error(`Gagal mencatat klaim: ${error.message}`);
 }
 
-/* ✅ upsert idempotent (tanpa 'returning') */
-async function trackReferral(
-  inviter: string,
-  invitee_fid: string,
-  status: "pending" | "valid" = "pending"
-) {
-  const sb = supabaseAdmin();
-  const { error } = await sb
+async function trackReferral(inviter: string, invitee_fid: string, status: "pending" | "valid" = "pending") {
+  const { error } = await getSupabaseAdmin()
     .from(TABLE_REFERRALS)
-    .upsert(
-      { inviter, invitee_fid, status },
-      {
-        onConflict: "inviter,invitee_fid",
-        ignoreDuplicates: true,
-      }
-    );
+    .upsert({ inviter, invitee_fid, status }, { onConflict: "inviter,invitee_fid" });
   if (error) throw new Error(`Gagal menyimpan referral: ${error.message}`);
 }
 
-/* =========================
-   Mint Helper
-   ========================= */
 async function mintBasicViaRigSale(to: string) {
   const { signer } = getProviderAndSigner();
   if (!signer) throw new Error("Signer backend tidak dikonfigurasi.");
@@ -172,6 +108,7 @@ async function mintBasicViaRigSale(to: string) {
   const receipt = await tx.wait();
   return receipt?.hash ?? tx.hash;
 }
+
 async function mintBasicViaRigNFT(to: string) {
   const { signer } = getProviderAndSigner();
   if (!signer) throw new Error("Signer backend tidak dikonfigurasi.");
@@ -183,7 +120,7 @@ async function mintBasicViaRigNFT(to: string) {
 }
 
 /* =========================
-   Handler
+   MAIN POST HANDLER
    ========================= */
 export async function POST(req: NextRequest) {
   try {
@@ -194,13 +131,13 @@ export async function POST(req: NextRequest) {
     }
 
     switch (mode) {
+      case "touch":
       case "track": {
         requireString(body.inviter, "inviter");
         requireString(body.invitee_fid, "invitee_fid");
         const inviter = body.inviter.trim();
         const invitee_fid = String(body.invitee_fid).trim();
         const status = (body.status === "valid" ? "valid" : "pending") as "pending" | "valid";
-
         await trackReferral(inviter, invitee_fid, status);
         return NextResponse.json({ ok: true });
       }
@@ -208,46 +145,66 @@ export async function POST(req: NextRequest) {
       case "stats": {
         requireString(body.inviter, "inviter");
         const inviter = body.inviter.trim();
-
         const [validInvites, usedClaims] = await Promise.all([
           countValidInvites(inviter),
           sumUsedClaims(inviter),
         ]);
         const quota = remainingClaims(validInvites, usedClaims);
-
-        return NextResponse.json({
-          ok: true,
-          data: { validInvites, usedClaims, remainingQuota: quota },
-        });
+        return NextResponse.json({ ok: true, data: { validInvites, usedClaims, remainingQuota: quota } });
       }
 
       case "claim": {
         requireString(body.inviter, "inviter");
         requireString(body.receiver, "receiver");
+        requireString(body.invitee_fid, "invitee_fid"); // Diperlukan untuk memberi poin
 
-        const inviter = body.inviter.trim();
-        const receiver = body.receiver.trim();
-        requireAddress(receiver, "receiver");
+        const inviterAddress = body.inviter.trim();
+        const receiverAddress = body.receiver.trim();
+        const inviteeFid = body.invitee_fid;
+        requireAddress(receiverAddress, "receiver");
 
         const [validInvites, usedClaims] = await Promise.all([
-          countValidInvites(inviter),
-          sumUsedClaims(inviter),
+            countValidInvites(inviterAddress),
+            sumUsedClaims(inviterAddress),
         ]);
         const quota = remainingClaims(validInvites, usedClaims);
         if (quota <= 0) {
-          return NextResponse.json({ error: "No free-claim quota" }, { status: 400 });
+            return NextResponse.json({ error: "No free-claim quota" }, { status: 400 });
         }
 
-        let txHash = "0x";
+        let txHash: string;
         if (MINT_MODE === "rigsale") {
-          txHash = await mintBasicViaRigSale(receiver);
+          txHash = await mintBasicViaRigSale(receiverAddress);
         } else if (MINT_MODE === "rignft") {
-          txHash = await mintBasicViaRigNFT(receiver);
+          txHash = await mintBasicViaRigNFT(receiverAddress);
         } else {
-          txHash = "0x000000000000000000000000000000000000000000000000000000000000BEEF";
+          txHash = "0x" + "0".repeat(63) + "beef"; // Mock tx for "none" mode
         }
 
-        await recordClaim(inviter, 1, txHash);
+        await recordClaim(inviterAddress, 1, txHash);
+        
+        // --- Integrasi Leaderboard ---
+        // Panggil Edge Function untuk menambahkan poin setelah klaim berhasil.
+        // Dijalankan secara "fire-and-forget" agar tidak memblokir respons.
+        if (SUPABASE_URL && SUPABASE_ANON_KEY) {
+          const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+          const { data: inviterData } = await getSupabaseAdmin()
+            .from('users')
+            .select('fid')
+            .eq('wallet', inviterAddress.toLowerCase())
+            .single();
+
+          if (inviterData?.fid) {
+            supabase.functions.invoke('add-referral-points', {
+                body: { 
+                    referrer_fid: inviterData.fid,
+                    referred_fid: inviteeFid 
+                }
+            }).catch(console.error); // Log error di server jika gagal, tapi jangan crash
+          }
+        }
+        // -----------------------------
+
         return NextResponse.json({ ok: true, txHash });
       }
 
@@ -256,19 +213,14 @@ export async function POST(req: NextRequest) {
     }
   } catch (e: any) {
     console.error("API referral error:", e);
-    const msg = String(e?.message || "Server error");
-    return NextResponse.json({ error: msg }, { status: 500 });
+    return NextResponse.json({ error: String(e?.message || "Server error") }, { status: 500 });
   }
 }
 
-/* =========================
-   GET: optional ping/status
-   ========================= */
-export async function GET() {
+export async function GET(req: NextRequest) {
+  // ... (fungsi GET tetap sama, tidak perlu diubah)
   return NextResponse.json({
     ok: true,
-    chainId: NEXT_PUBLIC_CHAIN_ID,
     mintMode: MINT_MODE,
   });
 }
-

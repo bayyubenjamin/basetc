@@ -1,3 +1,8 @@
 # supabase/config.toml
+
+# Pastikan project_id sudah benar
+project_id = "qzjnbjrjyvfindwjubdk"
+
 [functions.calculate-nft-usage-points]
-cron = "0 5 * * *" # Jalankan setiap hari jam 5 pagi UTC
+  # Gunakan 'schedule' bukan 'cron'
+  schedule = "0 5 * * *"
