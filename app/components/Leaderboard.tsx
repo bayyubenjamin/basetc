@@ -2,12 +2,15 @@
 "use client";
 
 import { useState, useEffect, type FC } from "react";
+import Image from "next/image";
 
 type LeaderboardEntry = {
   rank: number;
-  referrer_fid: number;
-  count: number;
-  // You can add more fields like username, pfp_url if your API provides them
+  fid: number;
+  display_name: string | null;
+  username: string | null;
+  pfp_url: string | null;
+  total_points: number;
 };
 
 const Leaderboard: FC = () => {
@@ -24,12 +27,7 @@ const Leaderboard: FC = () => {
           throw new Error("Failed to fetch leaderboard data.");
         }
         const data = await response.json();
-        // Add rank to the data
-        const rankedData = data.items.map((item: any, index: number) => ({
-          ...item,
-          rank: index + 1,
-        }));
-        setLeaderboardData(rankedData);
+        setLeaderboardData(data.items);
       } catch (err: any) {
         setError(err.message);
       } finally {
@@ -42,16 +40,16 @@ const Leaderboard: FC = () => {
 
   return (
     <div className="space-y-4 rounded-lg bg-neutral-900/50 p-4 border border-neutral-700">
-      <h2 className="text-lg font-semibold text-center">Referral Leaderboard</h2>
-      <p className="text-sm text-neutral-400 text-center">Top 50 referrers this week.</p>
+      <h2 className="text-lg font-semibold text-center">Leaderboard</h2>
+      <p className="text-sm text-neutral-400 text-center">Peringkat poin untuk ronde saat ini.</p>
 
       <div className="overflow-x-auto">
         <table className="min-w-full text-sm">
           <thead className="text-neutral-400">
             <tr>
               <th className="px-4 py-2 text-left">Rank</th>
-              <th className="px-4 py-2 text-left">Farcaster FID</th>
-              <th className="px-4 py-2 text-right">Invites</th>
+              <th className="px-4 py-2 text-left">User</th>
+              <th className="px-4 py-2 text-right">Points</th>
             </tr>
           </thead>
           <tbody>
@@ -72,11 +70,24 @@ const Leaderboard: FC = () => {
             {!loading &&
               !error &&
               leaderboardData.map((entry) => (
-                <tr key={entry.rank} className="border-b border-neutral-800">
+                <tr key={entry.fid} className="border-b border-neutral-800 hover:bg-neutral-800/50">
                   <td className="px-4 py-2 font-medium">{entry.rank}</td>
-                  <td className="px-4 py-2">{entry.referrer_fid}</td>
+                  <td className="px-4 py-2 flex items-center gap-3">
+                    {entry.pfp_url ? (
+                      <Image
+                        src={entry.pfp_url}
+                        alt={entry.display_name || ""}
+                        width={24}
+                        height={24}
+                        className="rounded-full"
+                      />
+                    ) : (
+                      <div className="w-6 h-6 rounded-full bg-neutral-700" />
+                    )}
+                    <span className="font-semibold">{entry.display_name || `@${entry.username}` || `FID: ${entry.fid}`}</span>
+                  </td>
                   <td className="px-4 py-2 text-right font-semibold">
-                    {entry.count}
+                    {entry.total_points}
                   </td>
                 </tr>
               ))}
@@ -87,4 +98,4 @@ const Leaderboard: FC = () => {
   );
 };
 
-export default Leaderboard; // <-- TAMBAHKAN BARIS INI
+export default Leaderboard;
