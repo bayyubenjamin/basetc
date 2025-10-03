@@ -1,17 +1,17 @@
 // app/components/Spin.tsx
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import type { FC } from "react";
 import { useAccount, useReadContract, useWriteContract, usePublicClient } from "wagmi";
 import { baseSepolia } from "viem/chains";
-import { formatEther, parseEther } from "viem";
+import { formatEther } from "viem";
 import { spinVaultAddress, spinVaultABI } from "../lib/web3Config";
 import { useFarcaster } from "../context/FarcasterProvider";
 
 const Spin: FC = () => {
   const { address } = useAccount();
-  const { user: fcUser } = useFarcaster(); // Ambil data user Farcaster
+  const { user: fcUser } = useFarcaster();
   const publicClient = usePublicClient();
   const { writeContractAsync } = useWriteContract();
   
@@ -24,6 +24,7 @@ const Spin: FC = () => {
     address: spinVaultAddress,
     abi: spinVaultABI as any,
     functionName: "epochNow",
+    // Hook ini tidak bergantung pada pengguna, jadi bisa langsung jalan
   });
 
   const { data: claimed, refetch: refetchClaimed } = useReadContract({
@@ -31,18 +32,24 @@ const Spin: FC = () => {
     abi: spinVaultABI as any,
     functionName: "claimed",
     args: epoch !== undefined && address ? [epoch, address] : undefined,
-    query: { enabled: !!address && epoch !== undefined },
+    query: { 
+      // Hanya aktifkan jika 'address' dan 'epoch' sudah ada nilainya
+      enabled: !!address && epoch !== undefined 
+    },
   });
 
    const { data: nonces, refetch: refetchNonces } = useReadContract({
     address: spinVaultAddress,
     abi: spinVaultABI as any,
     functionName: "nonces",
-    args: [address],
-    query: { enabled: !!address },
+    args: address ? [address] : undefined,
+    query: { 
+      // Hanya aktifkan jika 'address' sudah ada
+      enabled: !!address 
+    },
   });
 
-  const canClaim = useMemo(() => !claimed, [claimed]);
+  const canClaim = useMemo(() => address && !claimed, [address, claimed]);
 
   // --- Action ---
   const handleSpin = async () => {
@@ -55,13 +62,18 @@ const Spin: FC = () => {
     setSpinResult(null);
 
     try {
+        // Panggil refetch secara eksplisit untuk mendapatkan nilai nonce terbaru
         const nonceResult = await refetchNonces();
         const nonce = nonceResult.data;
-        if (nonce === undefined) throw new Error("Could not fetch nonce.");
 
-        const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600); // 1 hour
+        // Validasi bahwa nonce berhasil didapatkan sebelum lanjut
+        if (nonce === undefined || nonce === null) {
+            throw new Error("Could not fetch a valid nonce. Please try again.");
+        }
 
-        setStatus("Requesting signature...");
+        const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600); // 1 jam
+
+        setStatus("Requesting signature from backend...");
         const sigRes = await fetch("/api/sign-event-action", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -69,7 +81,7 @@ const Spin: FC = () => {
                 vault: "spin",
                 action: "claim",
                 user: address,
-                fid: fcUser.fid, // <-- FIX: Kirim FID ke backend
+                fid: fcUser.fid,
                 nonce: String(nonce),
                 deadline: String(deadline),
             }),
@@ -90,13 +102,16 @@ const Spin: FC = () => {
 
         const receipt = await publicClient?.waitForTransactionReceipt({ hash: txHash });
 
+        // Temukan event untuk menampilkan hasil spin
         const claimEvent = receipt?.logs.find(log => log.address.toLowerCase() === spinVaultAddress.toLowerCase());
-        if(claimEvent) {
-            const amount = BigInt(claimEvent.data.slice(0, 66)); 
-            setSpinResult(Number(formatEther(amount)).toFixed(4));
+        if (claimEvent) {
+            // Ambil jumlah reward dari data event
+            const amountWon = BigInt(claimEvent.data); 
+            setSpinResult(Number(formatEther(amountWon)).toFixed(4));
         }
         
         setStatus("Spin successful!");
+        // Refresh semua data yang relevan setelah berhasil
         await Promise.all([refetchClaimed(), refetchEpoch(), refetchNonces()]);
 
     } catch (e: any) {
@@ -116,7 +131,7 @@ const Spin: FC = () => {
         <div className="py-8">
             <button 
                 onClick={handleSpin} 
-                disabled={loading || !canClaim || !address}
+                disabled={loading || !canClaim}
                 className="px-8 py-4 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 text-white font-bold text-lg shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-105 transition-transform"
             >
                 {loading ? "Spinning..." : (canClaim ? "Spin Now!" : "Already Claimed for this Epoch")}
