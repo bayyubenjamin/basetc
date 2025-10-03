@@ -131,11 +131,10 @@ const Spin: FC = () => {
         hash: txHash,
       });
 
-      // --- Decode event yang kompatibel tipe (tanpa error topics) ---
+      // --- Decode event aman untuk typing viem (tuple topics) ---
       let won: bigint | null = null;
 
       for (const raw of receipt.logs) {
-        // Beberapa versi typing viem/wagmi tidak expose .topics -> cast ke any
         const log: any = raw as any;
         if (
           (log?.address as string)?.toLowerCase() !==
@@ -143,15 +142,22 @@ const Spin: FC = () => {
         ) {
           continue;
         }
+
         const topics = (log?.topics ?? []) as string[];
         const data = (log?.data ?? "0x") as `0x${string}`;
         if (!Array.isArray(topics) || topics.length === 0) continue;
+
+        // Bentuk tuple: [signatureTopic, ...rest]
+        const topicsTuple = [
+          topics[0] as `0x${string}`,
+          ...(topics.slice(1) as `0x${string}`[]),
+        ] as [`0x${string}`, ...`0x${string}`[]];
 
         try {
           const decoded = decodeEventLog({
             abi: spinVaultABI as any,
             data,
-            topics: topics as `0x${string}`[],
+            topics: topicsTuple,
           });
           if (decoded.eventName === "ClaimedSpin") {
             // event ClaimedSpin(address user, uint256 epoch, uint256 amount, uint8 tier)
