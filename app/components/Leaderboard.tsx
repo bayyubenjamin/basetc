@@ -87,4 +87,4 @@ const Leaderboard: FC = () => {
   );
 };
 
-export default Leaderboard;
+export default Leaderboard; // <-- TAMBAHKAN BARIS INI

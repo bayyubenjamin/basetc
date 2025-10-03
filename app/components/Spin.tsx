@@ -124,4 +124,4 @@ const Spin: FC = () => {
   );
 };
 
-export default Spin;
+export default Spin; // <-- TAMBAHKAN BARIS INI

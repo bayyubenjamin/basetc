@@ -193,3 +193,5 @@ const Staking: FC = () => {
     </div>
   );
 };
+
+export default Staking; // <-- TAMBAHKAN BARIS INI
