@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type FC } from "react";
 import Image from "next/image";
 import {
   useAccount,
@@ -24,17 +24,15 @@ import { formatUnits } from "viem";
 // ======================
 // Utils & Constants
 // ======================
-const RELAYER_ENDPOINT = "/api/sign-user-action"; // backend expects user/action/nonce/deadline/chainId/verifyingContract
+const RELAYER_ENDPOINT = "/api/sign-user-action";
 type ActionType = "start" | "claim" | null;
 
-// Compact large numbers
 const formatNumber = (num: number) => {
   if (num >= 1_000_000) return (num / 1_000_000).toFixed(1) + "M";
   if (num >= 1_000) return (num / 1_000).toFixed(1) + "K";
   return num.toString();
 };
 
-// === Relayer signer (SESUIAI server kamu: perlu nonce & deadline dari client)
 async function getRelayerSig(params: {
   user: `0x${string}`;
   action: "start" | "stop" | "claim";
@@ -54,15 +52,13 @@ async function getRelayerSig(params: {
     }),
   });
   const json = await resp.json();
-  if (!resp.ok) {
-    throw new Error(json?.error || "bad_request from relayer");
-  }
+  if (!resp.ok) throw new Error(json?.error || "bad_request from relayer");
   const { signature } = json || {};
   if (!signature) throw new Error("relayer: no signature");
   return { signature: signature as `0x${string}` };
 }
 
-export default function Monitoring() {
+const Monitoring: FC = () => {
   const { address, chainId } = useAccount();
 
   // UI state
@@ -148,56 +144,52 @@ export default function Monitoring() {
   const countPro = (proBal.data as bigint | undefined) ?? 0n;
   const countLegend = (legendBal.data as bigint | undefined) ?? 0n;
 
-// ======================
-// $BaseTC Balance (with dynamic decimals)
-// ======================
-const tokenDecimalsRead = useReadContract({
-  address: baseTcAddress as `0x${string}`,
-  abi: baseTcABI as any,
-  functionName: "decimals",
-});
+  // ======================
+  // $BaseTC Balance (with dynamic decimals)
+  // ======================
+  const tokenDecimalsRead = useReadContract({
+    address: baseTcAddress as `0x${string}`,
+    abi: baseTcABI as any,
+    functionName: "decimals",
+  });
 
-const baseBal = useReadContract({
-  address: baseTcAddress as `0x${string}`,
-  abi: baseTcABI as any,
-  functionName: "balanceOf",
-  args: address ? [address] : undefined,
-  query: { enabled: Boolean(address) },
-});
+  const baseBal = useReadContract({
+    address: baseTcAddress as `0x${string}`,
+    abi: baseTcABI as any,
+    functionName: "balanceOf",
+    args: address ? [address] : undefined,
+    query: { enabled: Boolean(address) },
+  });
 
-// Nilai numerik
-const tokenReadable = useMemo(() => {
-  const bal = baseBal.data as bigint | undefined;
-  const d = (tokenDecimalsRead.data as number | undefined) ?? 18;
-  if (!bal) return 0;
-  try {
-    return Number(formatUnits(bal, d));
-  } catch {
-    return 0;
-  }
-}, [baseBal.data, tokenDecimalsRead.data]);
+  const tokenReadable = useMemo(() => {
+    const bal = baseBal.data as bigint | undefined;
+    const d = (tokenDecimalsRead.data as number | undefined) ?? 18;
+    if (!bal) return 0;
+    try {
+      return Number(formatUnits(bal, d));
+    } catch {
+      return 0;
+    }
+  }, [baseBal.data, tokenDecimalsRead.data]);
 
-// Versi string untuk UI
-const tokenShort = useMemo(
-  () =>
-    tokenReadable.toLocaleString("en-US", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }),
-  [tokenReadable]
-);
+  const tokenShort = useMemo(
+    () =>
+      tokenReadable.toLocaleString("en-US", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }),
+    [tokenReadable]
+  );
 
-const tokenExact = useMemo(() => {
-  const bal = baseBal.data as bigint | undefined;
-  const d = (tokenDecimalsRead.data as number | undefined) ?? 18;
-  if (!bal) return "0";
-
-  // pakai formatUnits langsung biar 18 desimal
-  return formatUnits(bal, d); // string full dengan 18 angka di belakang koma
-}, [baseBal.data, tokenDecimalsRead.data]);
+  const tokenExact = useMemo(() => {
+    const bal = baseBal.data as bigint | undefined;
+    const d = (tokenDecimalsRead.data as number | undefined) ?? 18;
+    if (!bal) return "0";
+    return formatUnits(bal, d);
+  }, [baseBal.data, tokenDecimalsRead.data]);
 
   // ======================
-  // GameCore Reads (latest ABI)
+  // GameCore Reads
   // ======================
   const epochNow = useReadContract({
     address: gameCoreAddress as `0x${string}`,
@@ -264,7 +256,6 @@ const tokenExact = useMemo(() => {
     query: { enabled: Boolean(address) },
   });
 
-  // NEW: pending reward (accumulator ROI)
   const pendingRw = useReadContract({
     address: gameCoreAddress as `0x${string}`,
     abi: gameCoreABI as any,
@@ -273,7 +264,6 @@ const tokenExact = useMemo(() => {
     query: { enabled: Boolean(address) },
   });
 
-  // NEW: sessionEndAt (daily ritual auto-stop)
   const sessionEndAt = useReadContract({
     address: gameCoreAddress as `0x${string}`,
     abi: gameCoreABI as any,
@@ -282,7 +272,6 @@ const tokenExact = useMemo(() => {
     query: { enabled: Boolean(address) },
   });
 
-  // NEW: nonces for WithSig
   const userNonce = useReadContract({
     address: gameCoreAddress as `0x${string}`,
     abi: gameCoreABI as any,
@@ -291,7 +280,6 @@ const tokenExact = useMemo(() => {
     query: { enabled: Boolean(address) },
   });
 
-  // NEW: miningUsage (to compute effective hashrate & badges)
   const miningUsage = useReadContract({
     address: gameCoreAddress as `0x${string}`,
     abi: gameCoreABI as any,
@@ -300,7 +288,7 @@ const tokenExact = useMemo(() => {
     query: { enabled: Boolean(address) },
   });
 
-  // Refs to refetch after tx
+  // Refs
   const { refetch: refetchEpochNow } = epochNow as any;
   const { refetch: refetchMiningActive } = miningActive as any;
   const { refetch: refetchBaseUnit } = baseUnit as any;
@@ -321,20 +309,17 @@ const tokenExact = useMemo(() => {
   const goLiveOn = Boolean((goLive.data as boolean | undefined) ?? false);
   const active = Boolean((miningActive.data as boolean | undefined) ?? false);
 
-  // legacy hashrate (contract returns 0)
-  const hrLegacy = useMemo(() => {
+  const _hrLegacy = useMemo(() => {
     const v = hashrate.data as bigint | undefined;
     return v ? Number(v) : 0;
   }, [hashrate.data]);
 
-  // Base Unit per epoch (18 decimals)
   const baseUnitPerEpoch = useMemo(() => {
     const v = baseUnit.data as bigint | undefined;
     if (!v) return 0;
     return Number(formatUnits(v, 18));
   }, [baseUnit.data]);
 
-  // Pending amount (enable claim if > 0)
   const pendingAmt = useMemo(() => {
     const v = pendingRw.data as bigint | undefined;
     return v ? Number(formatUnits(v, 18)) : 0;
@@ -342,7 +327,6 @@ const tokenExact = useMemo(() => {
 
   const canClaim = pendingAmt > 0;
 
-  // Parse miningUsage -> used/idle & effective hashrate (display only; true reward pakai Base Unit)
   const {
     usedBasic,
     idleBasic,
@@ -355,14 +339,13 @@ const tokenExact = useMemo(() => {
     const mu = miningUsage.data as
       | readonly [bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint]
       | undefined;
-    // mu layout: bOwned, bUsed, bIdle, pOwned, pUsed, pIdle, lOwned, lUsed, lIdle
     const uB = mu ? Number(mu[1]) : 0;
     const iB = mu ? Number(mu[2]) : 0;
     const uP = mu ? Number(mu[4]) : 0;
     const iP = mu ? Number(mu[5]) : 0;
     const uL = mu ? Number(mu[7]) : 0;
     const iL = mu ? Number(mu[8]) : 0;
-    // Display convention lama: 1 / 5 / 25
+    // Display convention: 1 / 5 / 25
     const eff = uB * 1 + uP * 5 + uL * 25;
     return {
       usedBasic: uB,
@@ -417,15 +400,12 @@ const tokenExact = useMemo(() => {
     isError: receiptError,
   } = useWaitForTransactionReceipt({ hash: txHash });
 
-  // Busy indicator that won't hang
   const busy = Boolean((writePending || receiptLoading) && lastAction !== null);
 
-  // TX lifecycle
   useEffect(() => {
     if (isSuccess) {
       setMsg("Transaction confirmed.");
       addLog("Success: Transaction confirmed.");
-      // Refresh important reads
       refetchEpochNow?.();
       refetchMiningActive?.();
       refetchBaseUnit?.();
@@ -437,7 +417,6 @@ const tokenExact = useMemo(() => {
       refetchUsage?.();
       setLastAction(null);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSuccess]);
 
   useEffect(() => {
@@ -464,7 +443,6 @@ const tokenExact = useMemo(() => {
     return () => clearTimeout(t);
   }, [msg]);
 
-  // Watch Claim events to live-refresh
   useWatchContractEvent({
     address: gameCoreAddress as `0x${string}`,
     abi: gameCoreABI as any,
@@ -498,7 +476,7 @@ const tokenExact = useMemo(() => {
   });
 
   // ======================
-  // Actions (WithSig) — versi stabil
+  // Actions (WithSig)
   // ======================
   const onStart = async () => {
     if (!address) return setMsg("Please connect your wallet.");
@@ -512,13 +490,11 @@ const tokenExact = useMemo(() => {
       setLastAction("start");
       addLog("Requesting relayer signature for START...");
 
-      // nonce FRESH dari chain (gunakan view hook terbaru)
       const nonce =
         (await (refetchNonce?.() || Promise.resolve({ data: userNonce.data })))?.data ??
         (userNonce.data as bigint | undefined) ??
         0n;
 
-      // deadline 1 jam (lebih aman dari 15 menit)
       const deadline = BigInt(Math.floor(Date.now() / 1000) + 60 * 60);
 
       const { signature } = await getRelayerSig({
@@ -583,13 +559,13 @@ const tokenExact = useMemo(() => {
       addLog("Requesting relayer signature for CLAIM...");
       await trySend();
     } catch (e: any) {
-      const msg = (e?.message || "").toLowerCase();
+      const m = (e?.message || "").toLowerCase();
       const shouldRetry =
-        msg.includes("expired") ||
-        msg.includes("deadline") ||
-        msg.includes("bad_nonce") ||
-        msg.includes("bad nonce") ||
-        msg.includes("nonce");
+        m.includes("expired") ||
+        m.includes("deadline") ||
+        m.includes("bad_nonce") ||
+        m.includes("bad nonce") ||
+        m.includes("nonce");
       if (shouldRetry) {
         try {
           addLog("Retry: refresh nonce/deadline/signature from server...");
@@ -604,9 +580,9 @@ const tokenExact = useMemo(() => {
         }
       }
       setLastAction(null);
-      const m = e?.message || "Failed to claim";
-      setMsg(m);
-      addLog(`Error: ${m}`);
+      const em = e?.message || "Failed to claim";
+      setMsg(em);
+      addLog(`Error: ${em}`);
     }
   };
 
@@ -623,87 +599,76 @@ const tokenExact = useMemo(() => {
     const proportion = totalSec > 0 ? leftSec / totalSec : 0;
     const initAmt = baseUnitPerEpoch * proportion;
     setEpochBudget({ amt: initAmt, sec: leftSec });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [eNowBn, eLen, baseUnitPerEpoch, epochProgress.leftSec]);
 
-  // ===== Cosmetic per-second stream (randomized but totals match budget) =====
+  // ===== Cosmetic per-second stream =====
   useEffect(() => {
     if (!active || (prelaunch && goLiveOn)) return;
     if (epochBudget.sec <= 0 || epochBudget.amt <= 0) return;
 
     setEpochBudget((prev) => {
       if (prev.sec <= 0 || prev.amt <= 0) return prev;
-
       const baseline = prev.amt / prev.sec;
-      const jitter = 0.85 + Math.random() * 0.3; // 0.85..1.15
+      const jitter = 0.85 + Math.random() * 0.3;
       let inc = baseline * jitter;
       if (inc > prev.amt) inc = prev.amt;
-
       const next = { amt: prev.amt - inc, sec: prev.sec - 1 };
       addLog(`+${inc.toFixed(6)} Base Unit (left: ${next.amt.toFixed(6)})`);
       return next;
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [now, active, prelaunch, goLiveOn]);
 
   // =========== UI ===========
   return (
-    <div className="space-y-4 px-4 pt-4 pb-24">
-      <header className="space-y-1">
-        <h1 className="text-xl font-semibold">Mining Console</h1>
-        <p className="text-sm text-neutral-400">Real-time on-chain monitoring</p>
-      </header>
+    <div className="fin-wrap">
+      {/* Title only (bg gradient via .fin-wrap::before) */}
+      <div className="fin-page-head">
+        <h1>Mining Console</h1>
+        <p>Real-time on-chain monitoring</p>
+      </div>
 
-      <div className="bg-neutral-900/60 border border-neutral-800 rounded-xl p-4 space-y-3 shadow-lg">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-neutral-400">Epoch</span>
-            <span className="text-lg font-semibold">
-              {typeof eNowBn !== "undefined" ? String(eNowBn) : "—"}
-            </span>
+      {/* Console card */}
+      <section className="fin-card fin-card-pad" aria-label="Console">
+        <div className="fin-row">
+          <div className="fin-epoch">
+            <small>Epoch</small>
+            <strong>{typeof eNowBn !== "undefined" ? String(eNowBn) : "—"}</strong>
           </div>
-          <div className="flex items-center gap-2">
-            <span
-              className={`px-2 py-1 rounded-md text-xs font-medium border ${
-                prelaunch && goLiveOn
-                  ? "bg-yellow-500/10 text-yellow-300 border-yellow-500/30"
-                  : active
-                  ? "bg-green-500/10 text-green-400 border-green-500/30"
-                  : "bg-neutral-800 text-neutral-300 border-neutral-700"
-              }`}
-            >
-              {prelaunch && goLiveOn ? "Prelaunch" : active ? "Active" : "Paused"}
-            </span>
-          </div>
+          <span
+            className={
+              prelaunch && goLiveOn
+                ? "fin-badge fin-badge-pre"
+                : active
+                ? "fin-badge fin-badge-active"
+                : "fin-badge fin-badge-paused"
+            }
+          >
+            {prelaunch && goLiveOn ? "Prelaunch" : active ? "Active" : "Paused"}
+          </span>
         </div>
 
-        <div>
-          <div className="flex items-center justify-between text-xs text-neutral-400 mb-1">
+        <div className="fin-progress">
+          <div className="fin-progress-head">
             <span>Epoch progress</span>
-            <span>Next in {leftMMSS}</span>
+            <span>
+              Next in <b>{leftMMSS}</b>
+            </span>
           </div>
-          <div className="h-2 w-full rounded-full bg-neutral-800 overflow-hidden">
-            <div
-              className="h-full bg-blue-500 transition-all"
-              style={{ width: `${epochProgress.pct}%` }}
-            />
+          <div className="fin-bar">
+            <i style={{ width: `${epochProgress.pct}%` }} />
           </div>
         </div>
 
-        <div className="flex items-center justify-between pt-2">
-          <div className="text-xs text-neutral-400">
-            Cooldown: <span className="text-neutral-200">{String(cd ?? 0n)} epoch</span>
+        <div className="fin-actions">
+          <div className="fin-cooldown">
+            Cooldown: <b>{String(cd ?? 0n)}</b> epoch
           </div>
 
           {active ? (
             <button
               onClick={onClaim}
               disabled={!address || busy || !canClaim}
-              className={`px-4 py-2 rounded-lg text-sm font-medium text-white shadow ${
-                !address || busy || !canClaim
-                  ? "bg-neutral-700 text-neutral-400"
-                  : "bg-indigo-600 hover:bg-indigo-500"
-              }`}
+              className="fin-btn fin-btn-claim"
               title={canClaim ? "Claim rewards" : "No rewards available yet"}
             >
               {busy && lastAction === "claim" ? "Claiming…" : "Claim"}
@@ -712,173 +677,131 @@ const tokenExact = useMemo(() => {
             <button
               onClick={onStart}
               disabled={!address || busy || !canToggle || (prelaunch && goLiveOn)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium text-white shadow ${
-                !address || busy || !canToggle || (prelaunch && goLiveOn)
-                  ? "bg-neutral-700 text-neutral-400"
-                  : "bg-emerald-600 hover:bg-emerald-500"
-              }`}
+              className="fin-btn fin-btn-start"
             >
               {busy && lastAction === "start" ? "Starting…" : "Start Mining"}
             </button>
           )}
         </div>
-        {!!msg && <div className="text-xs text-emerald-400 pt-1">{msg}</div>}
-      </div>
+        {!!msg && <div className="fin-msg">{msg}</div>}
+      </section>
 
       {/* Terminal */}
-      <div
-        ref={terminalRef}
-        className="bg-black/50 border border-neutral-800 rounded-lg p-3 font-mono text-xs text-green-400 space-y-1 h-32 overflow-y-auto"
-      >
+      <section className="fin-terminal" ref={terminalRef} aria-label="Terminal">
         <p>&gt; Terminal ready...</p>
         {terminalLogs.map((log, i) => (
           <p key={i}>&gt; {log}</p>
         ))}
-      </div>
+      </section>
 
-      <div className="grid grid-cols-3 gap-2">
-        {/* Effective Hashrate from miningUsage (display only) */}
-        <StatCard title="Effective Hashrate" value={formatNumber(effectiveHashrate)} />
-        {/* Base Unit: 2 decimals + tooltip exact */}
-        <StatCardWithTooltip
-          title="Base Unit / Epoch"
-          valueShort={baseUnitPerEpoch.toLocaleString("en-US", {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-          })}
-          valueExact={baseUnitPerEpoch.toLocaleString("en-US", {
-            minimumFractionDigits: 12,
-          })}
-        />
-<StatCardWithTooltip
-  title="$BaseTC"
-  valueShort={tokenShort}
-  valueExact={tokenExact}
-/>
-      </div>
-      
-      <div className="bg-neutral-900/60 border border-neutral-800 rounded-xl p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold">Your Rigs</h2>
-          {/* small usage badges */}
-          <div className="text-[11px] text-neutral-400 space-x-2">
-            <span>
-              Basic x{String(countBasic)}{" "}
-              {address ? `( ${usedBasic} used, ${idleBasic} idle )` : ""}
-            </span>
-            <span className="mx-1">•</span>
-            <span>
-              Pro x{String(countPro)}{" "}
-              {address ? `( ${usedPro} used, ${idlePro} idle )` : ""}
-            </span>
-            <span className="mx-1">•</span>
-            <span>
-              Legend x{String(countLegend)}{" "}
-              {address ? `( ${usedLegend} used, ${idleLegend} idle )` : ""}
-            </span>
+      {/* Stats */}
+      <section className="fin-stats border-none shadow-none bg-transparent">
+        <div className="fin-stat">
+          <div className="fin-val">{formatNumber(effectiveHashrate)}</div>
+          <div className="fin-cap">Effective Hashrate</div>
+        </div>
+        <div className="fin-stat">
+          <div className="fin-tooltip">
+            <div className="fin-val">
+              {baseUnitPerEpoch.toLocaleString("en-US", {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}
+            </div>
+            <div className="fin-tip">
+              Exact:{" "}
+              {baseUnitPerEpoch.toLocaleString("en-US", {
+                minimumFractionDigits: 12,
+              })}
+            </div>
+          </div>
+          <div className="fin-cap">Base Unit / Epoch</div>
+        </div>
+        <div className="fin-stat">
+          <div className="fin-tooltip">
+            <div className="fin-val">{tokenShort}</div>
+            <div className="fin-tip">Exact: {tokenExact}</div>
+          </div>
+          <div className="fin-cap">$BaseTC</div>
+        </div>
+      </section>
+
+      {/* Rigs */}
+      <section className="fin-card fin-rigs border-0 shadow-none bg-neutral-800/60">
+        <div className="fin-rig-head">
+          <h2>Your Rigs</h2>
+          <div className="fin-rig-note">
+            Basic x{String(countBasic)} • Pro x{String(countPro)} • Legend x{String(countLegend)}
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-3">
-          <RigCard
+        <div className="fin-rig-grid">
+          <RigBox
             tier="Basic"
             count={String(countBasic)}
-            image="/img/basic.png"
             owned={countBasic > 0n}
             badge={address ? `${usedBasic} used, ${idleBasic} idle` : undefined}
+            placeholder="/img/basic.png"
           />
-          <RigCard
+          <RigBox
             tier="Pro"
             count={String(countPro)}
-            image="/img/pro.png"
             owned={countPro > 0n}
             badge={address ? `${usedPro} used, ${idlePro} idle` : undefined}
+            placeholder="/img/pro.png"
           />
-          <RigCard
+          <RigBox
             tier="Legend"
             count={String(countLegend)}
-            image="/img/legend.png"
             owned={countLegend > 0n}
             badge={address ? `${usedLegend} used, ${idleLegend} idle` : undefined}
+            placeholder="/img/legend.png"
           />
         </div>
-      </div>
+      </section>
+
+      <div className="fin-bottom-space" />
     </div>
   );
-}
+};
 
-// --- Components ---
+export default Monitoring;
 
-function StatCard({ title, value }: { title: string; value: string }) {
-  return (
-    <div className="bg-neutral-900/60 border border-neutral-800 rounded-xl p-4 text-center shadow">
-      <div className="text-lg font-semibold">{value}</div>
-      <div className="text-xs text-neutral-400">{title}</div>
-    </div>
-  );
-}
-
-function StatCardWithTooltip({
-  title,
-  valueShort,
-  valueExact,
-}: {
-  title: string;
-  valueShort: string;
-  valueExact: string;
-}) {
-  return (
-    <div className="bg-neutral-900/60 border border-neutral-800 rounded-xl p-4 text-center shadow">
-      <div className="relative inline-block group">
-        <div className="text-lg font-semibold cursor-help">{valueShort}</div>
-        {/* Tooltip (top) */}
-        <div
-          className="absolute -top-2 left-1/2 -translate-x-1/2 -translate-y-full
-                        hidden group-hover:block bg-neutral-800 text-neutral-100 text-xs
-                        px-2 py-1 rounded shadow-lg whitespace-nowrap border border-neutral-700"
-        >
-          Exact: {valueExact}
-          <div
-            className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-full
-                          w-0 h-0 border-l-4 border-r-4 border-t-4 border-l-transparent border-r-transparent border-t-neutral-800"
-          />
-        </div>
-      </div>
-      <div className="text-xs text-neutral-400 mt-1">{title}</div>
-    </div>
-  );
-}
-
-function RigCard({
+/* ---------- Subcomponent: RigBox (render PNG + fallback teks) ---------- */
+function RigBox({
   tier,
   count,
-  image,
   owned,
   badge,
+  placeholder,
 }: {
   tier: string;
   count: string;
-  image: string;
   owned: boolean;
   badge?: string;
+  placeholder: string; // e.g. "/img/basic.png"
 }) {
+  const [imgErr, setImgErr] = useState(false);
+
   return (
-    <div className="bg-neutral-800 rounded-lg p-3 text-center space-y-2">
-      <div
-        className={`relative aspect-square transition-all duration-300 ${
-          !owned ? "filter blur-sm opacity-50" : ""
-        }`}
-      >
-        <Image src={image} alt={`${tier} Rig`} fill style={{ objectFit: "contain" }} />
+    <div className="fin-rig">
+      <div className={`fin-rig-img ${!owned ? "fin-blur" : ""}`}>
+        {!imgErr ? (
+          <Image
+            src={placeholder}
+            alt={`${tier} Rig`}
+            fill
+            sizes="(max-width: 420px) 33vw, 140px"
+            style={{ objectFit: "contain" }}
+            onError={() => setImgErr(true)}
+          />
+        ) : (
+          <span>{tier} PNG</span>
+        )}
       </div>
-      <div>
-        <div className="text-sm text-neutral-400">{tier}</div>
-        <div className="text-lg font-semibold">x{count}</div>
-        {badge ? (
-          <div className="text-[11px] text-neutral-400 mt-0.5">{badge}</div>
-        ) : null}
-      </div>
+      <div className="fin-tier">{tier}</div>
+      <div className="fin-count">x{count}</div>
+      {badge ? <div className="fin-badge-mini">{badge}</div> : null}
     </div>
   );
 }
-

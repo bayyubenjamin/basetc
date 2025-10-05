@@ -2,7 +2,6 @@
 "use client";
 
 import { useState, type FC } from "react";
-// Impor komponen-komponen yang baru dibuat
 import Staking from "./Staking";
 import Spin from "./Spin";
 import Leaderboard from "./Leaderboard";
@@ -12,6 +11,7 @@ type EventTab = "staking" | "spin" | "leaderboard";
 const Event: FC = () => {
   const [activeTab, setActiveTab] = useState<EventTab>("staking");
 
+  // render dynamic content
   const renderContent = () => {
     switch (activeTab) {
       case "staking":
@@ -26,33 +26,38 @@ const Event: FC = () => {
   };
 
   return (
-    <div className="space-y-4 px-4 pt-4 pb-24">
-      <header className="space-y-1">
-        <h1 className="text-xl font-semibold">Events</h1>
-        <p className="text-sm text-neutral-400">
-          Ikuti event untuk mendapatkan lebih banyak reward.
-        </p>
-      </header>
-
-      {/* Sub-navigation */}
-      <div className="flex items-center justify-center gap-2 rounded-lg bg-neutral-800 p-1">
-        {(["staking", "spin", "leaderboard"] as EventTab[]).map((tab) => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`w-full rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-              activeTab === tab
-                ? "bg-neutral-700 text-white"
-                : "text-neutral-400 hover:bg-neutral-700/50"
-            }`}
-          >
-            {tab.charAt(0).toUpperCase() + tab.slice(1)}
-          </button>
-        ))}
+    <div className="fin-wrap fin-content-pad-bottom">
+      {/* Header */}
+      <div className="fin-page-head">
+        <h1>Events</h1>
+        <p>Join special events to earn extra rewards</p>
       </div>
 
-      {/* Konten dinamis berdasarkan tab yang aktif */}
-      <div>{renderContent()}</div>
+      {/* Sub navigation (tabs) */}
+      <div className="fin-card fin-card-trans fin-card-pad" style={{ margin: "16px" }}>
+        <div className="flex items-center justify-center gap-2">
+          {(["staking", "spin", "leaderboard"] as EventTab[]).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`flex-1 text-sm font-semibold rounded-lg py-2 transition-all duration-150 ${
+                activeTab === tab
+                  ? "bg-blue-600 text-white shadow-md"
+                  : "bg-transparent text-neutral-400 hover:bg-blue-600/20"
+              }`}
+            >
+              {tab.charAt(0).toUpperCase() + tab.slice(1)}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Content */}
+      <section className="fin-card fin-card-trans fin-card-pad" style={{ margin: "16px" }}>
+        {renderContent()}
+      </section>
+
+      <div className="fin-bottom-space" />
     </div>
   );
 };

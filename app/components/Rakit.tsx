@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import type { FC } from "react";
+import { useEffect, useMemo, useState, type FC } from "react";
 import Image from "next/image";
 import {
   useAccount,
@@ -37,15 +36,24 @@ const TierImg: Record<"basic"|"pro"|"legend", string> = {
   legend: "/img/vga_legend.gif",
 };
 
+/* Slot kecil preview kepemilikan — mengikuti tema fin-* */
 const NftSlot: FC<{ filled: boolean; tier: "basic" | "pro" | "legend" }> = ({ filled, tier }) => (
   <div
-    className={`w-12 h-12 md:w-16 md:h-16 rounded-md flex items-center justify-center border-2 ${
-      filled ? "bg-green-500/20 border-green-500/50" : "bg-neutral-800 border-neutral-700"
-    }`}
+    className={`rounded-md grid place-items-center border
+      ${filled ? "bg-green-500/12 border-green-500/40" : "bg-[#151a2e] border-[#1e263f]"}
+      w-12 h-12 md:w-16 md:h-16`}
   >
     {filled ? (
-      <Image src={TierImg[tier]} alt={`${tier} rig`} width={48} height={48} className="object-contain" />
-    ) : null}
+      <Image
+        src={TierImg[tier]}
+        alt={`${tier} rig`}
+        width={48}
+        height={48}
+        className="object-contain"
+      />
+    ) : (
+      <div className="text-[10px] text-neutral-400">empty</div>
+    )}
   </div>
 );
 
@@ -66,7 +74,7 @@ export default function Rakit() {
   const PRO    = proId.data    as bigint | undefined;
   const LEGEND = legendId.data as bigint | undefined;
 
-  /* Owned balances (untuk “Owned: N”) */
+  /* Owned balances */
   const basicBal  = useReadContract({
     address: rigNftAddress as `0x${string}`,
     abi: rigNftABI as any,
@@ -191,7 +199,6 @@ export default function Rakit() {
   async function onMergeBasicToPro() {
     if (!user) return setStatus("Connect wallet dulu.");
     setStatus("");
-    // tampilkan alasan langsung di panel, tombol tetap klikable
     if (!onBase) return setStatus("Please switch network to Base Sepolia.");
     if (ownedBasic < needBP) return setStatus(`Butuh ${String(needBP)} Basic untuk merge.`);
     if (caps.p <= 0) return setStatus("rigCaps.p = 0 (slot Pro belum di-set).");
@@ -200,7 +207,6 @@ export default function Rakit() {
     try {
       await ensureApprove(feeB2P);
       await runMerge("BASIC_TO_PRO");
-      // refresh owned/usage biar slot update
       await Promise.all([basicBal.refetch?.(), proBal.refetch?.(), miningUsage.refetch?.()]);
     } catch (e: any) {
       setStatus(e?.shortMessage || e?.message || "Merge failed");
@@ -224,93 +230,126 @@ export default function Rakit() {
     }
   }
 
-  /* ---------------- UI (desain grid slot seperti awal) ---------------- */
+  /* ---------------- UI (tema fintech selaras Monitoring) ---------------- */
   return (
-    <div className="space-y-4 px-4 pt-4 pb-8">
-      <header className="space-y-1">
-        <h1 className="text-xl font-semibold">Build Rig</h1>
-        <p className="text-sm text-neutral-400">Upgrade &amp; Merge your rigs</p>
-      </header>
+    <div className="fin-wrap fin-content-pad-bottom">
+      {/* Hero title (gradient statis datang dari html::before / .fin-wrap::before) */}
+      <div className="fin-page-head">
+        <h1>Build Rig</h1>
+        <p>Upgrade &amp; merge your rigs</p>
+      </div>
 
-      {/* Basic */}
-      <section className="bg-neutral-800 rounded-lg p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-semibold">Basic Rigs</h2>
-            <p className="text-sm text-neutral-400">Owned: {String(ownedBasic)}</p>
+      {/* BASIC */}
+      <section className="fin-card fin-card-pad" aria-label="Basic rigs">
+        <div className="fin-row">
+          <div className="fin-epoch">
+            <small>Basic</small>
+            <strong>Owned: {String(ownedBasic)}</strong>
           </div>
-          <Image src={TierImg.basic} alt="Basic rig" width={64} height={64} />
+          <div className="flex items-center gap-2">
+            <Image src={TierImg.basic} alt="Basic rig" width={44} height={44} />
+          </div>
         </div>
-        <div className="grid grid-cols-5 gap-2">
+
+        <div className="mt-3 grid grid-cols-5 gap-2">
           {Array.from({ length: Math.max(1, caps.b) }).map((_, i) => (
-            <NftSlot key={`b-${i}`} filled={i < Math.min(Number(ownedBasic), caps.b)} tier="basic" />
+            <NftSlot
+              key={`b-${i}`}
+              filled={i < Math.min(Number(ownedBasic), caps.b)}
+              tier="basic"
+            />
           ))}
         </div>
-        <button
-          onClick={(e) => { e.preventDefault(); onMergeBasicToPro(); }}
-          className={`w-full px-3 py-2 text-sm rounded-md transition-colors ${
-            user ? "bg-blue-600 hover:bg-blue-500 text-white" : "bg-neutral-700 text-neutral-400 cursor-not-allowed"
-          }`}
-          disabled={!user} // cuma disabled saat belum connect
-        >
-          {`Merge ${String(needBP)} for Pro`}
-          <span className="ml-2 text-xs text-neutral-300">
-            (fee {fmt2(Number(formatUnits(feeB2P, feeDecimals)))} {feeSymbol})
-          </span>
-        </button>
+
+        <div className="fin-actions">
+          <div className="fin-cooldown">
+            Need: <b>{String(needBP)}</b> Basic → Pro
+            <span className="opacity-70 ml-2">
+              (fee {fmt2(Number(formatUnits(feeB2P, feeDecimals)))} {feeSymbol})
+            </span>
+          </div>
+          <button
+            onClick={(e) => { e.preventDefault(); onMergeBasicToPro(); }}
+            className="fin-btn fin-btn-claim"
+            disabled={!user}
+            title={!user ? "Connect wallet" : "Merge to Pro"}
+          >
+            Merge to Pro
+          </button>
+        </div>
       </section>
 
-      {/* Pro */}
-      <section className="bg-neutral-800 rounded-lg p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-semibold">Pro Rigs</h2>
-            <p className="text-sm text-neutral-400">Owned: {String(ownedPro)}</p>
+      {/* PRO */}
+      <section className="fin-card fin-card-pad" aria-label="Pro rigs">
+        <div className="fin-row">
+          <div className="fin-epoch">
+            <small>Pro</small>
+            <strong>Owned: {String(ownedPro)}</strong>
           </div>
-          <Image src={TierImg.pro} alt="Pro rig" width={64} height={64} />
+          <div className="flex items-center gap-2">
+            <Image src={TierImg.pro} alt="Pro rig" width={44} height={44} />
+          </div>
         </div>
-        <div className="grid grid-cols-5 gap-2">
+
+        <div className="mt-3 grid grid-cols-5 gap-2">
           {Array.from({ length: Math.max(1, caps.p) }).map((_, i) => (
-            <NftSlot key={`p-${i}`} filled={i < Math.min(Number(ownedPro), caps.p)} tier="pro" />
+            <NftSlot
+              key={`p-${i}`}
+              filled={i < Math.min(Number(ownedPro), caps.p)}
+              tier="pro"
+            />
           ))}
         </div>
-        <button
-          onClick={(e) => { e.preventDefault(); onMergeProToLegend(); }}
-          className={`w-full px-3 py-2 text-sm rounded-md transition-colors ${
-            user ? "bg-purple-600 hover:bg-purple-500 text-white" : "bg-neutral-700 text-neutral-400 cursor-not-allowed"
-          }`}
-          disabled={!user}
-        >
-          {`Merge ${String(needPL)} for Legend`}
-          <span className="ml-2 text-xs text-neutral-300">
-            (fee {fmt2(Number(formatUnits(feeP2L, feeDecimals)))} {feeSymbol})
-          </span>
-        </button>
+
+        <div className="fin-actions">
+          <div className="fin-cooldown">
+            Need: <b>{String(needPL)}</b> Pro → Legend
+            <span className="opacity-70 ml-2">
+              (fee {fmt2(Number(formatUnits(feeP2L, feeDecimals)))} {feeSymbol})
+            </span>
+          </div>
+          <button
+            onClick={(e) => { e.preventDefault(); onMergeProToLegend(); }}
+            className="fin-btn fin-btn-claim"
+            disabled={!user}
+            title={!user ? "Connect wallet" : "Merge to Legend"}
+          >
+            Merge to Legend
+          </button>
+        </div>
       </section>
 
-      {/* Legend */}
-      <section className="bg-neutral-800 rounded-lg p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-semibold">Legend Rigs</h2>
-            <p className="text-sm text-neutral-400">Owned: {String(ownedLegend)}</p>
+      {/* LEGEND (display only + note) */}
+      <section className="fin-card fin-card-pad" aria-label="Legend rigs">
+        <div className="fin-row">
+          <div className="fin-epoch">
+            <small>Legend</small>
+            <strong>Owned: {String(ownedLegend)}</strong>
           </div>
-          <Image src={TierImg.legend} alt="Legend rig" width={64} height={64} />
+          <div className="flex items-center gap-2">
+            <Image src={TierImg.legend} alt="Legend rig" width={44} height={44} />
+          </div>
         </div>
-        <div className="grid grid-cols-5 gap-2">
+
+        <div className="mt-3 grid grid-cols-5 gap-2">
           {Array.from({ length: Math.max(1, caps.l) }).map((_, i) => (
-            <NftSlot key={`l-${i}`} filled={i < Math.min(Number(ownedLegend), caps.l)} tier="legend" />
+            <NftSlot
+              key={`l-${i}`}
+              filled={i < Math.min(Number(ownedLegend), caps.l)}
+              tier="legend"
+            />
           ))}
         </div>
-        <p className="text-xs text-neutral-400">
-          Per-wallet Legend limit mengikuti <code>rigCaps.l</code> (default 3). Jika sudah penuh,
-          merge ke Legend akan dinonaktifkan oleh guard server.
+
+        <p className="fin-cooldown mt-2">
+          Per-wallet Legend limit mengikuti <code>rigCaps.l</code> (default 3). Jika sudah
+          penuh, merge ke Legend akan dinonaktifkan oleh guard server.
         </p>
       </section>
 
-      {/* Status panel (selalu kelihatan step-nya) */}
-      <div className="text-xs text-neutral-300 min-h-5">{status}</div>
+      {/* status */}
+      <div className="fin-msg min-h-5">{status}</div>
+      <div className="fin-bottom-space" />
     </div>
   );
 }
-

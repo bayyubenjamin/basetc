@@ -1,20 +1,15 @@
-// app/components/Navigation.tsx
 "use client";
 
 import type { FC } from "react";
 
-/**
- * A union type representing the names of each tab in the application.
- */
 export type TabName = "monitoring" | "rakit" | "market" | "profil" | "event";
 
 interface NavItem {
   id: TabName;
   label: string;
-  iconPath: string; // Heroicon path data
+  iconPath: string;
 }
 
-// Define the navigation items with labels and simple SVG paths from Heroicons
 const NAV_ITEMS: NavItem[] = [
   {
     id: "monitoring",
@@ -36,7 +31,8 @@ const NAV_ITEMS: NavItem[] = [
   {
     id: "event",
     label: "Event",
-    iconPath: "M16.5 18.75h-9m9 0a3 3 0 013 3h-15a3 3 0 013-3m9 0v-3.375c0-.621-.504-1.125-1.125-1.125h-6.75c-.621 0-1.125.504-1.125 1.125v3.375m9 0h-9",
+    iconPath:
+      "M16.5 18.75h-9m9 0a3 3 0 013 3h-15a3 3 0 013-3m9 0v-3.375c0-.621-.504-1.125-1.125-1.125h-6.75c-.621 0-1.125.504-1.125 1.125v3.375m9 0h-9",
   },
   {
     id: "profil",
@@ -51,41 +47,32 @@ const Navigation: FC<{
   setActiveTab: (tab: TabName) => void;
 }> = ({ activeTab, setActiveTab }) => {
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-neutral-900 border-t border-neutral-700 p-2">
-      <div className="flex justify-around">
-        {NAV_ITEMS.map((item) => {
-          const isActive = item.id === activeTab;
-          return (
-            <button
-              key={item.id}
-              onClick={() => setActiveTab(item.id)}
-              className={[
-                "group flex flex-col items-center justify-center rounded-md px-2 py-1.5 text-xs font-medium transition-colors w-1/5",
-                isActive
-                  ? "bg-neutral-800 text-white"
-                  : "text-neutral-400 hover:bg-neutral-800 hover:text-white",
-              ].join(" ")}
-              aria-current={isActive ? "page" : undefined}
+    <nav className="fin-bottom-nav" role="navigation" aria-label="Main navigation">
+      {NAV_ITEMS.map((item) => {
+        const isActive = item.id === activeTab;
+        return (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => setActiveTab(item.id)}
+            className={`fin-nav-tab${isActive ? " is-active" : ""}`}
+            aria-current={isActive ? "page" : undefined}
+            aria-label={item.label}
+          >
+            <svg
+              className="fin-nav-icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={1.5}
+              aria-hidden="true"
             >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="w-5 h-5 mb-0.5"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={1.5}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d={item.iconPath}
-                />
-              </svg>
-              <span className="truncate">{item.label}</span>
-            </button>
-          );
-        })}
-      </div>
+              <path strokeLinecap="round" strokeLinejoin="round" d={item.iconPath} />
+            </svg>
+            <span className="fin-nav-label">{item.label}</span>
+          </button>
+        );
+      })}
     </nav>
   );
 };

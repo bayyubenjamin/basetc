@@ -2,7 +2,242 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Base colours and typography for the mini app */
-body {
-  @apply bg-neutral-950 text-neutral-50 overflow-x-hidden;
+/* ==============================
+   PALETTE & BASE
+============================== */
+:root{
+  --bg:#0a0d12;
+  --surface:#0e1220;
+  --card:#101525;
+  --muted:#9fb0d6;
+  --text:#eef3ff;
+  --accent:#2b7bff;
+  --accent2:#022cbe;
+  --ok:#1db954;
+  --warn:#eab308;
+  --err:#ef4444;
+  --stroke:rgba(255,255,255,.06);
+}
+
+html, body { min-height:100%; }
+html { background: var(--bg); color-scheme: dark; }
+body { @apply overflow-x-hidden; color: var(--text); }
+
+/* ==============================
+   GLOBAL STATIC HERO BACKGROUND
+   (stays fixed; not scrolling)
+============================== */
+html::before{
+  content:"";
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: 750px; /* tinggi area biru; ubah sesuai selera */
+  pointer-events: none;
+  z-index: -1; /* DI BELAKANG seluruh konten */
+  background: linear-gradient(
+    180deg,
+    rgba(15, 78, 255, 0.85) 0%,   /* biru terang agak transparan */
+    rgba(2, 44, 190, 0.75) 35%,   /* biru tua */
+    rgba(10, 13, 18, 0.55) 65%,   /* transisi lembut ke gelap */
+    rgba(10, 13, 18, 1) 100%      /* latar belakang utama */
+  );
+  background-repeat: no-repeat;
+  background-attachment: fixed;   /* diam saat discroll */
+  background-size: 100% 100%;
+  transform: translateZ(0);
+  will-change: transform;
+}
+
+/* (Opsional) glow lembut dari atas */
+html::after{
+  content:"";
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: 500px;
+  z-index: -2;
+  background: radial-gradient(
+    circle at top center,
+    rgba(43, 123, 255, 0.25),
+    transparent 70%
+  );
+  filter: blur(60px);
+}
+
+/* ==============================
+   PAGE HEADING
+============================== */
+.fin-page-head{ padding: 18px 16px 0; }
+.fin-page-head h1{ margin:0; font-size:22px; font-weight:700; }
+.fin-page-head p{ margin:6px 0 0; color:#d7e2ff; opacity:.85; font-size:12px; }
+
+/* ==============================
+   CARDS & COMPONENTS
+   (NO OUTLINE VERSION)
+============================== */
+.fin-card{
+  background:var(--card);
+  border:0;                                 /* ← remove outline */
+  border-radius:18px;
+  /* remove the faint inner white ring, keep soft drop shadow only */
+  box-shadow:0 18px 40px rgba(0,0,0,.45);
+  margin:14px 16px;
+}
+.fin-card-pad{ padding:14px; }
+
+.fin-row{ display:flex; justify-content:space-between; align-items:center; gap:12px; }
+.fin-epoch{ display:flex; align-items:center; gap:6px; }
+.fin-epoch small{ color:#c9d6ff; opacity:.7; }
+
+.fin-badge{ font-size:12px; padding:6px 10px; border-radius:10px; border:1px solid; font-weight:700; }
+.fin-badge-active{ background:rgba(29,185,84,.1); color:#9dffb1; border-color:rgba(29,185,84,.35); }
+.fin-badge-paused{ background:#1b2133; color:#e3e6f1; border-color:#2a334a; }
+.fin-badge-pre{ background:rgba(234,179,8,.12); color:#fde68a; border-color:rgba(234,179,8,.35); }
+
+.fin-progress{ margin-top:10px; }
+.fin-progress-head{ display:flex; justify-content:space-between; color:var(--muted); font-size:12px; margin-bottom:6px; }
+.fin-bar{ height:8px; background:#0f1730; border-radius:6px; overflow:hidden; }
+.fin-bar>i{ display:block; height:100%; background:var(--accent); width:0; transition:width .4s; }
+
+.fin-actions{ display:flex; justify-content:space-between; align-items:center; margin-top:12px; }
+.fin-cooldown{ font-size:12px; color:var(--muted); }
+.fin-btn{ border:0; border-radius:12px; padding:10px 14px; font-weight:700; color:#fff; cursor:pointer; }
+.fin-btn:disabled{ opacity:.4; cursor:not-allowed; }
+.fin-btn-start{ background:#10b981; }
+.fin-btn-claim{ background:#6366f1; }
+.fin-msg{ margin-top:6px; font-size:12px; color:#92ffaf; }
+
+/* ==============================
+   TERMINAL (KEEP ORIGINAL)
+============================== */
+.fin-terminal{
+  height:130px; margin:10px 16px 0; background:#00000080; border:1px solid #1f2937;
+  border-radius:12px; padding:10px;
+  font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,"Liberation Mono","Courier New",monospace;
+  font-size:12px; color:#8bff8b; overflow:auto;
+}
+.fin-terminal p{ margin:2px 0; }
+
+/* ==============================
+   STATS (NO OUTLINE)
+============================== */
+.fin-stats{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin:12px 16px; }
+.fin-stat{
+  background:#0f1426;
+  border:0;                                 /* ← remove outline */
+  border-radius:14px;
+  padding:12px;
+  text-align:center;
+  box-shadow:0 12px 28px rgba(0,0,0,.35);
+}
+.fin-val{ font-size:18px; font-weight:800; }
+.fin-cap{ font-size:11px; color:var(--muted); margin-top:2px; }
+.fin-tooltip{ position:relative; display:inline-block; }
+.fin-tip{
+  position:absolute; left:50%; bottom:100%; transform:translate(-50%,-6px);
+  white-space:nowrap; background:#141a2c; border:1px solid #24304a; color:#fff; font-size:11px;
+  padding:4px 8px; border-radius:6px; display:none;
+}
+.fin-tooltip:hover .fin-tip{ display:block; }
+
+/* ==============================
+   RIGS (NO OUTLINE)
+============================== */
+.fin-rigs{ padding:14px; }
+.fin-rig-head{ display:flex; justify-content:space-between; align-items:center; }
+.fin-rig-head h2{ font-size:14px; margin:0; }
+.fin-rig-note{ font-size:11px; color:var(--muted); }
+.fin-rig-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:12px; }
+.fin-rig{
+  background:#151a2e;
+  border:0;                                 /* ← remove outline */
+  border-radius:12px;
+  padding:10px;
+  text-align:center;
+  box-shadow:0 12px 28px rgba(0,0,0,.30);
+}
+.fin-rig-img{
+  width:100%; aspect-ratio:1/1; background:#0f1426;
+  border-radius:10px; border:0;             /* ← remove dashed outline */
+  display:grid; place-items:center; color:#7aa2ff; position:relative;
+}
+.fin-tier{ font-size:12px; color:var(--muted); margin-top:6px; }
+.fin-count{ font-weight:800; }
+.fin-badge-mini{ margin-top:4px; font-size:11px; color:var(--muted); }
+.fin-blur{ filter:blur(2px); opacity:.55; }
+
+/* ==============================
+   NAV SPACER & CONTENT PADDING
+============================== */
+.fin-bottom-space{ height:96px; }
+.fin-content-pad-bottom{
+  padding-bottom: calc(96px + env(safe-area-inset-bottom)) !important;
+}
+
+/* ==============================
+   FINTECH BOTTOM NAV
+   (dibiarkan seperti sebelumnya)
+============================== */
+.fin-bottom-nav{
+  position:fixed !important;
+  left:10px; right:10px; bottom:10px;
+  padding-bottom:max(10px, env(safe-area-inset-bottom)) !important;
+  height:auto;
+  background:var(--surface);
+  border-radius:28px;
+  box-shadow:0 10px 30px rgba(0,0,0,.6), 0 0 0 1px var(--stroke) inset;
+  padding-top:10px; padding-left:14px; padding-right:14px;
+  display:grid !important;
+  grid-template-columns:repeat(5,1fr) !important;
+  align-items:end !important; gap:4px;
+  z-index:60;
+}
+.fin-nav-tab{
+  position:relative;
+  display:flex !important;
+  flex-direction:column !important;
+  align-items:center !important;
+  justify-content:center !important;
+  gap:6px !important;
+  color:#c5d2f5; font-size:13px; font-weight:600;
+  opacity:.95;
+  border:0 !important; background:transparent !important;
+  padding:6px 0 8px !important;
+  border-radius:14px !important;
+  transition:transform .12s ease, color .12s ease, opacity .12s ease;
+  width:100% !important;
+}
+.fin-nav-tab:hover{ transform:translateY(-1px); opacity:1; }
+.fin-nav-tab.is-active{ color:#fff !important; }
+.fin-nav-tab.is-active::before{
+  content:"";
+  position:absolute; top:-6px; left:16px; right:16px; height:30px;
+  border-radius:12px; background:#1b2133;
+}
+.fin-nav-icon{ width:22px !important; height:22px !important; margin:0 !important; padding:0 !important; display:block !important; pointer-events:none; z-index:1; }
+.fin-nav-label{ display:block !important; line-height:1 !important; white-space:nowrap !important; z-index:1; }
+
+/* ==============================
+   RESPONSIVE TWEAKS (opsional)
+============================== */
+@media (min-width: 400px){
+  html::before, html::after{ height: 520px; }
+}
+@media (min-width: 480px){
+  html::before, html::after{ height: 560px; }
+}
+
+/* ==============================
+   Transparent card variant for Event page
+   (NO OUTLINE)
+============================== */
+.fin-card-trans {
+  background: rgba(20, 25, 35, 0.45);
+  backdrop-filter: blur(12px);
+  border: 0;                                 /* ← remove outline */
+  border-radius: 18px;
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.40);
+  transition: all 0.25s ease;
+}
+.fin-card-trans:hover {
+  background: rgba(25, 30, 45, 0.55);
 }
