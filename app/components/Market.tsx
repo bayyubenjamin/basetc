@@ -7,7 +7,7 @@ import {
   useAccount,
   useReadContract,
   useWriteContract,
-  // usePublicClient dihapus karena tidak lagi digunakan di handleClaimInviteReward
+  usePublicClient, // <-- tambahkan import hook di sini
 } from "wagmi";
 import { baseSepolia } from "viem/chains";
 import {
@@ -74,9 +74,12 @@ const NFT_DATA: NFTTier[] = [
 ============================= */
 const Market: FC = () => {
   const { address } = useAccount();
-  // const publicClient dihapus karena tidak lagi digunakan di handleClaimInviteReward
+  // const publicClient dihapus karena tidak lagi digunakan di handleClaimInviteReward (komentar lama)
   const [message, setMessage] = useState<string>("");
   const [loading, setLoading] = useState(false);
+
+  // <-- gunakan hook di level atas komponen (perbaikan utama)
+  const publicClient = usePublicClient();
 
   /* ---------- Rig IDs ---------- */
   const { data: BASIC }  = useReadContract({ address: rigNftAddress, abi: rigNftABI as any, functionName: "BASIC" });
@@ -185,14 +188,12 @@ const Market: FC = () => {
       });
       
       setMessage("3/3: Waiting for confirmation…");
-      // Dapatkan public client (untuk menunggu receipt)
-      const publicClient = (await import('wagmi')).usePublicClient();
+      // PERBAIKAN: gunakan publicClient dari hook top-level
       await publicClient?.waitForTransactionReceipt({ hash: txHash });
 
       // --- SINKRONISASI REFERRAL: Tandai referral sebagai 'valid' di Supabase
       if (inviter !== "0x0000000000000000000000000000000000000000") {
         setMessage("Finalizing: Updating referral status..."); 
-        // Panggil API mark-valid untuk mencatat referral sebagai valid
         await fetch("/api/referral", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -223,10 +224,7 @@ const Market: FC = () => {
       const price = priceOf(id) as bigint | undefined;
       if (!price || price === 0n) throw new Error("Item is not for sale.");
 
-      // Dapatkan public client (untuk menunggu receipt)
-      const { usePublicClient } = await import('wagmi');
-      const publicClient = usePublicClient();
-
+      // PERBAIKAN: hapus dynamic import; gunakan publicClient dari hook top-level
       if (mode === 0) {
         const txHash = await writeContractAsync({
           address: rigSaleAddress,
@@ -445,3 +443,4 @@ const Market: FC = () => {
 };
 
 export default Market;
+
