@@ -1,3 +1,4 @@
+// app/components/Profil.tsx
 "use client";
 
 import { useEffect, useMemo, useState, useCallback } from "react";
@@ -121,14 +122,15 @@ export default function Profil() {
   const [shareLoading, setShareLoading] = useState(false);
   const buildCastText = useCallback(() => "BaseTC Console: mine onchain, upgrade rigs, and earn $BaseTC.", []);
 
-  /** Referral link */
+  /** Referral link: DIGANTI UNTUK MENGGUNAKAN FIDREF */
   const inviteLink = useMemo(() => {
-    if (typeof window === "undefined" || !address) return "";
+    if (typeof window === "undefined" || !fcUser?.fid) return "";
     const base = window.location.origin || "";
-    const refQuery = `ref=${address}`;
-    const fidQuery = fcUser?.fid ? `&fid=${fcUser.fid}` : "";
-    return `${base}?${refQuery}${fidQuery}`;
-  }, [fcUser?.fid, address]);
+    // Menggunakan fidref (FID Pengundang) sebagai parameter baru
+    const fidRefQuery = `fidref=${fcUser.fid}`;
+    // Link mengarah ke /launch
+    return `${base}/launch?${fidRefQuery}`; 
+  }, [fcUser?.fid]);
 
   const onShareReferral = useCallback(async () => {
     if (!inviteLink) return;

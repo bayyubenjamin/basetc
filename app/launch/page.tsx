@@ -12,6 +12,7 @@ import Market from "../components/Market";
 import Profil from "../components/Profil";
 import Event from "../components/Event"; // <-- Impor komponen baru
 import FidInput from "../components/FidInput";
+import { ethers } from "ethers"; // <-- TAMBAH: Import Ethers untuk validasi alamat
 
 const DEFAULT_TAB: TabName = "monitoring";
 const TAB_KEY = "basetc_active_tab";
@@ -98,18 +99,64 @@ function AppInitializer() {
     if (finalFid) {
       localStorage.setItem("basetc_fid", String(finalFid));
       setResolvedFid(finalFid);
-      try {
-        const url = new URL(window.location.href);
-        const ref = url.searchParams.get("ref");
-        if (ref && /^0x[0-9a-fA-F]{40}$/.test(ref)) {
-          localStorage.setItem("basetc_ref", ref);
-          fetch("/api/referral", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ mode: "touch", inviter: ref, invitee_fid: finalFid }),
-          }).catch(err => console.error("Referral touch failed:", err));
+      
+      // --- LOGIKA REFERRAL BARU (Mengatasi URL Stripping) ---
+      (async () => {
+        try {
+          const url = new URL(window.location.href);
+          
+          // 1. Cek parameter baru: fidref (FID PENGUNDANG)
+          const fidref = url.searchParams.get("fidref"); 
+          let inviterWallet: string | null = null;
+
+          if (fidref && /^\d+$/.test(fidref)) {
+            // A. Ambil alamat wallet Inviter dari backend menggunakan FID mereka
+            const res = await fetch("/api/user", { 
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ mode: "get_wallet_by_fid", fid: Number(fidref) }),
+            });
+            const data = await res.json();
+            
+            // Verifikasi respons dari API resolver baru
+            if (data?.ok && data.wallet && ethers.utils.isAddress(data.wallet)) {
+                inviterWallet = data.wallet;
+            } else {
+                console.warn(`FID Referral found (${fidref}), but wallet resolution failed:`, data?.error);
+            }
+          }
+          
+          // 2. Jika fidref gagal/tidak ada, coba cek parameter lama ('ref') atau dari local storage
+          if (!inviterWallet) {
+            const ref = url.searchParams.get("ref");
+            if (ref && ethers.utils.isAddress(ref)) {
+                inviterWallet = ref;
+            } else {
+                // Final fallback check to localStorage
+                const localRef = localStorage.getItem("basetc_ref");
+                if (localRef && ethers.utils.isAddress(localRef)) {
+                    inviterWallet = localRef;
+                }
+            }
+          }
+
+          // 3. Jika Inviter Wallet ditemukan, catat touch
+          if (inviterWallet && inviterWallet.toLowerCase() !== "0x0000000000000000000000000000000000000000") {
+            // Simpan alamat Inviter yang valid ke localStorage untuk langkah klaim berikutnya
+            localStorage.setItem("basetc_ref", inviterWallet); 
+            
+            // Catat touch ke Supabase (status pending)
+            fetch("/api/referral", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ mode: "touch", inviter: inviterWallet, invitee_fid: finalFid }),
+            }).catch(err => console.error("Referral touch failed:", err));
+          }
+
+        } catch (error) {
+            console.error("General referral processing error:", error);
         }
-      } catch {}
+      })();
     }
   }, [ready, user]);
 
