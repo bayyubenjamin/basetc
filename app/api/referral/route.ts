@@ -68,7 +68,6 @@ function requireAddress(value: string, name: string) {
   }
 }
 
-// FIX: Helper baru untuk memastikan FID adalah string angka yang valid
 function requireFidString(value: unknown, name: string): string {
   if (typeof value !== "string" || value.trim().length === 0) {
     throw new Error(`Field "${name}" wajib diisi (string).`);
@@ -114,7 +113,6 @@ async function trackReferral(inviter: string, invitee_fid: string, status: "pend
   if (invitee_wallet) {
     data.invitee_wallet = invitee_wallet;
   }
-  // FIX: Menggunakan onConflict yang benar untuk upsert
   const { error } = await getSupabaseAdmin()
     .from(TABLE_REFERRALS)
     .upsert(data, { onConflict: "inviter,invitee_fid" });
@@ -142,7 +140,7 @@ async function mintBasicViaRigNFT(to: string) {
 }
 
 /* =========================
-   MAIN POST HANDLER
+   MAIN POST HANDLER (Writes data)
    ========================= */
 export async function POST(req: NextRequest) {
   try {
@@ -155,11 +153,11 @@ export async function POST(req: NextRequest) {
     switch (mode) {
       case "touch":
       case "track": {
-        // FIX: Menggunakan requireFidString untuk memastikan FID valid
         requireString(body.inviter, "inviter");
         const invitee_fid_str = requireFidString(body.invitee_fid, "invitee_fid");
         
-        const inviter = body.inviter.trim();
+        // FIX 1: Ubah inviter menjadi lowercase sebelum menyimpan ke DB
+        const inviter = body.inviter.trim().toLowerCase(); 
         const invitee_fid = invitee_fid_str;
         const invitee_wallet = body.invitee_wallet ? body.invitee_wallet.toLowerCase() : null;
         const status = (body.status === "valid" ? "valid" : "pending") as "pending" | "valid";
@@ -170,7 +168,7 @@ export async function POST(req: NextRequest) {
 
       case "stats": {
         requireString(body.inviter, "inviter");
-        const inviter = body.inviter.trim();
+        const inviter = body.inviter.trim().toLowerCase(); // FIX: Lowercase untuk konsistensi
         const [validInvites, usedClaims] = await Promise.all([
           countValidInvites(inviter),
           sumUsedClaims(inviter),
@@ -182,9 +180,9 @@ export async function POST(req: NextRequest) {
       case "claim": {
         requireString(body.inviter, "inviter");
         requireString(body.receiver, "receiver");
-        requireFidString(body.invitee_fid, "invitee_fid"); // Diperlukan untuk memberi poin
+        requireFidString(body.invitee_fid, "invitee_fid");
 
-        const inviterAddress = body.inviter.trim();
+        const inviterAddress = body.inviter.trim().toLowerCase(); // FIX: Lowercase
         const receiverAddress = body.receiver.trim();
         const inviteeFid = body.invitee_fid;
         requireAddress(receiverAddress, "receiver");
@@ -209,7 +207,6 @@ export async function POST(req: NextRequest) {
 
         await recordClaim(inviterAddress, 1, txHash);
         
-        // Poin Leaderboard dibayarkan di step "mark-valid"
         return NextResponse.json({ ok: true, txHash });
       }
       
@@ -237,7 +234,6 @@ export async function POST(req: NextRequest) {
               return NextResponse.json({ ok: true, message: "Referral already marked valid or not found." });
           }
 
-          // Trigger point referral
           if (SUPABASE_URL && SUPABASE_ANON_KEY) {
               const supabaseAnon = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
               const inviterAddress = updateData.inviter;
@@ -250,7 +246,6 @@ export async function POST(req: NextRequest) {
                   .maybeSingle();
 
               if (inviterData?.fid) {
-                  // Panggil Edge Function untuk memberikan poin referral ke inviter
                   supabaseAnon.functions.invoke('add-referral-points', {
                       body: { 
                           referrer_fid: inviterData.fid,
@@ -269,7 +264,6 @@ export async function POST(req: NextRequest) {
           return NextResponse.json({ error: "Backend signer PK missing." }, { status: 500 });
         }
         
-        // FIX: Menggunakan requireFidString
         const fidStr = requireFidString(body.fid, "fid");
 
         if (!body.to || !body.inviter || !ethers.isAddress(body.to)) {
@@ -277,11 +271,15 @@ export async function POST(req: NextRequest) {
         }
         
         const fid = BigInt(fidStr);
-        const { to, inviter } = body as { to: `0x${string}`; inviter: `0x${string}` };
-        
-        const account = privateKeyToAccount(pk as `0x${string}`);
-        const deadline = BigInt(Math.floor(Date.now() / 1000) + 15 * 60);
+        // Pastikan Inviter yang disign juga lowercased agar konsisten
+        const to = body.to as `0x${string}`;
+        const inviter = body.inviter.toLowerCase() as `0x${string}`;
 
+        const deadline = BigInt(Math.floor(Date.now() / 1000) + 15 * 60);
+        
+        // ... (Logika Signing EIP-712 tetap sama) ...
+        const account = privateKeyToAccount(pk as `0x${string}`);
+        
         const domain = {
             name: "RigSaleFlexible",
             version: "1",
@@ -301,7 +299,7 @@ export async function POST(req: NextRequest) {
         const message = {
             fid: fid,
             to: to,
-            inviter: inviter,
+            inviter: inviter, // Gunakan inviter yang sudah di-lowercase
             deadline,
         };
 
@@ -326,15 +324,16 @@ export async function POST(req: NextRequest) {
     }
   } catch (e: any) {
     console.error("API referral error:", e);
-    // Penanganan Error yang Lebih Baik
     if (e.message.includes("fid is required and must be a number")) {
-         // Pesan error dari middleware/validasi umum
         return NextResponse.json({ error: "Validasi data umum gagal: FID Pengundang diperlukan. Pastikan Anda memiliki FID yang sah." }, { status: 400 });
     }
     return NextResponse.json({ error: String(e?.message || "Server error") }, { status: 500 });
   }
 }
 
+/* =========================
+   GET HANDLER (Reads data)
+   ========================= */
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const inviter = searchParams.get("inviter") ?? "";
@@ -344,9 +343,12 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "Invalid inviter address." }, { status: 400 });
   }
   
+  // FIX 2: Ubah inviter menjadi lowercase untuk pencarian
+  const lowerCaseInviter = inviter.toLowerCase();
+  
   const [validInvites, usedClaims] = await Promise.all([
-      countValidInvites(inviter),
-      sumUsedClaims(inviter),
+      countValidInvites(lowerCaseInviter),
+      sumUsedClaims(lowerCaseInviter),
   ]);
   const remainingQuota = remainingClaims(validInvites, usedClaims);
 
@@ -362,7 +364,7 @@ export async function GET(req: NextRequest) {
       const { data, error } = await getSupabaseAdmin()
           .from(TABLE_REFERRALS)
           .select('invitee_fid, invitee_wallet, status')
-          .eq('inviter', inviter);
+          .eq('inviter', lowerCaseInviter); // Gunakan lowerCaseInviter untuk filter
 
       if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
       response.list = data;
@@ -370,4 +372,3 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json(response);
 }
-
