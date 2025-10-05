@@ -7,7 +7,7 @@ import {
   useAccount,
   useReadContract,
   useWriteContract,
-  usePublicClient,
+  // usePublicClient dihapus karena tidak lagi digunakan di handleClaimInviteReward
 } from "wagmi";
 import { baseSepolia } from "viem/chains";
 import {
@@ -74,7 +74,7 @@ const NFT_DATA: NFTTier[] = [
 ============================= */
 const Market: FC = () => {
   const { address } = useAccount();
-  const publicClient = usePublicClient();
+  // const publicClient dihapus karena tidak lagi digunakan di handleClaimInviteReward
   const [message, setMessage] = useState<string>("");
   const [loading, setLoading] = useState(false);
 
@@ -173,6 +173,7 @@ const Market: FC = () => {
       const sig = await sigRes.json();
       if (!sigRes.ok) throw new Error(sig?.error || "Failed to obtain signature.");
 
+      // Menggunakan useWriteContract untuk meminta konfirmasi dompet pengguna
       setMessage("2/3: Sending transaction…");
       const txHash = await writeContractAsync({
         address: rigSaleAddress,
@@ -184,6 +185,8 @@ const Market: FC = () => {
       });
       
       setMessage("3/3: Waiting for confirmation…");
+      // Dapatkan public client (untuk menunggu receipt)
+      const publicClient = (await import('wagmi')).usePublicClient();
       await publicClient?.waitForTransactionReceipt({ hash: txHash });
 
       // --- SINKRONISASI REFERRAL: Tandai referral sebagai 'valid' di Supabase
@@ -219,6 +222,10 @@ const Market: FC = () => {
       if (!address) throw new Error("Please connect your wallet.");
       const price = priceOf(id) as bigint | undefined;
       if (!price || price === 0n) throw new Error("Item is not for sale.");
+
+      // Dapatkan public client (untuk menunggu receipt)
+      const { usePublicClient } = await import('wagmi');
+      const publicClient = usePublicClient();
 
       if (mode === 0) {
         const txHash = await writeContractAsync({
@@ -304,7 +311,7 @@ const Market: FC = () => {
   // FIX: Fungsi untuk mengklaim NFT dari kuota undangan yang valid
   async function handleClaimInviteReward() {
     try {
-      if (!address) return setInviteMsg("Please connect your wallet.");
+      if (!address) throw new Error("Please connect your wallet.");
       // Tambahkan pengecekan FID, karena API 'claim' membutuhkan FID Inviter untuk poin
       if (!fid) throw new Error("Farcaster FID required for reward claim."); 
 
@@ -313,7 +320,7 @@ const Market: FC = () => {
         return setInviteMsg(`Need ${needMoreInv} more valid invite(s) for the next claim.`);
       }
       setBusyInvite(true);
-      setMessage("Claiming reward NFT...");
+      setMessage("Klaim Reward NFT sedang diproses oleh Relayer..."); // Pesan yang lebih akurat
       
       const res = await fetch("/api/referral", {
         method: "POST",
@@ -326,22 +333,22 @@ const Market: FC = () => {
         }),
       });
       const json = await res.json();
-      if (!json?.ok) throw new Error(json?.error || "Claim failed.");
+      if (!json?.ok) throw new Error(json?.error || "Klaim gagal. Periksa logs server.");
 
-      setMessage(`Waiting for transaction confirmation: ${json.txHash}`);
-      // FIX: Tunggu konfirmasi transaksi minting NFT sebelum memperbarui UI
-      await publicClient?.waitForTransactionReceipt({ hash: json.txHash }); 
+      // Karena minting dilakukan oleh relayer, kita hanya menunggu konfirmasi bahwa
+      // backend telah mengirim transaksi dan mencatat kuota (yang sudah dilakukan).
       
-      // Perbarui status klaim lokal
+      // Langsung perbarui status klaim lokal setelah respons sukses dari API
       setClaimedRewards(claimedRewards + 1); 
-      setInviteMsg("Reward claimed successfully! NFT minted.");
+      setInviteMsg(`Reward diklaim! Transaksi relayer: ${json.txHash.slice(0, 8)}...`);
       
     } catch (e: any) {
-      setInviteMsg(e?.shortMessage || e?.message || "Claim failed");
+      // Tampilkan pesan error klaim ke kotak pesan kecil
+      setInviteMsg(e?.shortMessage || e?.message || "Klaim gagal.");
+      setMessage(""); // Pastikan pesan transaksi umum dibersihkan
     } finally {
-      setMessage(""); // Bersihkan pesan proses setelah selesai/gagal
-      setLoading(false);
       setBusyInvite(false);
+      setLoading(false);
     }
   }
 
@@ -370,7 +377,7 @@ const Market: FC = () => {
             disabled={busyInvite || availableClaims <= 0 || !address} // Tambahkan !address untuk mencegah error
             className={`fin-btn fin-btn-claim text-xs ${busyInvite || availableClaims <= 0 || !address ? "opacity-50 cursor-not-allowed" : ""}`}
           >
-            {busyInvite ? "Claiming…" : `Claim${availableClaims > 0 ? ` (${availableClaims})` : ""}`}
+            {busyInvite ? "Klaim diproses…" : `Klaim${availableClaims > 0 ? ` (${availableClaims})` : ""}`}
           </button>
         </div>
 
@@ -379,7 +386,7 @@ const Market: FC = () => {
         </div>
         {availableClaims <= 0 && (
           <div className="text-xs text-neutral-400">
-            Need <b>{needMoreInv}</b> more valid invite(s) for the next claim.
+            Butuh <b>{needMoreInv}</b> undangan valid lagi untuk klaim berikutnya.
           </div>
         )}
         {/* Pesan spesifik untuk reward claim (bukan pesan transaksi umum) */}
@@ -393,7 +400,7 @@ const Market: FC = () => {
           const p = priceOf(id);
           const priceText =
             tier.id === "basic" && isBasicFreeForMe
-              ? "FREE"
+              ? "GRATIS"
               : p
               ? mode === 0
                 ? `${formatEther(p as bigint)} ETH`
@@ -418,7 +425,7 @@ const Market: FC = () => {
                 <button
                   onClick={onClickCta(tier.id)}
                   disabled={loading || !address || !id}
-                  title={!address ? "Connect wallet first" : undefined}
+                  title={!address ? "Hubungkan dompet terlebih dahulu" : undefined}
                   className={`fin-btn fin-btn-claim px-3 py-1.5 text-xs ${loading || !address || !id ? "opacity-50 cursor-not-allowed" : ""}`}
                 >
                   {ctaText(tier.id)}
