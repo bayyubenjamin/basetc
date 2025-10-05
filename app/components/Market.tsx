@@ -147,7 +147,7 @@ const Market: FC = () => {
   const { writeContractAsync } = useWriteContract();
 
   /* =============================
-     Actions — FIX REFERRAL MARK-VALID
+     Actions — CLAIM FREE BASIC RIG (BY INVITEE)
   ============================== */
 
   // Free claim (Basic) via server signature
@@ -186,10 +186,10 @@ const Market: FC = () => {
       setMessage("3/3: Waiting for confirmation…");
       await publicClient?.waitForTransactionReceipt({ hash: txHash });
 
-      // --- FIX REFERRAL: Tandai referral sebagai 'valid' di Supabase
+      // --- SINKRONISASI REFERRAL: Tandai referral sebagai 'valid' di Supabase
       if (inviter !== "0x0000000000000000000000000000000000000000") {
         setMessage("Finalizing: Updating referral status..."); 
-        // Panggil API mark-valid yang baru saja diperbaiki di backend
+        // Panggil API mark-valid untuk mencatat referral sebagai valid
         await fetch("/api/referral", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -200,7 +200,7 @@ const Market: FC = () => {
           }),
         });
       }
-      // --- END FIX ---
+      // --- AKHIR SINKRONISASI ---
 
       setMessage("Claim successful! Referral counted.");
       refetchFreeUsed?.();
@@ -301,26 +301,46 @@ const Market: FC = () => {
   const [inviteMsg, setInviteMsg] = useState<string>("");
   const [busyInvite, setBusyInvite] = useState(false);
 
+  // FIX: Fungsi untuk mengklaim NFT dari kuota undangan yang valid
   async function handleClaimInviteReward() {
     try {
       if (!address) return setInviteMsg("Please connect your wallet.");
+      // Tambahkan pengecekan FID, karena API 'claim' membutuhkan FID Inviter untuk poin
+      if (!fid) throw new Error("Farcaster FID required for reward claim."); 
+
       setInviteMsg("");
       if (availableClaims <= 0) {
         return setInviteMsg(`Need ${needMoreInv} more valid invite(s) for the next claim.`);
       }
       setBusyInvite(true);
+      setMessage("Claiming reward NFT...");
+      
       const res = await fetch("/api/referral", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ inviter: address, inc: 1 }),
+        body: JSON.stringify({ 
+          mode: "claim", // FIX: Tambahkan mode operasi yang benar untuk klaim reward
+          inviter: address, // Alamat Anda (untuk pengecekan kuota)
+          receiver: address, // Alamat yang akan menerima NFT (Anda)
+          invitee_fid: String(fid), // FID Anda (Inviter) untuk dicatat sebagai referensi poin
+        }),
       });
       const json = await res.json();
       if (!json?.ok) throw new Error(json?.error || "Claim failed.");
-      setClaimedRewards(json?.claimedRewards ?? (claimedRewards + 1));
-      setInviteMsg("Reward recorded successfully.");
+
+      setMessage(`Waiting for transaction confirmation: ${json.txHash}`);
+      // FIX: Tunggu konfirmasi transaksi minting NFT sebelum memperbarui UI
+      await publicClient?.waitForTransactionReceipt({ hash: json.txHash }); 
+      
+      // Perbarui status klaim lokal
+      setClaimedRewards(claimedRewards + 1); 
+      setInviteMsg("Reward claimed successfully! NFT minted.");
+      
     } catch (e: any) {
-      setInviteMsg(e?.shortMessage || e?.message || "Claim failed.");
+      setInviteMsg(e?.shortMessage || e?.message || "Claim failed");
     } finally {
+      setMessage(""); // Bersihkan pesan proses setelah selesai/gagal
+      setLoading(false);
       setBusyInvite(false);
     }
   }
@@ -347,8 +367,8 @@ const Market: FC = () => {
           </div>
           <button
             onClick={handleClaimInviteReward}
-            disabled={busyInvite || availableClaims <= 0}
-            className={`fin-btn fin-btn-claim text-xs ${busyInvite || availableClaims <= 0 ? "opacity-50 cursor-not-allowed" : ""}`}
+            disabled={busyInvite || availableClaims <= 0 || !address} // Tambahkan !address untuk mencegah error
+            className={`fin-btn fin-btn-claim text-xs ${busyInvite || availableClaims <= 0 || !address ? "opacity-50 cursor-not-allowed" : ""}`}
           >
             {busyInvite ? "Claiming…" : `Claim${availableClaims > 0 ? ` (${availableClaims})` : ""}`}
           </button>
@@ -362,7 +382,8 @@ const Market: FC = () => {
             Need <b>{needMoreInv}</b> more valid invite(s) for the next claim.
           </div>
         )}
-        {!!inviteMsg && <div className="mt-2 text-xs text-blue-400">{inviteMsg}</div>}
+        {/* Pesan spesifik untuk reward claim (bukan pesan transaksi umum) */}
+        {!!inviteMsg && <div className="mt-2 text-xs text-blue-400">{inviteMsg}</div>} 
       </section>
 
       {/* Listings */}
@@ -408,6 +429,7 @@ const Market: FC = () => {
         })}
       </section>
 
+      {/* Pesan transaksi umum (untuk klaim Basic atau Buy) */}
       {!!message && <p className="text-center text-xs text-neutral-400">{message}</p>}
 
       <div className="fin-bottom-space" />
@@ -416,3 +438,4 @@ const Market: FC = () => {
 };
 
 export default Market;
+
