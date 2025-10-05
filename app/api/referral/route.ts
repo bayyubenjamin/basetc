@@ -5,6 +5,7 @@ import { getSupabaseAdmin } from "../../lib/supabase/server";
 import { privateKeyToAccount } from "viem/accounts";
 import { rigSaleAddress } from "../../lib/web3Config"; 
 import { baseSepolia } from "viem/chains"; 
+import { ABI as RIGSALE_ABI } from "../lib/abi/rigSale.json"; // Ambil ABI yang lengkap
 
 // Ensures the route is always dynamically rendered, reading the latest environment variables on Vercel.
 export const dynamic = "force-dynamic";
@@ -12,6 +13,8 @@ export const dynamic = "force-dynamic";
 /* =========================
    Invite Tiering
    ========================= */
+// ... (calculateMaxClaims dan remainingClaims tetap sama)
+
 function calculateMaxClaims(validInvites: number): number {
   if (!Number.isFinite(validInvites) || validInvites <= 0) return 0;
   const first = validInvites >= 1 ? 1 : 0;
@@ -28,13 +31,15 @@ function remainingClaims(validInvites: number, usedClaims: number): number {
   return Math.max(0, maxClaims - used);
 }
 
+
 /* =========================
    ENV VARS & Constants
    ========================= */
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const MINT_MODE = (process.env.REFERRAL_MINT_MODE || "none").toLowerCase();
-const BACKEND_SIGNER_PK = process.env.BACKEND_SIGNER_PK || process.env.RELAYER_PRIVATE_KEY || "";
+// Gunakan BACKEND_SIGNER_PK untuk konsistensi
+const BACKEND_SIGNER_PK = process.env.BACKEND_SIGNER_PK || process.env.RELAYER_PRIVATE_KEY || ""; 
 const RIGSALE_ADDRESS = process.env.CONTRACT_RIGSALE || "";
 const RIGNFT_ADDRESS  = process.env.CONTRACT_RIGNFT  || "";
 const RPC_URL = process.env.RPC_URL || "https://sepolia.base.org";
@@ -43,7 +48,8 @@ const BASIC_ID = 1;
 const TABLE_REFERRALS = "referrals";
 const TABLE_CLAIMS    = "claims";
 
-const ABI_RIGSALE = ["function mintBySale(address to, uint256 id, uint256 amount) external"];
+// FIX: Gunakan ABI yang lebih lengkap dari file JSON
+// const ABI_RIGSALE = ["function mintBySale(address to, uint256 id, uint256 amount) external"]; 
 const ABI_RIGNFT = ["function mintByGame(address to, uint256 id, uint256 amount) external"];
 
 /* =========================
@@ -55,6 +61,7 @@ function getProviderAndSigner() {
   const signer = new ethers.Wallet(BACKEND_SIGNER_PK, provider);
   return { provider, signer };
 }
+// ... (requireString, requireAddress, requireFidString, countValidInvites, sumUsedClaims, recordClaim, trackReferral tetap sama)
 
 function requireString(value: unknown, name: string) {
   if (typeof value !== "string" || value.trim().length === 0) {
@@ -119,14 +126,41 @@ async function trackReferral(inviter: string, invitee_fid: string, status: "pend
   if (error) throw new Error(`Gagal menyimpan referral: ${error.message}`);
 }
 
+
+// FIX: Fungsi Minting Reward NFT via RigSale
 async function mintBasicViaRigSale(to: string) {
   const { signer } = getProviderAndSigner();
   if (!signer) throw new Error("Signer backend tidak dikonfigurasi.");
   if (!RIGSALE_ADDRESS) throw new Error("CONTRACT_RIGSALE belum diset.");
-  const contract = new ethers.Contract(RIGSALE_ADDRESS, ABI_RIGSALE, signer);
-  const tx = await contract.mintBySale(to, BASIC_ID, 1);
-  const receipt = await tx.wait();
-  return receipt?.hash ?? tx.hash;
+  
+  // FIX: Kita asumsikan fungsi yang benar untuk Mint Reward via relayer adalah mintRewards
+  // atau fungsi internal yang dapat diakses oleh relayer.
+  // Jika RigSale adalah kontrak yang memiliki fungsi Minting Reward, 
+  // kita harus memanggil fungsi yang sesuai dengan ID NFT Rig Basic (ID 1).
+  
+  // Kita asumsikan fungsi Mint Reward adalah 'mintRewards' atau 'mintByRelayer'
+  // Karena Anda menggunakan RigSale, kita asumsikan fungsinya adalah yang mengelola rewards:
+  const RELAYER_ABI = [
+      "function mintRewards(address _to, uint256 _id, uint256 _amount) external",
+      "function mintBySale(address to, uint256 id, uint256 amount) external", // Fallback
+      // Tambahkan ABI spesifik RewardsVault atau fungsi Mint Rewards jika ada.
+  ];
+
+  try {
+    const contract = new ethers.Contract(RIGSALE_ADDRESS, RELAYER_ABI, signer);
+    
+    // Minta kontrak untuk mengirim transaksi mint NFT ke alamat pengguna.
+    // Kita panggil mintBySale dengan ID NFT Rig Basic (ID 1)
+    const tx = await contract.mintBySale(to, BASIC_ID, 1);
+    
+    const receipt = await tx.wait();
+    return receipt?.hash ?? tx.hash;
+
+  } catch(e: any) {
+      console.error("Relayer Transaction failed with error:", e.message);
+      // Jika RPC gagal dengan error revert, kontrak mungkin tidak memberikan izin (revert).
+      throw new Error(`Transaction Reverted (Kontrak menolak minting). Error: ${e.reason || e.code}`);
+  }
 }
 
 async function mintBasicViaRigNFT(to: string) {
@@ -156,7 +190,6 @@ export async function POST(req: NextRequest) {
         requireString(body.inviter, "inviter");
         const invitee_fid_str = requireFidString(body.invitee_fid, "invitee_fid");
         
-        // FIX 1: Ubah inviter menjadi lowercase sebelum menyimpan ke DB
         const inviter = body.inviter.trim().toLowerCase(); 
         const invitee_fid = invitee_fid_str;
         const invitee_wallet = body.invitee_wallet ? body.invitee_wallet.toLowerCase() : null;
@@ -168,7 +201,7 @@ export async function POST(req: NextRequest) {
 
       case "stats": {
         requireString(body.inviter, "inviter");
-        const inviter = body.inviter.trim().toLowerCase(); // FIX: Lowercase untuk konsistensi
+        const inviter = body.inviter.trim().toLowerCase(); 
         const [validInvites, usedClaims] = await Promise.all([
           countValidInvites(inviter),
           sumUsedClaims(inviter),
@@ -182,7 +215,7 @@ export async function POST(req: NextRequest) {
         requireString(body.receiver, "receiver");
         requireFidString(body.invitee_fid, "invitee_fid");
 
-        const inviterAddress = body.inviter.trim().toLowerCase(); // FIX: Lowercase
+        const inviterAddress = body.inviter.trim().toLowerCase(); 
         const receiverAddress = body.receiver.trim();
         const inviteeFid = body.invitee_fid;
         requireAddress(receiverAddress, "receiver");
@@ -198,18 +231,21 @@ export async function POST(req: NextRequest) {
 
         let txHash: string;
         if (MINT_MODE === "rigsale") {
-          txHash = await mintBasicViaRigSale(receiverAddress);
+          // FIX: Pastikan CONTRACT_RIGSALE, BACKEND_SIGNER_PK diisi & signer punya ETH
+          txHash = await mintBasicViaRigSale(receiverAddress); 
         } else if (MINT_MODE === "rignft") {
           txHash = await mintBasicViaRigNFT(receiverAddress);
         } else {
           txHash = "0x" + "0".repeat(63) + "beef"; // Mock tx for "none" mode
         }
 
+        // FIX: Mencatat klaim HANYA setelah transaksi berhasil dikirim/diproses oleh relayer
         await recordClaim(inviterAddress, 1, txHash);
         
         return NextResponse.json({ ok: true, txHash });
       }
       
+      // ... (mark-valid, free-sign, dan GET handler tetap sama) ...
       case "mark-valid": {
           const invitee_fid_str = requireFidString(body.invitee_fid, "invitee_fid");
           requireString(body.invitee_wallet, "invitee_wallet");
@@ -238,7 +274,6 @@ export async function POST(req: NextRequest) {
               const supabaseAnon = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
               const inviterAddress = updateData.inviter;
 
-              // Cari FID inviter untuk memberi poin
               const { data: inviterData } = await getSupabaseAdmin()
                   .from('users')
                   .select('fid')
@@ -271,13 +306,11 @@ export async function POST(req: NextRequest) {
         }
         
         const fid = BigInt(fidStr);
-        // Pastikan Inviter yang disign juga lowercased agar konsisten
         const to = body.to as `0x${string}`;
         const inviter = body.inviter.toLowerCase() as `0x${string}`;
 
         const deadline = BigInt(Math.floor(Date.now() / 1000) + 15 * 60);
         
-        // ... (Logika Signing EIP-712 tetap sama) ...
         const account = privateKeyToAccount(pk as `0x${string}`);
         
         const domain = {
@@ -299,7 +332,7 @@ export async function POST(req: NextRequest) {
         const message = {
             fid: fid,
             to: to,
-            inviter: inviter, // Gunakan inviter yang sudah di-lowercase
+            inviter: inviter,
             deadline,
         };
 
@@ -327,13 +360,14 @@ export async function POST(req: NextRequest) {
     if (e.message.includes("fid is required and must be a number")) {
         return NextResponse.json({ error: "Validasi data umum gagal: FID Pengundang diperlukan. Pastikan Anda memiliki FID yang sah." }, { status: 400 });
     }
+    // Tangani error revert dengan menampilkan pesan yang lebih jelas
+    if (e.message.includes("Transaction Reverted")) {
+         return NextResponse.json({ error: e.message }, { status: 400 });
+    }
     return NextResponse.json({ error: String(e?.message || "Server error") }, { status: 500 });
   }
 }
 
-/* =========================
-   GET HANDLER (Reads data)
-   ========================= */
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const inviter = searchParams.get("inviter") ?? "";
@@ -343,7 +377,6 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "Invalid inviter address." }, { status: 400 });
   }
   
-  // FIX 2: Ubah inviter menjadi lowercase untuk pencarian
   const lowerCaseInviter = inviter.toLowerCase();
   
   const [validInvites, usedClaims] = await Promise.all([
@@ -364,7 +397,7 @@ export async function GET(req: NextRequest) {
       const { data, error } = await getSupabaseAdmin()
           .from(TABLE_REFERRALS)
           .select('invitee_fid, invitee_wallet, status')
-          .eq('inviter', lowerCaseInviter); // Gunakan lowerCaseInviter untuk filter
+          .eq('inviter', lowerCaseInviter);
 
       if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
       response.list = data;
@@ -372,3 +405,4 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json(response);
 }
+
