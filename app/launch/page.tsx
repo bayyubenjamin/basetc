@@ -12,7 +12,8 @@ import Market from "../components/Market";
 import Profil from "../components/Profil";
 import Event from "../components/Event"; // <-- Impor komponen baru
 import FidInput from "../components/FidInput";
-import { ethers } from "ethers"; // <-- TAMBAH: Import Ethers untuk validasi alamat
+// --- FIX: Import isAddress langsung dari ethers v6 ---
+import { isAddress } from "ethers"; 
 
 const DEFAULT_TAB: TabName = "monitoring";
 const TAB_KEY = "basetc_active_tab";
@@ -119,7 +120,7 @@ function AppInitializer() {
             const data = await res.json();
             
             // Verifikasi respons dari API resolver baru
-            if (data?.ok && data.wallet && ethers.utils.isAddress(data.wallet)) {
+            if (data?.ok && data.wallet && isAddress(data.wallet)) {
                 inviterWallet = data.wallet;
             } else {
                 console.warn(`FID Referral found (${fidref}), but wallet resolution failed:`, data?.error);
@@ -129,12 +130,12 @@ function AppInitializer() {
           // 2. Jika fidref gagal/tidak ada, coba cek parameter lama ('ref') atau dari local storage
           if (!inviterWallet) {
             const ref = url.searchParams.get("ref");
-            if (ref && ethers.utils.isAddress(ref)) {
+            if (ref && isAddress(ref)) {
                 inviterWallet = ref;
             } else {
                 // Final fallback check to localStorage
                 const localRef = localStorage.getItem("basetc_ref");
-                if (localRef && ethers.utils.isAddress(localRef)) {
+                if (localRef && isAddress(localRef)) {
                     inviterWallet = localRef;
                 }
             }
