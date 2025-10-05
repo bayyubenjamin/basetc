@@ -3,6 +3,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { ethers } from "ethers";
 import { getSupabaseAdmin } from "../../lib/supabase/server";
+// --- Tambahan untuk Signature EIP-712 ---
+import { privateKeyToAccount } from "viem/accounts";
+import { rigSaleAddress } from "../../lib/web3Config"; 
+import { baseSepolia } from "viem/chains"; 
+// ---------------------------------------
 
 /* =========================
    Invite Tiering
@@ -184,8 +189,6 @@ export async function POST(req: NextRequest) {
         await recordClaim(inviterAddress, 1, txHash);
         
         // --- Integrasi Leaderboard ---
-        // Panggil Edge Function untuk menambahkan poin setelah klaim berhasil.
-        // Dijalankan secara "fire-and-forget" agar tidak memblokir respons.
         if (SUPABASE_URL && SUPABASE_ANON_KEY) {
           const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
           const { data: inviterData } = await getSupabaseAdmin()
@@ -207,6 +210,66 @@ export async function POST(req: NextRequest) {
 
         return NextResponse.json({ ok: true, txHash });
       }
+      
+      // --- START OF FIX: Tambahkan case untuk "free-sign" ---
+      case "free-sign": {
+        const pk = process.env.BACKEND_SIGNER_PK || process.env.RELAYER_PRIVATE_KEY;
+        if (!pk) {
+          return NextResponse.json({ error: "Backend signer PK missing." }, { status: 500 });
+        }
+        if (!body.fid || !body.to || !body.inviter || !ethers.isAddress(body.to)) {
+          return NextResponse.json({ error: "Missing fid, to, or inviter." }, { status: 400 });
+        }
+        
+        const { fid, to, inviter } = body as { fid: string; to: `0x${string}`; inviter: `0x${string}` };
+        
+        const account = privateKeyToAccount(pk as `0x${string}`);
+        
+        // Deadline: 15 menit dari sekarang (dikonversi ke BigInt)
+        const deadline = BigInt(Math.floor(Date.now() / 1000) + 15 * 60);
+
+        // Domain & Types harus MATCH dengan RigSaleFlexible.sol
+        const domain = {
+            name: "RigSaleFlexible",
+            version: "1",
+            chainId: baseSepolia.id, 
+            verifyingContract: rigSaleAddress as `0x${string}`,
+        };
+
+        const types = {
+            FreeClaim: [
+                { name: "fid", type: "uint256" },
+                { name: "to", type: "address" },
+                { name: "inviter", type: "address" },
+                { name: "deadline", type: "uint256" },
+            ],
+        } as const;
+
+        const message = {
+            fid: BigInt(fid),
+            to: to,
+            inviter: inviter,
+            deadline,
+        };
+
+        // Signature EIP-712
+        const signature = await account.signTypedData({
+            domain, types, primaryType: "FreeClaim", message,
+        });
+        
+        // Pisahkan signature menjadi r, s, v (viem default format 0x[r][s][v])
+        const v = parseInt(signature.slice(130, 132), 16); 
+        const r = signature.slice(0, 66) as `0x${string}`;
+        const s = ('0x' + signature.slice(66, 130)) as `0x${string}`;
+
+        return NextResponse.json({
+            ok: true,
+            v, r, s,
+            inviter: inviter,
+            deadline: deadline.toString(),
+        });
+    } // --- END OF FIX: "free-sign" ---
+
 
       default:
         return NextResponse.json({ error: "Unknown mode" }, { status: 400 });
@@ -219,8 +282,37 @@ export async function POST(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
   // ... (fungsi GET tetap sama, tidak perlu diubah)
-  return NextResponse.json({
-    ok: true,
-    mintMode: MINT_MODE,
-  });
+  const { searchParams } = new URL(req.url);
+  const inviter = searchParams.get("inviter") ?? "";
+  const detail = searchParams.get("detail") === "1";
+
+  if (!ethers.isAddress(inviter)) {
+      return NextResponse.json({ ok: false, error: "Invalid inviter address." }, { status: 400 });
+  }
+  
+  const [validInvites, usedClaims] = await Promise.all([
+      countValidInvites(inviter),
+      sumUsedClaims(inviter),
+  ]);
+  const remainingQuota = remainingClaims(validInvites, usedClaims);
+
+  const response: any = {
+      ok: true,
+      mintMode: MINT_MODE,
+      validInvites,
+      claimedRewards: usedClaims,
+      remainingQuota,
+  };
+
+  if (detail) {
+      const { data, error } = await getSupabaseAdmin()
+          .from(TABLE_REFERRALS)
+          .select('invitee_fid, invitee_wallet, status')
+          .eq('inviter', inviter);
+
+      if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+      response.list = data;
+  }
+
+  return NextResponse.json(response);
 }

@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import type { FC } from "react";
+import { useEffect, useMemo, useState, type FC } from "react";
 import Image from "next/image";
 import {
   useAccount,
@@ -19,7 +18,7 @@ import {
 import { formatEther, formatUnits, type Address } from "viem";
 
 /* =============================
-    Invite Math (Fungsi Asli Dikembalikan)
+   Invite math (original rules)
 ============================= */
 function maxClaimsFrom(totalInvites: number): number {
   if (totalInvites <= 0) return 0;
@@ -34,7 +33,9 @@ function invitesNeededForNext(totalInvites: number, claimed: number): number {
   return t - totalInvites;
 }
 
-// ERC20 minimal ABI (Fungsi Asli)
+/* =============================
+   Minimal ERC20 ABI (approval path)
+============================= */
 const erc20ABI = [
   { type: "function", name: "symbol",    stateMutability: "view", inputs: [], outputs: [{ type: "string" }] },
   { type: "function", name: "decimals",  stateMutability: "view", inputs: [], outputs: [{ type: "uint8" }] },
@@ -50,6 +51,9 @@ const erc20ABI = [
   },
 ] as const;
 
+/* =============================
+   UI meta for each tier
+============================= */
 type TierID = "basic" | "pro" | "legend";
 interface NFTTier {
   id: TierID;
@@ -59,120 +63,140 @@ interface NFTTier {
   description: string;
 }
 const NFT_DATA: NFTTier[] = [
-  { id: "basic",  name: "Basic Rig",  image: "/img/vga_basic.png",  hashrateHint: "~1.5 H/s",  description: "Claim your first rig for free to start mining." },
-  { id: "pro",    name: "Pro Rig",    image: "/img/vga_pro.gif",    hashrateHint: "~5.0 H/s",  description: "Upgrade for a significant boost in hashrate." },
-  { id: "legend", name: "Legend Rig", image: "/img/vga_legend.gif", hashrateHint: "~25.0 H/s", description: "The ultimate rig for professional miners." },
+  { id: "basic",  name: "Basic Rig",  image: "/img/vga_basic.png",  hashrateHint: "~1.5 H/s",  description: "Claim a free starter rig to begin mining." },
+  { id: "pro",    name: "Pro Rig",    image: "/img/vga_pro.gif",    hashrateHint: "~5.0 H/s",  description: "Upgrade to significantly increase hashrate." },
+  { id: "legend", name: "Legend Rig", image: "/img/vga_legend.gif", hashrateHint: "~25.0 H/s", description: "Top-tier rig for maximum performance." },
 ];
 
-export interface MarketProps { onTransactionSuccess?: () => void; }
-
-const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
+/* =============================
+   Component
+============================= */
+const Market: FC = () => {
   const { address } = useAccount();
   const publicClient = usePublicClient();
   const [message, setMessage] = useState<string>("");
   const [loading, setLoading] = useState(false);
 
-  // ----- Ambil ID tier dari RigNFT -----
-  const { data: BASIC } = useReadContract({ address: rigNftAddress, abi: rigNftABI as any, functionName: "BASIC" });
-  const { data: PRO } = useReadContract({ address: rigNftAddress, abi: rigNftABI as any, functionName: "PRO" });
+  /* ---------- Rig IDs ---------- */
+  const { data: BASIC }  = useReadContract({ address: rigNftAddress, abi: rigNftABI as any, functionName: "BASIC" });
+  const { data: PRO }    = useReadContract({ address: rigNftAddress, abi: rigNftABI as any, functionName: "PRO" });
   const { data: LEGEND } = useReadContract({ address: rigNftAddress, abi: rigNftABI as any, functionName: "LEGEND" });
 
-  // ----- Mode & Token Pembayaran -----
-  const { data: modeVal } = useReadContract({ address: rigSaleAddress, abi: rigSaleABI as any, functionName: "currentMode" }); // 0=ETH, 1=ERC20
+  /* ---------- Payment mode & token ---------- */
+  const { data: modeVal }   = useReadContract({ address: rigSaleAddress, abi: rigSaleABI as any, functionName: "currentMode" }); // 0=ETH, 1=ERC20
   const { data: tokenAddr } = useReadContract({ address: rigSaleAddress, abi: rigSaleABI as any, functionName: "paymentToken" });
-  
-  // Jika ERC20, ambil symbol & decimals
-  const { data: tokenDecimals = 18 } = useReadContract({ address: tokenAddr as Address, abi: erc20ABI as any, functionName: "decimals", query: { enabled: !!(tokenAddr && modeVal === 1) } });
-  const { data: tokenSymbol = "TOKEN" } = useReadContract({ address: tokenAddr as Address, abi: erc20ABI as any, functionName: "symbol", query: { enabled: !!(tokenAddr && modeVal === 1) } });
+  const mode = Number(modeVal ?? 0);
 
-  // ----- Harga aktif per ID -----
-  const { data: priceBasic } = useReadContract({ address: rigSaleAddress, abi: rigSaleABI as any, functionName: "priceOf", args: [BASIC], query: { enabled: !!BASIC } });
-  const { data: pricePro } = useReadContract({ address: rigSaleAddress, abi: rigSaleABI as any, functionName: "priceOf", args: [PRO], query: { enabled: !!PRO } });
-  const { data: priceLegend } = useReadContract({ address: rigSaleAddress, abi: rigSaleABI as any, functionName: "priceOf", args: [LEGEND], query: { enabled: !!LEGEND } });
-  
-  const priceOf = (id: unknown) => {
-    if (id === BASIC)  return priceBasic;
-    if (id === PRO)    return pricePro;
-    if (id === LEGEND) return priceLegend;
-    return undefined;
-  };
-
-  // ----- Free mint status -----
-  const { data: freeOpen } = useReadContract({ address: rigSaleAddress, abi: rigSaleABI as any, functionName: "freeMintOpen" });
-  const { data: freeId } = useReadContract({ address: rigSaleAddress, abi: rigSaleABI as any, functionName: "freeMintId" });
-  const { data: freeUsed, refetch: refetchFreeUsed } = useReadContract({
-    address: rigSaleAddress, abi: rigSaleABI as any, functionName: "freeMintedByFid",
-    args: [BigInt(localStorage.getItem("basetc_fid") || "0")],
-    query: { enabled: !!localStorage.getItem("basetc_fid") },
+  // Read raw (unknown) then normalize to correct types
+  const { data: tokenDecimalsRaw } = useReadContract({
+    address: tokenAddr as Address, abi: erc20ABI as any, functionName: "decimals",
+    query: { enabled: Boolean(tokenAddr && mode === 1) },
   });
+  const { data: tokenSymbolRaw } = useReadContract({
+    address: tokenAddr as Address, abi: erc20ABI as any, functionName: "symbol",
+    query: { enabled: Boolean(tokenAddr && mode === 1) },
+  });
+  const tokenDecimals: number = (tokenDecimalsRaw as number | undefined) ?? 18;
+  const tokenSymbol: string = (tokenSymbolRaw as string | undefined) ?? "TOKEN";
 
-  const isBasicFreeForMe = freeOpen && BASIC !== undefined && freeId === BASIC && !freeUsed;
+  /* ---------- Active Prices ---------- */
+  const { data: priceBasic }  = useReadContract({ address: rigSaleAddress, abi: rigSaleABI as any, functionName: "priceOf", args: [BASIC],  query: { enabled: Boolean(BASIC) } });
+  const { data: pricePro }    = useReadContract({ address: rigSaleAddress, abi: rigSaleABI as any, functionName: "priceOf", args: [PRO],    query: { enabled: Boolean(PRO) } });
+  const { data: priceLegend } = useReadContract({ address: rigSaleAddress, abi: rigSaleABI as any, functionName: "priceOf", args: [LEGEND], query: { enabled: Boolean(LEGEND) } });
 
-  // ===== Ambil FID & inviter dari localStorage (simple)
+  const priceOf = (id?: unknown) =>
+    id === BASIC ? priceBasic : id === PRO ? pricePro : id === LEGEND ? priceLegend : undefined;
+
+  /* ---------- Free mint status ---------- */
+  const { data: freeOpen } = useReadContract({ address: rigSaleAddress, abi: rigSaleABI as any, functionName: "freeMintOpen" });
+  const { data: freeId }   = useReadContract({ address: rigSaleAddress, abi: rigSaleABI as any, functionName: "freeMintId" });
+
+  // fid + inviter from localStorage (original flow)
   const [fid, setFid] = useState<bigint | null>(null);
   const [inviter, setInviter] = useState<Address>("0x0000000000000000000000000000000000000000");
-
   useEffect(() => {
-    const storedFid = localStorage.getItem("basetc_fid");
-    if (storedFid) setFid(BigInt(storedFid));
-    const storedRef = localStorage.getItem("basetc_ref");
-    if (storedRef && /^0x[0-9a-fA-F]{40}$/.test(storedRef)) setInviter(storedRef as Address);
+    const f = typeof window !== "undefined" ? window.localStorage.getItem("basetc_fid") : null;
+    const r = typeof window !== "undefined" ? window.localStorage.getItem("basetc_ref") : null;
+    if (f) setFid(BigInt(f));
+    if (r && /^0x[0-9a-fA-F]{40}$/.test(r)) setInviter(r as Address);
   }, []);
 
-  // ----- ERC20 allowance -----
-  const { data: allowance = 0n } = useReadContract({
-    address: tokenAddr as Address, abi: erc20ABI as any, functionName: "allowance",
-    args: address && tokenAddr ? [address, rigSaleAddress] : undefined,
-    query: { enabled: !!(address && tokenAddr && modeVal === 1) },
+  const { data: freeUsed, refetch: refetchFreeUsed } = useReadContract({
+    address: rigSaleAddress,
+    abi: rigSaleABI as any,
+    functionName: "freeMintedByFid",
+    args: fid !== null ? [fid] : undefined,
+    query: { enabled: Boolean(fid !== null) },
   });
 
-  // ----- Writer -----
+  const isBasicFreeForMe = Boolean(
+    freeOpen && BASIC !== undefined && freeId === BASIC && !freeUsed
+  );
+
+  /* ---------- ERC20 allowance (only if needed) ---------- */
+  const { data: allowance = 0n } = useReadContract({
+    address: tokenAddr as Address,
+    abi: erc20ABI as any,
+    functionName: "allowance",
+    args: address && tokenAddr ? [address, rigSaleAddress] : undefined,
+    query: { enabled: Boolean(address && tokenAddr && mode === 1) },
+  });
+
+  /* ---------- Writer ---------- */
   const { writeContractAsync } = useWriteContract();
 
-  /* ============================
-      Handlers
-  ============================ */
+  /* =============================
+     Actions — preserved behavior
+  ============================== */
+
+  // Free claim (Basic) via server signature
   const handleClaimBasicFree = async () => {
     setLoading(true);
     setMessage("");
     try {
-      if (!address) throw new Error("Please connect wallet first.");
-      if (!isBasicFreeForMe) throw new Error("Not eligible for free mint.");
+      if (!address) throw new Error("Please connect your wallet.");
+      if (!isBasicFreeForMe) throw new Error("You are not eligible for free mint.");
       if (!fid) throw new Error("Farcaster FID not found. Open from Farcaster app.");
 
-      setMessage("Requesting signature...");
+      setMessage("Requesting server signature…");
       const sigRes = await fetch("/api/referral", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode: "free-sign", fid: String(fid), to: address, inviter }),
+        body: JSON.stringify({
+          mode: "free-sign",
+          fid: String(fid),
+          to: address,
+          inviter,
+        }),
       });
-      const sigData = await sigRes.json();
-      if (!sigRes.ok) throw new Error(sigData.error || "Failed to get signature.");
+      const sig = await sigRes.json();
+      if (!sigRes.ok) throw new Error(sig?.error || "Failed to obtain signature.");
 
-      setMessage("Awaiting transaction confirmation...");
-      // PERBAIKAN: Menambahkan properti `account` dan `chain` yang wajib ada
+      setMessage("Waiting for transaction confirmation…");
       const txHash = await writeContractAsync({
         address: rigSaleAddress,
         abi: rigSaleABI as any,
         functionName: "claimFreeByFidSig",
-        args: [fid, address, sigData.inviter, BigInt(sigData.deadline), sigData.v, sigData.r, sigData.s],
+        args: [fid, address, sig.inviter, BigInt(sig.deadline), sig.v, sig.r, sig.s],
         account: address,
         chain: baseSepolia,
       });
       await publicClient?.waitForTransactionReceipt({ hash: txHash });
 
-      setMessage("Updating referral status...");
       if (inviter !== "0x0000000000000000000000000000000000000000") {
         await fetch("/api/referral", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ mode: "mark-valid", invitee_fid: String(fid), invitee_wallet: address }),
+          body: JSON.stringify({
+            mode: "mark-valid",
+            invitee_fid: String(fid),
+            invitee_wallet: address,
+          }),
         });
       }
 
       setMessage("Claim successful!");
-      refetchFreeUsed();
-      onTransactionSuccess?.();
+      refetchFreeUsed?.();
     } catch (e: any) {
       setMessage(e?.shortMessage || e?.message || "Transaction failed");
     } finally {
@@ -180,59 +204,77 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
     }
   };
 
+  // Buy with ETH / ERC20 (approval preserved)
   const handleBuy = async (id: bigint) => {
     setLoading(true);
     setMessage("");
     try {
-        if (!address) throw new Error("Connect wallet first.");
-        const price = priceOf(id) as bigint | undefined;
-        if (!price || price === 0n) throw new Error("Not for sale.");
+      if (!address) throw new Error("Please connect your wallet.");
+      const price = priceOf(id) as bigint | undefined;
+      if (!price || price === 0n) throw new Error("Item is not for sale.");
 
-        if (modeVal === 0) { // ETH
-            await writeContractAsync({
-                address: rigSaleAddress, abi: rigSaleABI as any, functionName: "buyWithETH",
-                args: [id, 1n], value: price, account: address, chain: baseSepolia,
-            });
-        } else if (modeVal === 1 && tokenAddr) { // ERC20
-            if ((allowance as bigint) < price) {
-                await writeContractAsync({
-                    address: tokenAddr as Address, abi: erc20ABI, functionName: "approve",
-                    args: [rigSaleAddress, price], account: address, chain: baseSepolia,
-                });
-            }
-            await writeContractAsync({
-                address: rigSaleAddress, abi: rigSaleABI as any, functionName: "buyWithERC20",
-                args: [id, 1n], account: address, chain: baseSepolia,
-            });
-        } else {
-            throw new Error("Unsupported payment mode.");
+      if (mode === 0) {
+        const txHash = await writeContractAsync({
+          address: rigSaleAddress,
+          abi: rigSaleABI as any,
+          functionName: "buyWithETH",
+          args: [id, 1n],
+          value: price,
+          account: address,
+          chain: baseSepolia,
+        });
+        await publicClient?.waitForTransactionReceipt({ hash: txHash });
+      } else if (mode === 1 && tokenAddr) {
+        if ((allowance as bigint) < price) {
+          const approveHash = await writeContractAsync({
+            address: tokenAddr as Address,
+            abi: erc20ABI,
+            functionName: "approve",
+            args: [rigSaleAddress, price],
+            account: address,
+            chain: baseSepolia,
+          });
+          await publicClient?.waitForTransactionReceipt({ hash: approveHash });
         }
-        setMessage("Purchase success!");
-        onTransactionSuccess?.();
+        const buyHash = await writeContractAsync({
+          address: rigSaleAddress,
+          abi: rigSaleABI as any,
+          functionName: "buyWithERC20",
+          args: [id, 1n],
+          account: address,
+          chain: baseSepolia,
+        });
+        await publicClient?.waitForTransactionReceipt({ hash: buyHash });
+      } else {
+        throw new Error("Unsupported payment mode.");
+      }
+
+      setMessage("Purchase success!");
     } catch (e: any) {
-        setMessage(e?.shortMessage || e?.message || "Transaction failed");
+      setMessage(e?.shortMessage || e?.message || "Transaction failed");
     } finally {
-        setLoading(false);
+      setLoading(false);
     }
   };
-  
-  const tierId = (t: TierID) => (t === "basic" ? BASIC : t === "pro" ? PRO : LEGEND);
+
+  /* ---------- Tier helpers ---------- */
+  const tierId = (t: TierID) => (t === "basic" ? (BASIC as bigint) : t === "pro" ? (PRO as bigint) : (LEGEND as bigint));
   const onClickCta = (t: TierID) => {
     const id = tierId(t);
     if (t === "basic" && isBasicFreeForMe) return handleClaimBasicFree;
-    return () => handleBuy(id as bigint);
+    return () => handleBuy(id);
   };
   const ctaText = (t: TierID) => (t === "basic" && isBasicFreeForMe ? "Claim Free Rig" : "Buy");
 
-  /* ============================
-      Invite Task (Fungsi Asli Dikembalikan)
-  ============================ */
+  /* =============================
+     Invite rewards (original flow)
+  ============================== */
   const { data: totalInvitesData } = useReadContract({
     address: rigSaleAddress,
     abi: rigSaleABI as any,
     functionName: "inviteCountOf",
     args: address ? [address as Address] : undefined,
-    query: { enabled: !!address },
+    query: { enabled: Boolean(address) },
   });
   const totalInvites = totalInvitesData ? Number(totalInvitesData) : 0;
 
@@ -254,91 +296,102 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
 
   async function handleClaimInviteReward() {
     try {
-      if (!address) return setInviteMsg("Connect wallet dulu.");
+      if (!address) return setInviteMsg("Please connect your wallet.");
       setInviteMsg("");
       if (availableClaims <= 0) {
-        return setInviteMsg(`Butuh ${needMoreInv} invite lagi untuk klaim berikutnya.`);
+        return setInviteMsg(`Need ${needMoreInv} more valid invite(s) for the next claim.`);
       }
       setBusyInvite(true);
-
       const res = await fetch("/api/referral", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ inviter: address, inc: 1 }),
       });
       const json = await res.json();
-      if (!json?.ok) throw new Error(json?.error || "Claim gagal");
-
+      if (!json?.ok) throw new Error(json?.error || "Claim failed.");
       setClaimedRewards(json?.claimedRewards ?? (claimedRewards + 1));
-      setInviteMsg("Reward dicatat.");
+      setInviteMsg("Reward recorded successfully.");
     } catch (e: any) {
-      setInviteMsg(e?.shortMessage || e?.message || "Claim gagal");
+      setInviteMsg(e?.shortMessage || e?.message || "Claim failed.");
     } finally {
       setBusyInvite(false);
     }
   }
 
-  /* ============================
-      Render (Struktur Asli)
-  ============================ */
+  /* =============================
+     UI (Fin look; logic intact)
+  ============================== */
   return (
-    <div className="space-y-4 px-4 pt-4 pb-8">
+    <div className="fin-wrap fin-content-pad-bottom px-4 pt-4 space-y-5">
+      {/* Page title */}
       <header className="space-y-1">
         <h1 className="text-xl font-semibold">Market</h1>
-        <p className="text-sm text-neutral-400">Mint &amp; Listings</p>
+        <p className="text-sm text-neutral-400">Mint rigs and invite to earn</p>
       </header>
 
-      {/* Invite Task Card (UI Asli Dikembalikan) */}
-      <div className="rounded-2xl p-4 border border-white/10 bg-white/5">
+      {/* Invite card — simplified but keeps the full logic */}
+      <section className="fin-card p-4">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <div className="text-sm opacity-80">Invite Friends → Free Basic</div>
-            <div className="text-lg font-semibold">1 • 2× sampai 10 • 3× setelahnya</div>
+            <h2 className="text-sm font-semibold">Invite Friends</h2>
+            <p className="text-xs text-neutral-400">
+              Valid invites unlock free Basic rig claims.
+            </p>
           </div>
           <button
             onClick={handleClaimInviteReward}
             disabled={busyInvite || availableClaims <= 0}
-            className={`px-4 py-2 rounded-xl ${availableClaims>0 ? "bg-green-500" : "bg-neutral-600 cursor-not-allowed"}`}
+            className={`fin-btn fin-btn-claim text-xs ${busyInvite || availableClaims <= 0 ? "opacity-50 cursor-not-allowed" : ""}`}
           >
-            {busyInvite ? "Claiming..." : `CLAIM ${availableClaims>0 ? `(${availableClaims})` : ""}`}
+            {busyInvite ? "Claiming…" : `Claim${availableClaims > 0 ? ` (${availableClaims})` : ""}`}
           </button>
         </div>
 
-        <div className="mt-2 text-sm">
-          Total undangan valid: <b>{totalInvites}</b> • Sudah diklaim: <b>{claimedRewards}</b> • Maks seharusnya: <b>{maxClaims}</b>
+        <div className="mt-2 text-xs text-neutral-400">
+          Invites: <b>{totalInvites}</b> • Claimed: <b>{claimedRewards}</b> • Max now: <b>{maxClaims}</b>
         </div>
-        {availableClaims<=0 && (
-          <div className="text-xs opacity-80">Butuh <b>{needMoreInv}</b> invite lagi untuk buka klaim berikutnya.</div>
+        {availableClaims <= 0 && (
+          <div className="text-xs text-neutral-400">
+            Need <b>{needMoreInv}</b> more valid invite(s) for the next claim.
+          </div>
         )}
-        {!!inviteMsg && <div className="mt-2 text-sm opacity-90">{inviteMsg}</div>}
-      </div>
+        {!!inviteMsg && <div className="mt-2 text-xs text-blue-400">{inviteMsg}</div>}
+      </section>
 
-      {/* Listing NFT (UI Asli) */}
-      <div className="space-y-4">
+      {/* Listings */}
+      <section className="space-y-4">
         {NFT_DATA.map((tier) => {
           const id = tierId(tier.id);
-          const price = priceOf(id);
-          const isFree = tier.id === "basic" && isBasicFreeForMe;
-          const priceText = isFree ? "FREE" : (price ? `${formatEther(price as bigint)} ETH` : 'N/A');
+          const p = priceOf(id);
+          const priceText =
+            tier.id === "basic" && isBasicFreeForMe
+              ? "FREE"
+              : p
+              ? mode === 0
+                ? `${formatEther(p as bigint)} ETH`
+                : `${formatUnits(p as bigint, tokenDecimals)} ${tokenSymbol}`
+              : "N/A";
+
           return (
-            <div key={tier.id} className="flex items-center bg-neutral-800 rounded-lg p-3 space-x-3">
-              <div className="w-16 h-16 bg-neutral-700 rounded-md flex items-center justify-center relative overflow-hidden">
-                <Image src={tier.image} alt={tier.name} width={64} height={64} className="object-contain" />
-              </div>
-              <div className="flex-1">
-                <div className="flex items-baseline justify-between">
-                  <h3 className="font-semibold text-sm md:text-base">{tier.name}</h3>
-                  <span className="text-xs md:text-sm text-neutral-400">{priceText}</span>
+            <div key={tier.id} className="fin-card p-3 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-16 h-16 rounded-md bg-neutral-800 border border-white/5 flex items-center justify-center overflow-hidden">
+                  <Image src={tier.image} alt={tier.name} width={64} height={64} className="object-contain" />
                 </div>
-                <p className="text-xs text-neutral-400 pt-0.5">{tier.description}</p>
-                <p className="text-xs text-neutral-400 pt-0.5">Est. Hashrate: {tier.hashrateHint}</p>
+                <div>
+                  <h3 className="text-sm font-semibold">{tier.name}</h3>
+                  <p className="text-xs text-neutral-400">{tier.description}</p>
+                  <p className="text-[11px] text-neutral-500">Est. Hashrate: {tier.hashrateHint}</p>
+                </div>
               </div>
-              <div>
+
+              <div className="flex flex-col items-end">
+                <span className="text-xs text-neutral-400 mb-1">{priceText}</span>
                 <button
-                  onClick={() => onClickCta(tier.id)()}
+                  onClick={onClickCta(tier.id)}
                   disabled={loading || !address || !id}
-                  className="px-3 py-1.5 text-xs rounded-md bg-neutral-700 hover:bg-neutral-600 text-white disabled:bg-neutral-700 disabled:text-neutral-500"
                   title={!address ? "Connect wallet first" : undefined}
+                  className={`fin-btn fin-btn-claim px-3 py-1.5 text-xs ${loading || !address || !id ? "opacity-50 cursor-not-allowed" : ""}`}
                 >
                   {ctaText(tier.id)}
                 </button>
@@ -346,12 +399,14 @@ const Market: FC<MarketProps> = ({ onTransactionSuccess }) => {
             </div>
           );
         })}
-      </div>
-      {!!message && <p className="text-center text-xs text-neutral-400 mt-2">{message}</p>}
+      </section>
+
+      {!!message && <p className="text-center text-xs text-neutral-400">{message}</p>}
+
+      <div className="fin-bottom-space" />
     </div>
   );
 };
 
 export default Market;
-
 
