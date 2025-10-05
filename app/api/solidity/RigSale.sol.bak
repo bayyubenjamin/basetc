@@ -9,18 +9,17 @@ import "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
 interface IRigNFT {
-    // Fungsi Minting RigNFT yang dipanggil dari RigSale
-    function mintBySale(address to, uint256 id, uint256 amount) external; 
+    function mintBySale(address to, uint256 id, uint256 amount) external;
 }
 
 /**
  * @title RigSaleFlexible (Free mint via FID + inviter)
  * @notice
- * - Menambahkan peran rewardMinter untuk Mint NFT reward dari kuota undangan.
+ * - Jalur free mint lama `claimFree()` DIHAPUS untuk keamanan (hanya FID-signed).
+ * - EIP-712 FreeClaim mencakup `inviter` agar relasi & hitungan undangan tercatat on-chain.
+ * - Fungsi jual-beli & admin tetap sama.
  */
 contract RigSaleFlexible is Ownable, Pausable, ReentrancyGuard, EIP712 {
-    using ECDSA for bytes32;
-
     IRigNFT public immutable rigNFT;
     address public treasury;
 
@@ -45,10 +44,8 @@ contract RigSaleFlexible is Ownable, Pausable, ReentrancyGuard, EIP712 {
     mapping(address => address) public inviterOf;     // invitee -> inviter (tetap, set sekali)
     mapping(address => uint256) public inviteCount;   // inviter -> jumlah invite valid (unik) yang sukses klaim
 
-    // ── BARU: Peran Minter Reward
-    address public rewardMinter;
-
     // ── EIP-712 typehash untuk klaim berbasis FID + inviter
+    // FreeClaim(uint256 fid,address to,address inviter,uint256 deadline)
     bytes32 private constant FREECLAIM_TYPEHASH =
         keccak256("FreeClaim(uint256 fid,address to,address inviter,uint256 deadline)");
 
@@ -60,14 +57,13 @@ contract RigSaleFlexible is Ownable, Pausable, ReentrancyGuard, EIP712 {
     event BoughtETH(address indexed buyer, uint256 indexed id, uint256 amount, uint256 paidWei);
     event BoughtERC20(address indexed buyer, uint256 indexed id, uint256 amount, uint256 paid);
     event Withdrawn(address indexed to, uint256 amountWei);
+
     event FreeMintConfigured(uint256 indexed id, bool open);
     event FreeMinted(address indexed to, uint256 indexed id);
     event FidSignerChanged(address indexed newSigner);
-    event Invited(address indexed inviter, address indexed invitee, uint256 indexed fid);
-    // ── BARU: Event Minter Reward
-    event RewardMinterChanged(address indexed oldMinter, address indexed newMinter);
-    event RewardMinted(address indexed to, uint256 indexed id, uint256 amount);
 
+    // Referral events
+    event Invited(address indexed inviter, address indexed invitee, uint256 indexed fid);
 
     constructor(address _rigNFT, address _treasury, address initialOwner)
         Ownable(initialOwner)
@@ -78,22 +74,14 @@ contract RigSaleFlexible is Ownable, Pausable, ReentrancyGuard, EIP712 {
         rigNFT = IRigNFT(_rigNFT);
         treasury = _treasury;
 
-        _mode = Mode.ETH_ONLY; 
-        _freeMintId = 0;       
-        _freeMintOpen = false; 
+        _mode = Mode.ETH_ONLY; // default
+        _freeMintId = 0;       // set via setFreeMintId
+        _freeMintOpen = false; // default closed
     }
 
     // ======================
     // Admin
     // ======================
-    
-    // ── BARU: Admin Minter Reward
-    function setRewardMinter(address minter) external onlyOwner {
-        require(minter != address(0), "bad minter");
-        emit RewardMinterChanged(rewardMinter, minter);
-        rewardMinter = minter;
-    }
-    // ── AKHIR BARU
 
     function setTreasury(address t) external onlyOwner {
         require(t != address(0), "bad treasury");
@@ -106,7 +94,7 @@ contract RigSaleFlexible is Ownable, Pausable, ReentrancyGuard, EIP712 {
         _payToken = IERC20(address(0));
         emit ModeChanged(_mode, address(0));
     }
-// ... (Fungsi Admin lainnya seperti setPaymentModeERC20, setEthPrice, dll. tetap sama) ...
+
     function setPaymentModeERC20(address token) external onlyOwner {
         require(token != address(0), "bad token");
         _payToken = IERC20(token);
@@ -174,30 +162,10 @@ contract RigSaleFlexible is Ownable, Pausable, ReentrancyGuard, EIP712 {
         emit Withdrawn(treasury, bal);
     }
 
-
-    // ======================
-    // MINTING REWARD BARU (Dipanggil oleh Relayer)
-    // ======================
-
-    /**
-     * @notice Mint Rig NFT ke pengguna sebagai Reward Undangan.
-     * @dev Ini adalah fungsi yang akan dipanggil relayer Anda.
-     */
-    function mintRewardRig(address to, uint256 id, uint256 amount) external whenNotPaused {
-        // HANYA rewardMinter yang dapat memanggil fungsi ini
-        require(msg.sender == rewardMinter, "unauthorized minter");
-        require(id != 0, "bad id");
-        require(amount > 0, "amount=0");
-
-        rigNFT.mintBySale(to, id, amount);
-
-        emit RewardMinted(to, id, amount);
-    }
-
     // ======================
     // View / Getters (untuk frontend)
     // ======================
-    // ... (Semua View/Getters tetap sama) ...
+
     function currentMode() external view returns (Mode) { return _mode; }
     function paymentToken() external view returns (address) { return address(_payToken); }
 
@@ -222,9 +190,25 @@ contract RigSaleFlexible is Ownable, Pausable, ReentrancyGuard, EIP712 {
     }
 
     // ======================
-    // Free Mint per FID (klaim user)
+    // Free Mint per FID (baru) — dengan inviter
     // ======================
 
+    /**
+     * @notice Klaim 1x per FID dengan EIP-712 signature dari fidSigner.
+     * Digest: keccak256(
+     *   abi.encode(
+     *     FREECLAIM_TYPEHASH,
+     *     fid,
+     *     to,
+     *     inviter,
+     *     deadline
+     *   )
+     * ) lalu _hashTypedDataV4(...)
+     *
+     * - signer: fidSigner (trusted backend/relayer yg verifikasi FID ↔ wallet & valid inviter)
+     * - replay protection: freeMintedByFid[fid] = true setelah klaim pertama (tak bisa dobel)
+     * - referral: jika inviter belum tercatat utk `to` & inviter != 0 & inviter != to → set & ++inviteCount[inviter]
+     */
     function claimFreeByFidSig(
         uint256 fid,
         address to,
@@ -238,20 +222,29 @@ contract RigSaleFlexible is Ownable, Pausable, ReentrancyGuard, EIP712 {
         require(!freeMintedByFid[fid], "FID claimed");
         require(block.timestamp <= deadline, "expired");
 
+        // bangun digest EIP-712
         bytes32 structHash = keccak256(abi.encode(
-            FREECLAIM_TYPEHASH, fid, to, inviter, deadline
+            FREECLAIM_TYPEHASH,
+            fid,
+            to,
+            inviter,
+            deadline
         ));
         bytes32 digest = _hashTypedDataV4(structHash);
+
+        // verify signer
         address signer = ECDSA.recover(digest, v, r, s);
         require(signer == fidSigner, "bad signer");
 
         uint256 id = _freeMintId;
         require(id != 0, "free id not set");
 
+        // tandai FID terpakai dan mint
         freeMintedByFid[fid] = true;
-        rigNFT.mintBySale(to, id, 1); // <--- INI ADALAH CLAIM GRATIS USER, BUKAN REWARD
+        rigNFT.mintBySale(to, id, 1);
         emit FreeMinted(to, id);
 
+        // catat relasi inviter -> invitee (sekali, jika belum tercatat)
         if (inviter != address(0) && inviter != to && inviterOf[to] == address(0)) {
             inviterOf[to] = inviter;
             unchecked { inviteCount[inviter] += 1; }
@@ -262,7 +255,7 @@ contract RigSaleFlexible is Ownable, Pausable, ReentrancyGuard, EIP712 {
     // ======================
     // User Buying (bayar)
     // ======================
-    // ... (Fungsi buy, buyWithETH, buyWithERC20, dan Internal helpers _buyETH, _buyERC20 tetap sama) ...
+
     function buy(uint256 id, uint256 amount) external payable whenNotPaused nonReentrant {
         if (_mode == Mode.ETH_ONLY) {
             _buyETH(id, amount);
@@ -324,4 +317,3 @@ contract RigSaleFlexible is Ownable, Pausable, ReentrancyGuard, EIP712 {
 
     receive() external payable {}
 }
-
