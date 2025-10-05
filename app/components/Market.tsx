@@ -445,4 +445,3 @@ const Market: FC = () => {
 };
 
 export default Market;
-

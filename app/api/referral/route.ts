@@ -5,7 +5,6 @@ import { getSupabaseAdmin } from "../../lib/supabase/server";
 import { privateKeyToAccount } from "viem/accounts";
 import { rigSaleAddress } from "../../lib/web3Config"; 
 import { baseSepolia } from "viem/chains"; 
-import { ABI as RIGSALE_ABI } from "../lib/abi/rigSale.json"; // Ambil ABI yang lengkap
 
 // Ensures the route is always dynamically rendered, reading the latest environment variables on Vercel.
 export const dynamic = "force-dynamic";
@@ -13,8 +12,6 @@ export const dynamic = "force-dynamic";
 /* =========================
    Invite Tiering
    ========================= */
-// ... (calculateMaxClaims dan remainingClaims tetap sama)
-
 function calculateMaxClaims(validInvites: number): number {
   if (!Number.isFinite(validInvites) || validInvites <= 0) return 0;
   const first = validInvites >= 1 ? 1 : 0;
@@ -38,7 +35,6 @@ function remainingClaims(validInvites: number, usedClaims: number): number {
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const MINT_MODE = (process.env.REFERRAL_MINT_MODE || "none").toLowerCase();
-// Gunakan BACKEND_SIGNER_PK untuk konsistensi
 const BACKEND_SIGNER_PK = process.env.BACKEND_SIGNER_PK || process.env.RELAYER_PRIVATE_KEY || ""; 
 const RIGSALE_ADDRESS = process.env.CONTRACT_RIGSALE || "";
 const RIGNFT_ADDRESS  = process.env.CONTRACT_RIGNFT  || "";
@@ -48,8 +44,8 @@ const BASIC_ID = 1;
 const TABLE_REFERRALS = "referrals";
 const TABLE_CLAIMS    = "claims";
 
-// FIX: Gunakan ABI yang lebih lengkap dari file JSON
-// const ABI_RIGSALE = ["function mintBySale(address to, uint256 id, uint256 amount) external"]; 
+// FIX: Kembali menggunakan ABI string sederhana untuk menghindari Build Error.
+const ABI_RIGSALE = ["function mintBySale(address to, uint256 id, uint256 amount) external"]; 
 const ABI_RIGNFT = ["function mintByGame(address to, uint256 id, uint256 amount) external"];
 
 /* =========================
@@ -61,7 +57,6 @@ function getProviderAndSigner() {
   const signer = new ethers.Wallet(BACKEND_SIGNER_PK, provider);
   return { provider, signer };
 }
-// ... (requireString, requireAddress, requireFidString, countValidInvites, sumUsedClaims, recordClaim, trackReferral tetap sama)
 
 function requireString(value: unknown, name: string) {
   if (typeof value !== "string" || value.trim().length === 0) {
@@ -127,39 +122,29 @@ async function trackReferral(inviter: string, invitee_fid: string, status: "pend
 }
 
 
-// FIX: Fungsi Minting Reward NFT via RigSale
+// Fungsi Minting Reward NFT via RigSale
 async function mintBasicViaRigSale(to: string) {
   const { signer } = getProviderAndSigner();
   if (!signer) throw new Error("Signer backend tidak dikonfigurasi.");
   if (!RIGSALE_ADDRESS) throw new Error("CONTRACT_RIGSALE belum diset.");
   
-  // FIX: Kita asumsikan fungsi yang benar untuk Mint Reward via relayer adalah mintRewards
-  // atau fungsi internal yang dapat diakses oleh relayer.
-  // Jika RigSale adalah kontrak yang memiliki fungsi Minting Reward, 
-  // kita harus memanggil fungsi yang sesuai dengan ID NFT Rig Basic (ID 1).
+  // ABI digunakan untuk memanggil fungsi minting di kontrak RigSale
+  const contract = new ethers.Contract(RIGSALE_ADDRESS, ABI_RIGSALE, signer);
   
-  // Kita asumsikan fungsi Mint Reward adalah 'mintRewards' atau 'mintByRelayer'
-  // Karena Anda menggunakan RigSale, kita asumsikan fungsinya adalah yang mengelola rewards:
-  const RELAYER_ABI = [
-      "function mintRewards(address _to, uint256 _id, uint256 _amount) external",
-      "function mintBySale(address to, uint256 id, uint256 amount) external", // Fallback
-      // Tambahkan ABI spesifik RewardsVault atau fungsi Mint Rewards jika ada.
-  ];
-
   try {
-    const contract = new ethers.Contract(RIGSALE_ADDRESS, RELAYER_ABI, signer);
-    
-    // Minta kontrak untuk mengirim transaksi mint NFT ke alamat pengguna.
-    // Kita panggil mintBySale dengan ID NFT Rig Basic (ID 1)
+    // FIX: Minting Reward menggunakan fungsi yang sama dengan klaim user.
+    // Jika Reward NFT harusnya Basic Rig ID 1, panggil mintBySale.
     const tx = await contract.mintBySale(to, BASIC_ID, 1);
     
+    // Tunggu konfirmasi, jika gagal, akan ditangkap di catch block
     const receipt = await tx.wait();
     return receipt?.hash ?? tx.hash;
 
   } catch(e: any) {
       console.error("Relayer Transaction failed with error:", e.message);
-      // Jika RPC gagal dengan error revert, kontrak mungkin tidak memberikan izin (revert).
-      throw new Error(`Transaction Reverted (Kontrak menolak minting). Error: ${e.reason || e.code}`);
+      // Ini adalah perbaikan penting untuk menangkap error revert
+      const reason = e.reason || e.code || "unknown";
+      throw new Error(`TRANSACTION REVERTED: Minting Reward gagal. Pastikan Relayer Wallet memiliki izin MINTER_ROLE pada kontrak RigSale. Error: ${reason}`);
   }
 }
 
@@ -230,8 +215,8 @@ export async function POST(req: NextRequest) {
         }
 
         let txHash: string;
+        // Panggil fungsi Minting sesuai mode
         if (MINT_MODE === "rigsale") {
-          // FIX: Pastikan CONTRACT_RIGSALE, BACKEND_SIGNER_PK diisi & signer punya ETH
           txHash = await mintBasicViaRigSale(receiverAddress); 
         } else if (MINT_MODE === "rignft") {
           txHash = await mintBasicViaRigNFT(receiverAddress);
@@ -239,13 +224,12 @@ export async function POST(req: NextRequest) {
           txHash = "0x" + "0".repeat(63) + "beef"; // Mock tx for "none" mode
         }
 
-        // FIX: Mencatat klaim HANYA setelah transaksi berhasil dikirim/diproses oleh relayer
+        // Catat klaim di Supabase HANYA setelah Minting Relayer berhasil/diproses
         await recordClaim(inviterAddress, 1, txHash);
         
         return NextResponse.json({ ok: true, txHash });
       }
       
-      // ... (mark-valid, free-sign, dan GET handler tetap sama) ...
       case "mark-valid": {
           const invitee_fid_str = requireFidString(body.invitee_fid, "invitee_fid");
           requireString(body.invitee_wallet, "invitee_wallet");
@@ -253,7 +237,6 @@ export async function POST(req: NextRequest) {
           const invitee_fid = invitee_fid_str;
           const invitee_wallet = String(body.invitee_wallet).trim().toLowerCase();
 
-          // Cari dan update status di Supabase berdasarkan invitee_fid
           const { data: updateData, error: updateError } = await getSupabaseAdmin()
               .from(TABLE_REFERRALS)
               .update({ status: "valid", invitee_wallet: invitee_wallet })
@@ -357,14 +340,19 @@ export async function POST(req: NextRequest) {
     }
   } catch (e: any) {
     console.error("API referral error:", e);
-    if (e.message.includes("fid is required and must be a number")) {
-        return NextResponse.json({ error: "Validasi data umum gagal: FID Pengundang diperlukan. Pastikan Anda memiliki FID yang sah." }, { status: 400 });
-    }
+    
     // Tangani error revert dengan menampilkan pesan yang lebih jelas
-    if (e.message.includes("Transaction Reverted")) {
-         return NextResponse.json({ error: e.message }, { status: 400 });
+    let errorMessage = String(e?.message || "Server error");
+    if (errorMessage.includes("TRANSACTION REVERTED")) {
+         return NextResponse.json({ error: errorMessage }, { status: 400 });
     }
-    return NextResponse.json({ error: String(e?.message || "Server error") }, { status: 500 });
+    
+    // Tangani error validasi umum
+    if (errorMessage.includes("fid is required and must be a number")) {
+        return NextResponse.json({ error: "Validasi data umum gagal: FID Pengundang diperlukan." }, { status: 400 });
+    }
+    
+    return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }
 
@@ -405,4 +393,3 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json(response);
 }
-
