@@ -97,10 +97,14 @@ async function recordClaim(inviter: string, amount: number, txHash: string) {
   if (error) throw new Error(`Gagal mencatat klaim: ${error.message}`);
 }
 
-async function trackReferral(inviter: string, invitee_fid: string, status: "pending" | "valid" = "pending") {
+async function trackReferral(inviter: string, invitee_fid: string, status: "pending" | "valid" = "pending", invitee_wallet: string | null = null) {
+  const data: { inviter: string; invitee_fid: string; status: "pending" | "valid"; invitee_wallet?: string } = { inviter, invitee_fid, status };
+  if (invitee_wallet) {
+    data.invitee_wallet = invitee_wallet;
+  }
   const { error } = await getSupabaseAdmin()
     .from(TABLE_REFERRALS)
-    .upsert({ inviter, invitee_fid, status }, { onConflict: "inviter,invitee_fid" });
+    .upsert(data, { onConflict: "inviter,invitee_fid" });
   if (error) throw new Error(`Gagal menyimpan referral: ${error.message}`);
 }
 
@@ -140,10 +144,13 @@ export async function POST(req: NextRequest) {
       case "track": {
         requireString(body.inviter, "inviter");
         requireString(body.invitee_fid, "invitee_fid");
+        // Gunakan wallet jika ada
         const inviter = body.inviter.trim();
         const invitee_fid = String(body.invitee_fid).trim();
+        const invitee_wallet = body.invitee_wallet ? body.invitee_wallet.toLowerCase() : null;
         const status = (body.status === "valid" ? "valid" : "pending") as "pending" | "valid";
-        await trackReferral(inviter, invitee_fid, status);
+        
+        await trackReferral(inviter, invitee_fid, status, invitee_wallet);
         return NextResponse.json({ ok: true });
       }
 
@@ -189,29 +196,68 @@ export async function POST(req: NextRequest) {
         await recordClaim(inviterAddress, 1, txHash);
         
         // --- Integrasi Leaderboard ---
-        if (SUPABASE_URL && SUPABASE_ANON_KEY) {
-          const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-          const { data: inviterData } = await getSupabaseAdmin()
-            .from('users')
-            .select('fid')
-            .eq('wallet', inviterAddress.toLowerCase())
-            .single();
-
-          if (inviterData?.fid) {
-            supabase.functions.invoke('add-referral-points', {
-                body: { 
-                    referrer_fid: inviterData.fid,
-                    referred_fid: inviteeFid 
-                }
-            }).catch(console.error); // Log error di server jika gagal, tapi jangan crash
-          }
-        }
+        // Poin Leaderboard untuk Claim NFT dibayarkan di step "mark-valid"
+        // di bawah, bukan di sini (untuk membedakan referral yang berhasil claim
+        // dengan referral yang hanya menggunakan kuota NFT dari pool).
         // -----------------------------
 
         return NextResponse.json({ ok: true, txHash });
       }
       
-      // --- START OF FIX: Tambahkan case untuk "free-sign" ---
+      // --- FIX START: Menangani permintaan dari frontend untuk menandai klaim berhasil ---
+      case "mark-valid": {
+          requireString(body.invitee_fid, "invitee_fid");
+          requireString(body.invitee_wallet, "invitee_wallet");
+          
+          const invitee_fid = String(body.invitee_fid).trim();
+          const invitee_wallet = String(body.invitee_wallet).trim().toLowerCase();
+
+          // Cari dan update status di Supabase berdasarkan invitee_fid
+          const { data: updateData, error: updateError } = await getSupabaseAdmin()
+              .from(TABLE_REFERRALS)
+              // Hanya update yang statusnya masih 'pending'
+              .update({ status: "valid", invitee_wallet: invitee_wallet })
+              .eq("invitee_fid", invitee_fid)
+              .eq("status", "pending")
+              .select("inviter") // Ambil alamat inviter untuk memberi poin
+              .maybeSingle();
+
+          if (updateError) {
+              throw new Error(`Gagal update referral status: ${updateError.message}`);
+          }
+          
+          if (!updateData) {
+              // Jika tidak ada data yang diupdate, referral sudah valid atau tidak ada record pending.
+              return NextResponse.json({ ok: true, message: "Referral already marked valid or not found." });
+          }
+
+          // Trigger point referral (sekali saja saat pertama valid)
+          if (SUPABASE_URL && SUPABASE_ANON_KEY) {
+              const supabaseAnon = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+              const inviterAddress = updateData.inviter;
+
+              // Cari FID inviter untuk memberi poin
+              const { data: inviterData } = await getSupabaseAdmin()
+                  .from('users')
+                  .select('fid')
+                  .eq('wallet', inviterAddress.toLowerCase())
+                  .maybeSingle();
+
+              if (inviterData?.fid) {
+                  // Panggil Edge Function untuk memberikan poin referral ke inviter
+                  supabaseAnon.functions.invoke('add-referral-points', {
+                      body: { 
+                          referrer_fid: inviterData.fid,
+                          referred_fid: invitee_fid 
+                      }
+                  }).catch(console.error);
+              }
+          }
+
+          return NextResponse.json({ ok: true, message: "Referral marked valid." });
+      }
+      // --- FIX END: Menangani permintaan dari frontend untuk menandai klaim berhasil ---
+      
       case "free-sign": {
         const pk = process.env.BACKEND_SIGNER_PK || process.env.RELAYER_PRIVATE_KEY;
         if (!pk) {
@@ -268,8 +314,7 @@ export async function POST(req: NextRequest) {
             inviter: inviter,
             deadline: deadline.toString(),
         });
-    } // --- END OF FIX: "free-sign" ---
-
+    }
 
       default:
         return NextResponse.json({ error: "Unknown mode" }, { status: 400 });
@@ -281,7 +326,6 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-  // ... (fungsi GET tetap sama, tidak perlu diubah)
   const { searchParams } = new URL(req.url);
   const inviter = searchParams.get("inviter") ?? "";
   const detail = searchParams.get("detail") === "1";

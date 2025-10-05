@@ -1,3 +1,4 @@
+// app/components/Market.tsx
 "use client";
 
 import { useEffect, useMemo, useState, type FC } from "react";
@@ -8,7 +9,7 @@ import {
   useWriteContract,
   usePublicClient,
 } from "wagmi";
-import { baseSepolia } from "wagmi/chains";
+import { baseSepolia } from "viem/chains";
 import {
   rigSaleAddress,
   rigSaleABI,
@@ -146,7 +147,7 @@ const Market: FC = () => {
   const { writeContractAsync } = useWriteContract();
 
   /* =============================
-     Actions — preserved behavior
+     Actions — FIX REFERRAL MARK-VALID
   ============================== */
 
   // Free claim (Basic) via server signature
@@ -158,7 +159,7 @@ const Market: FC = () => {
       if (!isBasicFreeForMe) throw new Error("You are not eligible for free mint.");
       if (!fid) throw new Error("Farcaster FID not found. Open from Farcaster app.");
 
-      setMessage("Requesting server signature…");
+      setMessage("1/3: Requesting server signature…");
       const sigRes = await fetch("/api/referral", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -172,7 +173,7 @@ const Market: FC = () => {
       const sig = await sigRes.json();
       if (!sigRes.ok) throw new Error(sig?.error || "Failed to obtain signature.");
 
-      setMessage("Waiting for transaction confirmation…");
+      setMessage("2/3: Sending transaction…");
       const txHash = await writeContractAsync({
         address: rigSaleAddress,
         abi: rigSaleABI as any,
@@ -181,9 +182,14 @@ const Market: FC = () => {
         account: address,
         chain: baseSepolia,
       });
+      
+      setMessage("3/3: Waiting for confirmation…");
       await publicClient?.waitForTransactionReceipt({ hash: txHash });
 
+      // --- FIX REFERRAL: Tandai referral sebagai 'valid' di Supabase
       if (inviter !== "0x0000000000000000000000000000000000000000") {
+        setMessage("Finalizing: Updating referral status..."); 
+        // Panggil API mark-valid yang baru saja diperbaiki di backend
         await fetch("/api/referral", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -194,8 +200,9 @@ const Market: FC = () => {
           }),
         });
       }
+      // --- END FIX ---
 
-      setMessage("Claim successful!");
+      setMessage("Claim successful! Referral counted.");
       refetchFreeUsed?.();
     } catch (e: any) {
       setMessage(e?.shortMessage || e?.message || "Transaction failed");
@@ -409,4 +416,3 @@ const Market: FC = () => {
 };
 
 export default Market;
-
