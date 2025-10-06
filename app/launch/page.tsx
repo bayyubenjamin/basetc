@@ -13,7 +13,7 @@ import Profil from "../components/Profil";
 import Event from "../components/Event"; // <-- Impor komponen baru
 import FidInput from "../components/FidInput";
 // --- FIX: Import isAddress langsung dari ethers v6 ---
-import { isAddress } from "ethers"; 
+import { isAddress } from "ethers";
 
 const DEFAULT_TAB: TabName = "monitoring";
 const TAB_KEY = "basetc_active_tab";
@@ -48,16 +48,21 @@ function MainApp() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ fid: Number(fidStr), wallet: address }),
-    }).catch(err => console.error("Wallet mapping upsert failed:", err));
+    }).catch((err) => console.error("Wallet mapping upsert failed:", err));
   }, [address]);
 
   const content = useMemo(() => {
     switch (activeTab) {
-      case "rakit": return <Rakit />;
-      case "market": return <Market />;
-      case "profil": return <Profil />;
-      case "event": return <Event />; // <-- Render komponen Event
-      default: return <Monitoring />;
+      case "rakit":
+        return <Rakit />;
+      case "market":
+        return <Market />;
+      case "profil":
+        return <Profil />;
+      case "event":
+        return <Event />; // <-- Render komponen Event
+      default:
+        return <Monitoring />;
     }
   }, [activeTab]);
 
@@ -88,7 +93,7 @@ function AppInitializer() {
           display_name: user.displayName,
           pfp_url: user.pfpUrl,
         }),
-      }).catch(err => console.error("Context user auto-upsert failed:", err));
+      }).catch((err) => console.error("Context user auto-upsert failed:", err));
     } else {
       try {
         const url = new URL(window.location.href);
@@ -100,62 +105,60 @@ function AppInitializer() {
     if (finalFid) {
       localStorage.setItem("basetc_fid", String(finalFid));
       setResolvedFid(finalFid);
-      
+
       // --- LOGIKA REFERRAL BARU (Mengatasi URL Stripping) ---
       (async () => {
         try {
           const url = new URL(window.location.href);
-          
+
           // 1. Cek parameter baru: fidref (FID PENGUNDANG)
-          const fidref = url.searchParams.get("fidref"); 
+          const fidref = url.searchParams.get("fidref");
           let inviterWallet: string | null = null;
 
           if (fidref && /^\d+$/.test(fidref)) {
             // A. Ambil alamat wallet Inviter dari backend menggunakan FID mereka
-            const res = await fetch("/api/user", { 
+            const res = await fetch("/api/user", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ mode: "get_wallet_by_fid", fid: Number(fidref) }),
             });
             const data = await res.json();
-            
+
             // Verifikasi respons dari API resolver baru
             if (data?.ok && data.wallet && isAddress(data.wallet)) {
-                inviterWallet = data.wallet;
+              inviterWallet = data.wallet;
             } else {
-                console.warn(`FID Referral found (${fidref}), but wallet resolution failed:`, data?.error);
+              console.warn(`FID Referral found (${fidref}), but wallet resolution failed:`, data?.error);
             }
           }
-          
+
           // 2. Jika fidref gagal/tidak ada, coba cek parameter lama ('ref') atau dari local storage
           if (!inviterWallet) {
             const ref = url.searchParams.get("ref");
             if (ref && isAddress(ref)) {
-                inviterWallet = ref;
+              inviterWallet = ref;
             } else {
-                // Final fallback check to localStorage
-                const localRef = localStorage.getItem("basetc_ref");
-                if (localRef && isAddress(localRef)) {
-                    inviterWallet = localRef;
-                }
+              // Final fallback check to localStorage
+              const localRef = localStorage.getItem("basetc_ref");
+              if (localRef && isAddress(localRef)) {
+                inviterWallet = localRef;
+              }
             }
           }
 
           // 3. Jika Inviter Wallet ditemukan, catat touch
           if (inviterWallet && inviterWallet.toLowerCase() !== "0x0000000000000000000000000000000000000000") {
             // Simpan alamat Inviter yang valid ke localStorage untuk langkah klaim berikutnya
-            localStorage.setItem("basetc_ref", inviterWallet); 
-            
+            localStorage.setItem("basetc_ref", inviterWallet);
             // Catat touch ke Supabase (status pending)
             fetch("/api/referral", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ mode: "touch", inviter: inviterWallet, invitee_fid: finalFid }),
-            }).catch(err => console.error("Referral touch failed:", err));
+            }).catch((err) => console.error("Referral touch failed:", err));
           }
-
         } catch (error) {
-            console.error("General referral processing error:", error);
+          console.error("General referral processing error:", error);
         }
       })();
     }
@@ -172,11 +175,15 @@ function AppInitializer() {
   if (resolvedFid) {
     return <MainApp />;
   }
-  
-  return <FidInput setFid={(fid) => {
-    localStorage.setItem("basetc_fid", String(fid));
-    setResolvedFid(fid);
-  }} />;
+
+  return (
+    <FidInput
+      setFid={(fid) => {
+        localStorage.setItem("basetc_fid", String(fid));
+        setResolvedFid(fid);
+      }}
+    />
+  );
 }
 
 // Komponen utama yang akan di-render untuk /dashboard

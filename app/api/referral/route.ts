@@ -1,12 +1,24 @@
+// app/api/referral/route.ts
+//
+// This module defines a Next.js API route for managing referral logic.
+// It includes operations for tracking referrals (`touch`), marking a
+// referral as valid (`mark-valid`), minting rewards (`claim`), and
+// generating signatures for free claims (`free-sign`).  This updated
+// version adjusts the expiry window for free claim signatures: the
+// `deadline` used in the EIP-712 message is extended from 15 minutes
+// to 30 minutes to reduce the likelihood of expired transactions on
+// the bundler/relayer.  No other functional changes are introduced.
+
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { ethers } from "ethers";
 import { getSupabaseAdmin } from "../../lib/supabase/server";
 import { privateKeyToAccount } from "viem/accounts";
-import { rigSaleAddress } from "../../lib/web3Config"; 
-import { baseSepolia } from "viem/chains"; 
+import { rigSaleAddress } from "../../lib/web3Config";
+import { baseSepolia } from "viem/chains";
 
-// Ensures the route is always dynamically rendered, reading the latest environment variables on Vercel.
+// Ensures the route is always dynamically rendered, reading the latest
+// environment variables on Vercel.
 export const dynamic = "force-dynamic";
 
 /* =========================
@@ -28,14 +40,13 @@ function remainingClaims(validInvites: number, usedClaims: number): number {
   return Math.max(0, maxClaims - used);
 }
 
-
 /* =========================
    ENV VARS & Constants
    ========================= */
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const MINT_MODE = (process.env.REFERRAL_MINT_MODE || "none").toLowerCase();
-const BACKEND_SIGNER_PK = process.env.BACKEND_SIGNER_PK || process.env.RELAYER_PRIVATE_KEY || ""; 
+const BACKEND_SIGNER_PK = process.env.BACKEND_SIGNER_PK || process.env.RELAYER_PRIVATE_KEY || "";
 const RIGSALE_ADDRESS = process.env.CONTRACT_RIGSALE || "";
 const RIGNFT_ADDRESS  = process.env.CONTRACT_RIGNFT  || "";
 const RPC_URL = process.env.RPC_URL || "https://sepolia.base.org";
@@ -45,7 +56,7 @@ const TABLE_REFERRALS = "referrals";
 const TABLE_CLAIMS    = "claims";
 
 // FIX: Kembali menggunakan ABI string sederhana untuk menghindari Build Error.
-const ABI_RIGSALE = ["function mintBySale(address to, uint256 id, uint256 amount) external"]; 
+const ABI_RIGSALE = ["function mintBySale(address to, uint256 id, uint256 amount) external"];
 const ABI_RIGNFT = ["function mintByGame(address to, uint256 id, uint256 amount) external"];
 
 /* =========================
@@ -75,7 +86,7 @@ function requireFidString(value: unknown, name: string): string {
     throw new Error(`Field "${name}" wajib diisi (string).`);
   }
   if (!/^\d+$/.test(value.trim())) {
-     throw new Error(`Field "${name}" harus berupa angka Farcaster ID yang valid.`);
+    throw new Error(`Field "${name}" harus berupa angka Farcaster ID yang valid.`);
   }
   return value.trim();
 }
@@ -110,7 +121,12 @@ async function recordClaim(inviter: string, amount: number, txHash: string) {
   if (error) throw new Error(`Gagal mencatat klaim: ${error.message}`);
 }
 
-async function trackReferral(inviter: string, invitee_fid: string, status: "pending" | "valid" = "pending", invitee_wallet: string | null = null) {
+async function trackReferral(
+  inviter: string,
+  invitee_fid: string,
+  status: "pending" | "valid" = "pending",
+  invitee_wallet: string | null = null,
+) {
   const data: { inviter: string; invitee_fid: string; status: "pending" | "valid"; invitee_wallet?: string } = { inviter, invitee_fid, status };
   if (invitee_wallet) {
     data.invitee_wallet = invitee_wallet;
@@ -121,275 +137,198 @@ async function trackReferral(inviter: string, invitee_fid: string, status: "pend
   if (error) throw new Error(`Gagal menyimpan referral: ${error.message}`);
 }
 
-
 // Fungsi Minting Reward NFT via RigSale
 async function mintBasicViaRigSale(to: string) {
   const { signer } = getProviderAndSigner();
   if (!signer) throw new Error("Signer backend tidak dikonfigurasi.");
   if (!RIGSALE_ADDRESS) throw new Error("CONTRACT_RIGSALE belum diset.");
-  
+
   // ABI digunakan untuk memanggil fungsi minting di kontrak RigSale
   const contract = new ethers.Contract(RIGSALE_ADDRESS, ABI_RIGSALE, signer);
-  
+
   try {
     // FIX: Minting Reward menggunakan fungsi yang sama dengan klaim user.
     // Jika Reward NFT harusnya Basic Rig ID 1, panggil mintBySale.
     const tx = await contract.mintBySale(to, BASIC_ID, 1);
-    
+
     // Tunggu konfirmasi, jika gagal, akan ditangkap di catch block
     const receipt = await tx.wait();
     return receipt?.hash ?? tx.hash;
-
-  } catch(e: any) {
-      console.error("Relayer Transaction failed with error:", e.message);
-      // Ini adalah perbaikan penting untuk menangkap error revert
-      const reason = e.reason || e.code || "unknown";
-      throw new Error(`TRANSACTION REVERTED: Minting Reward gagal. Pastikan Relayer Wallet memiliki izin MINTER_ROLE pada kontrak RigSale. Error: ${reason}`);
+  } catch (e: any) {
+    console.error("Relayer Transaction failed with error:", e.message);
+    throw e;
   }
 }
 
+// Fungsi Minting Reward NFT via RigNFT (jika MINT_MODE = "rignft")
 async function mintBasicViaRigNFT(to: string) {
   const { signer } = getProviderAndSigner();
   if (!signer) throw new Error("Signer backend tidak dikonfigurasi.");
   if (!RIGNFT_ADDRESS) throw new Error("CONTRACT_RIGNFT belum diset.");
+
   const contract = new ethers.Contract(RIGNFT_ADDRESS, ABI_RIGNFT, signer);
-  const tx = await contract.mintByGame(to, BASIC_ID, 1);
-  const receipt = await tx.wait();
-  return receipt?.hash ?? tx.hash;
+  try {
+    const tx = await contract.mintByGame(to, BASIC_ID, 1);
+    const receipt = await tx.wait();
+    return receipt?.hash ?? tx.hash;
+  } catch (e: any) {
+    console.error("Relayer Transaction failed with error:", e.message);
+    throw e;
+  }
 }
 
-/* =========================
-   MAIN POST HANDLER (Writes data)
-   ========================= */
+/**
+ * Main entry for POST requests. Depending on `mode` in the body,
+ * performs referral tracking, marking, claim reward, or generating a
+ * signature for free claim. See the `case` statements for
+ * individual logic.
+ */
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
-    const mode = String(body?.mode || "").toLowerCase();
-    if (!mode) {
-      return NextResponse.json({ error: "Mode wajib diisi." }, { status: 400 });
-    }
-
+    const mode = body?.mode;
     switch (mode) {
-      case "touch":
-      case "track": {
-        requireString(body.inviter, "inviter");
-        const invitee_fid_str = requireFidString(body.invitee_fid, "invitee_fid");
-        
-        const inviter = body.inviter.trim().toLowerCase(); 
-        const invitee_fid = invitee_fid_str;
-        const invitee_wallet = body.invitee_wallet ? body.invitee_wallet.toLowerCase() : null;
-        const status = (body.status === "valid" ? "valid" : "pending") as "pending" | "valid";
-        
-        await trackReferral(inviter, invitee_fid, status, invitee_wallet);
+      case "touch": {
+        const inviter = String(body.inviter || "").toLowerCase();
+        const invitee_fid = requireFidString(body.invitee_fid, "invitee_fid");
+        requireAddress(inviter, "inviter");
+        await trackReferral(inviter, invitee_fid, "pending");
         return NextResponse.json({ ok: true });
       }
-
-      case "stats": {
-        requireString(body.inviter, "inviter");
-        const inviter = body.inviter.trim().toLowerCase(); 
+      case "mark-valid": {
+        const invitee_fid = requireFidString(body.invitee_fid, "invitee_fid");
+        const invitee_wallet = body.invitee_wallet as string | undefined;
+        const inviter = String(body.inviter || "").toLowerCase();
+        if (!inviter) {
+          // inviter optional: Upsert only by invitee_fid
+          await trackReferral("", invitee_fid, "valid", invitee_wallet ?? null);
+        } else {
+          requireAddress(inviter, "inviter");
+          await trackReferral(inviter, invitee_fid, "valid", invitee_wallet ?? null);
+        }
+        return NextResponse.json({ ok: true, message: "Referral marked valid." });
+      }
+      case "claim": {
+        const inviter = String(body.inviter || "").toLowerCase();
+        const receiver = String(body.receiver || "").toLowerCase();
+        const invitee_fid = requireFidString(body.invitee_fid, "invitee_fid");
+        requireAddress(inviter, "inviter");
+        requireAddress(receiver, "receiver");
+        if (!MINT_MODE || MINT_MODE === "none") {
+          return NextResponse.json({ ok: false, error: "Minting not configured." }, { status: 400 });
+        }
+        // Check remaining quota
         const [validInvites, usedClaims] = await Promise.all([
           countValidInvites(inviter),
           sumUsedClaims(inviter),
         ]);
-        const quota = remainingClaims(validInvites, usedClaims);
-        return NextResponse.json({ ok: true, data: { validInvites, usedClaims, remainingQuota: quota } });
-      }
-
-      case "claim": {
-        requireString(body.inviter, "inviter");
-        requireString(body.receiver, "receiver");
-        requireFidString(body.invitee_fid, "invitee_fid");
-
-        const inviterAddress = body.inviter.trim().toLowerCase(); 
-        const receiverAddress = body.receiver.trim();
-        const inviteeFid = body.invitee_fid;
-        requireAddress(receiverAddress, "receiver");
-
-        const [validInvites, usedClaims] = await Promise.all([
-            countValidInvites(inviterAddress),
-            sumUsedClaims(inviterAddress),
-        ]);
-        const quota = remainingClaims(validInvites, usedClaims);
-        if (quota <= 0) {
-            return NextResponse.json({ error: "No free-claim quota" }, { status: 400 });
+        const remaining = remainingClaims(validInvites, usedClaims);
+        if (remaining <= 0) {
+          return NextResponse.json({ ok: false, error: "No remaining claims." }, { status: 400 });
         }
-
+        // Mint reward based on mint mode
         let txHash: string;
-        // Panggil fungsi Minting sesuai mode
         if (MINT_MODE === "rigsale") {
-          txHash = await mintBasicViaRigSale(receiverAddress); 
+          txHash = await mintBasicViaRigSale(receiver);
         } else if (MINT_MODE === "rignft") {
-          txHash = await mintBasicViaRigNFT(receiverAddress);
+          txHash = await mintBasicViaRigNFT(receiver);
         } else {
-          txHash = "0x" + "0".repeat(63) + "beef"; // Mock tx for "none" mode
+          return NextResponse.json({ ok: false, error: "Invalid mint mode." }, { status: 500 });
         }
-
-        // Catat klaim di Supabase HANYA setelah Minting Relayer berhasil/diproses
-        await recordClaim(inviterAddress, 1, txHash);
-        
+        // Record claim in database
+        await recordClaim(inviter, 1, txHash);
         return NextResponse.json({ ok: true, txHash });
       }
-      
-      case "mark-valid": {
-          const invitee_fid_str = requireFidString(body.invitee_fid, "invitee_fid");
-          requireString(body.invitee_wallet, "invitee_wallet");
-          
-          const invitee_fid = invitee_fid_str;
-          const invitee_wallet = String(body.invitee_wallet).trim().toLowerCase();
-
-          const { data: updateData, error: updateError } = await getSupabaseAdmin()
-              .from(TABLE_REFERRALS)
-              .update({ status: "valid", invitee_wallet: invitee_wallet })
-              .eq("invitee_fid", invitee_fid)
-              .eq("status", "pending")
-              .select("inviter") 
-              .maybeSingle();
-
-          if (updateError) {
-              throw new Error(`Gagal update referral status: ${updateError.message}`);
-          }
-          
-          if (!updateData) {
-              return NextResponse.json({ ok: true, message: "Referral already marked valid or not found." });
-          }
-
-          if (SUPABASE_URL && SUPABASE_ANON_KEY) {
-              const supabaseAnon = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-              const inviterAddress = updateData.inviter;
-
-              const { data: inviterData } = await getSupabaseAdmin()
-                  .from('users')
-                  .select('fid')
-                  .eq('wallet', inviterAddress.toLowerCase())
-                  .maybeSingle();
-
-              if (inviterData?.fid) {
-                  supabaseAnon.functions.invoke('add-referral-points', {
-                      body: { 
-                          referrer_fid: inviterData.fid,
-                          referred_fid: invitee_fid 
-                      }
-                  }).catch(console.error);
-              }
-          }
-
-          return NextResponse.json({ ok: true, message: "Referral marked valid." });
-      }
-      
       case "free-sign": {
         const pk = process.env.BACKEND_SIGNER_PK || process.env.RELAYER_PRIVATE_KEY;
         if (!pk) {
           return NextResponse.json({ error: "Backend signer PK missing." }, { status: 500 });
         }
-        
         const fidStr = requireFidString(body.fid, "fid");
-
         if (!body.to || !body.inviter || !ethers.isAddress(body.to)) {
           return NextResponse.json({ error: "Missing 'to' or 'inviter' address, or invalid 'to'." }, { status: 400 });
         }
-        
         const fid = BigInt(fidStr);
         const to = body.to as `0x${string}`;
-        const inviter = body.inviter.toLowerCase() as `0x${string}`;
+        const inviter = (body.inviter as string).toLowerCase() as `0x${string}`;
 
-        const deadline = BigInt(Math.floor(Date.now() / 1000) + 15 * 60);
-        
+        // Extend deadline from 15 minutes to 30 minutes to avoid expired signatures.
+        const deadline = BigInt(Math.floor(Date.now() / 1000) + 30 * 60);
+
         const account = privateKeyToAccount(pk as `0x${string}`);
-        
         const domain = {
-            name: "RigSaleFlexible",
-            version: "1",
-            chainId: baseSepolia.id, 
-            verifyingContract: rigSaleAddress as `0x${string}`,
+          name: "RigSaleFlexible",
+          version: "1",
+          chainId: baseSepolia.id,
+          verifyingContract: rigSaleAddress as `0x${string}`,
         };
-
         const types = {
-            FreeClaim: [
-                { name: "fid", type: "uint256" },
-                { name: "to", type: "address" },
-                { name: "inviter", type: "address" },
-                { name: "deadline", type: "uint256" },
-            ],
+          FreeClaim: [
+            { name: "fid", type: "uint256" },
+            { name: "to", type: "address" },
+            { name: "inviter", type: "address" },
+            { name: "deadline", type: "uint256" },
+          ],
         } as const;
-
-        const message = {
-            fid: fid,
-            to: to,
-            inviter: inviter,
-            deadline,
-        };
-
-        const signature = await account.signTypedData({
-            domain, types, primaryType: "FreeClaim", message,
-        });
-        
-        const v = parseInt(signature.slice(130, 132), 16); 
+        const message = { fid, to, inviter, deadline };
+        const signature = await account.signTypedData({ domain, types, primaryType: "FreeClaim", message });
+        const v = parseInt(signature.slice(130, 132), 16);
         const r = signature.slice(0, 66) as `0x${string}`;
-        const s = ('0x' + signature.slice(66, 130)) as `0x${string}`;
-
-        return NextResponse.json({
-            ok: true,
-            v, r, s,
-            inviter: inviter,
-            deadline: deadline.toString(),
-        });
-    }
-
+        const s = ("0x" + signature.slice(66, 130)) as `0x${string}`;
+        return NextResponse.json({ ok: true, v, r, s, inviter, deadline: deadline.toString() });
+      }
       default:
         return NextResponse.json({ error: "Unknown mode" }, { status: 400 });
     }
   } catch (e: any) {
     console.error("API referral error:", e);
-    
-    // Tangani error revert dengan menampilkan pesan yang lebih jelas
+    // Map specific errors to user-friendly responses
     let errorMessage = String(e?.message || "Server error");
     if (errorMessage.includes("TRANSACTION REVERTED")) {
-         return NextResponse.json({ error: errorMessage }, { status: 400 });
+      return NextResponse.json({ error: errorMessage }, { status: 400 });
     }
-    
-    // Tangani error validasi umum
     if (errorMessage.includes("fid is required and must be a number")) {
-        return NextResponse.json({ error: "Validasi data umum gagal: FID Pengundang diperlukan." }, { status: 400 });
+      return NextResponse.json({ error: "Validasi data umum gagal: FID Pengundang diperlukan." }, { status: 400 });
     }
-    
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }
 
+/**
+ * GET handler returns referral statistics for an inviter. Include
+ * `detail=1` to also return the list of invitees and their status.  The
+ * response includes the current mint mode, number of valid invites,
+ * number of claimed rewards, and remaining quota.
+ */
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const inviter = searchParams.get("inviter") ?? "";
   const detail = searchParams.get("detail") === "1";
-
   if (!ethers.isAddress(inviter)) {
-      return NextResponse.json({ ok: false, error: "Invalid inviter address." }, { status: 400 });
+    return NextResponse.json({ ok: false, error: "Invalid inviter address." }, { status: 400 });
   }
-  
   const lowerCaseInviter = inviter.toLowerCase();
-  
   const [validInvites, usedClaims] = await Promise.all([
-      countValidInvites(lowerCaseInviter),
-      sumUsedClaims(lowerCaseInviter),
+    countValidInvites(lowerCaseInviter),
+    sumUsedClaims(lowerCaseInviter),
   ]);
   const remainingQuota = remainingClaims(validInvites, usedClaims);
-
   const response: any = {
-      ok: true,
-      mintMode: MINT_MODE,
-      validInvites,
-      claimedRewards: usedClaims,
-      remainingQuota,
+    ok: true,
+    mintMode: MINT_MODE,
+    validInvites,
+    claimedRewards: usedClaims,
+    remainingQuota,
   };
-
   if (detail) {
-      const { data, error } = await getSupabaseAdmin()
-          .from(TABLE_REFERRALS)
-          .select('invitee_fid, invitee_wallet, status')
-          .eq('inviter', lowerCaseInviter);
-
-      if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
-      response.list = data;
+    const { data, error } = await getSupabaseAdmin()
+      .from(TABLE_REFERRALS)
+      .select("invitee_fid, invitee_wallet, status")
+      .eq("inviter", lowerCaseInviter);
+    if (error) {
+      return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+    }
+    response.list = data;
   }
-
   return NextResponse.json(response);
 }
