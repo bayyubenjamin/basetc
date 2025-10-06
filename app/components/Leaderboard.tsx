@@ -1,4 +1,3 @@
-// app/components/Leaderboard.tsx
 "use client";
 
 import { useState, useEffect, type FC, useMemo } from "react";
@@ -8,7 +7,7 @@ import { formatEther } from "viem";
 import { fetchCurrentSnapshot, type Snapshot } from "../utils/snapshot";
 import { VAULT_ADDRESS, vaultABI } from "../lib/vault";
 
-// ====== Leaderboard (tetap) ======
+// Tipe data untuk tabel leaderboard (dari /api/leaderboard)
 type LeaderboardEntry = {
   rank: number;
   fid: number;
@@ -23,19 +22,19 @@ const Leaderboard: FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // ====== Snapshot state ======
-  const { address } = useAccount();
+  // ====== Snapshot & Wallet ======
+  const { address, chain } = useAccount();
   const [snap, setSnap] = useState<Snapshot | null>(null);
   const [claiming, setClaiming] = useState(false);
 
-  // fetch leaderboard (seperti sebelumnya)
+  // Fetch leaderboard
   useEffect(() => {
     const fetchLeaderboard = async () => {
       try {
         setLoading(true);
-        const res = await fetch("/api/leaderboard");
-        if (!res.ok) throw new Error("Failed to fetch leaderboard data.");
-        const data = await res.json();
+        const response = await fetch("/api/leaderboard");
+        if (!response.ok) throw new Error("Failed to fetch leaderboard data.");
+        const data = await response.json();
         setLeaderboardData(data.items);
       } catch (err: any) {
         setError(err.message);
@@ -46,27 +45,30 @@ const Leaderboard: FC = () => {
     fetchLeaderboard();
   }, []);
 
-  // fetch snapshot current
+  // Fetch snapshot
   useEffect(() => {
     fetchCurrentSnapshot().then(setSnap);
   }, []);
 
-  // entitlement user (kalau ada)
+  // Entitlement user dari JSON
   const entitlement = useMemo(() => {
     if (!snap || !address) return null;
     return snap.entries[(address.toLowerCase() as `0x${string}`)] || null;
   }, [snap, address]);
 
-  // status claimed on-chain
+  // Status claimed on-chain
   const { data: isClaimed } = useReadContract({
     abi: vaultABI,
     address: VAULT_ADDRESS,
     functionName: "claimed",
-    args: [BigInt(snap?.snapshotId || 0), (address ?? "0x0000000000000000000000000000000000000000") as `0x${string}`],
-    query: { enabled: !!snap && !!address },
+    args: [
+      BigInt(snap?.snapshotId || 0),
+      (address ?? "0x0000000000000000000000000000000000000000") as `0x${string}`
+    ],
+    // beberapa versi wagmi pakai opsi 'query' atau tidak; aman dibiarkan saja
   });
 
-  // write claim
+  // Write claim
   const { data: txHash, writeContract, isPending } = useWriteContract();
   const { isLoading: txLoading, isSuccess: txSuccess } = useWaitForTransactionReceipt({ hash: txHash });
 
@@ -75,6 +77,9 @@ const Leaderboard: FC = () => {
     try {
       setClaiming(true);
       await writeContract({
+        // tambahkan account (dan chainId opsional) untuk memuaskan typing wagmi
+        account: address as `0x${string}`,
+        ...(chain?.id ? { chainId: chain.id } : {}),
         abi: vaultABI,
         address: VAULT_ADDRESS,
         functionName: "claim",
@@ -85,14 +90,21 @@ const Leaderboard: FC = () => {
     }
   };
 
-  const claimDisabled = !snap || !address || !entitlement || entitlement.amount === "0" || isPending || txLoading || Boolean(isClaimed);
+  const claimDisabled =
+    !snap ||
+    !address ||
+    !entitlement ||
+    entitlement.amount === "0" ||
+    isPending ||
+    txLoading ||
+    Boolean(isClaimed);
 
   return (
     <div className="space-y-4 rounded-lg bg-neutral-900/50 p-4 border border-neutral-700">
       <h2 className="text-lg font-semibold text-center">Leaderboard</h2>
       <p className="text-sm text-neutral-400 text-center">Peringkat poin untuk ronde saat ini.</p>
 
-      {/* ====== Halving Reward box (baru) ====== */}
+      {/* ====== Halving Reward box ====== */}
       <div className="rounded-md border border-neutral-700 bg-neutral-800/50 p-3 flex items-center justify-between gap-3">
         <div className="text-sm">
           <div className="font-semibold">Halving Reward</div>
@@ -119,7 +131,7 @@ const Leaderboard: FC = () => {
         </button>
       </div>
 
-      {/* ====== Tabel leaderboard (tetap) ====== */}
+      {/* ====== Tabel leaderboard ====== */}
       <div className="overflow-x-auto">
         <table className="min-w-full text-sm">
           <thead className="text-neutral-400">
