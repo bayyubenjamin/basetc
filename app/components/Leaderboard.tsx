@@ -5,8 +5,8 @@ import { useState, useEffect, type FC, useMemo } from "react";
 import Image from "next/image";
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { formatEther } from "viem";
-import { fetchCurrentSnapshot, type Snapshot } from "@/app/utils/snapshot";
-import { VAULT_ADDRESS, vaultABI } from "@/app/lib/vault";
+import { fetchCurrentSnapshot, type Snapshot } from "../utils/snapshot";
+import { VAULT_ADDRESS, vaultABI } from "../lib/vault";
 
 // ====== Leaderboard (tetap) ======
 type LeaderboardEntry = {
