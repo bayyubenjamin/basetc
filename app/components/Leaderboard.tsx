@@ -2,12 +2,22 @@
 
 import { useState, useEffect, type FC, useMemo } from "react";
 import Image from "next/image";
-import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import {
+  useAccount,
+  useReadContract,
+  useWriteContract,
+  useWaitForTransactionReceipt,
+} from "wagmi";
 import { formatEther } from "viem";
+import { base, baseSepolia } from "viem/chains"; // <— tambahkan ini
 import { fetchCurrentSnapshot, type Snapshot } from "../utils/snapshot";
 import { VAULT_ADDRESS, vaultABI } from "../lib/vault";
 
-// Tipe data untuk tabel leaderboard (dari /api/leaderboard)
+// === pilih chain TX ===
+// - pakai base untuk mainnet
+// - pakai baseSepolia untuk testnet
+const TX_CHAIN = baseSepolia;
+
 type LeaderboardEntry = {
   rank: number;
   fid: number;
@@ -23,7 +33,7 @@ const Leaderboard: FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   // ====== Snapshot & Wallet ======
-  const { address, chain } = useAccount();
+  const { address } = useAccount();
   const [snap, setSnap] = useState<Snapshot | null>(null);
   const [claiming, setClaiming] = useState(false);
 
@@ -63,27 +73,33 @@ const Leaderboard: FC = () => {
     functionName: "claimed",
     args: [
       BigInt(snap?.snapshotId || 0),
-      (address ?? "0x0000000000000000000000000000000000000000") as `0x${string}`
+      (address ??
+        "0x0000000000000000000000000000000000000000") as `0x${string}`,
     ],
-    // beberapa versi wagmi pakai opsi 'query' atau tidak; aman dibiarkan saja
+    // beberapa versi wagmi tidak butuh query.enabled — biarkan default
   });
 
   // Write claim
   const { data: txHash, writeContract, isPending } = useWriteContract();
-  const { isLoading: txLoading, isSuccess: txSuccess } = useWaitForTransactionReceipt({ hash: txHash });
+  const { isLoading: txLoading, isSuccess: txSuccess } =
+    useWaitForTransactionReceipt({ hash: txHash });
 
   const onClaim = async () => {
     if (!snap || !entitlement || !address) return;
     try {
       setClaiming(true);
       await writeContract({
-        // tambahkan account (dan chainId opsional) untuk memuaskan typing wagmi
+        // ====== FIX INTI: sertakan chain & account ======
+        chain: TX_CHAIN,
         account: address as `0x${string}`,
-        ...(chain?.id ? { chainId: chain.id } : {}),
         abi: vaultABI,
         address: VAULT_ADDRESS,
         functionName: "claim",
-        args: [BigInt(snap.snapshotId), BigInt(entitlement.amount), entitlement.proof],
+        args: [
+          BigInt(snap.snapshotId),
+          BigInt(entitlement.amount),
+          entitlement.proof,
+        ],
       });
     } finally {
       setClaiming(false);
@@ -102,7 +118,9 @@ const Leaderboard: FC = () => {
   return (
     <div className="space-y-4 rounded-lg bg-neutral-900/50 p-4 border border-neutral-700">
       <h2 className="text-lg font-semibold text-center">Leaderboard</h2>
-      <p className="text-sm text-neutral-400 text-center">Peringkat poin untuk ronde saat ini.</p>
+      <p className="text-sm text-neutral-400 text-center">
+        Peringkat poin untuk ronde saat ini.
+      </p>
 
       {/* ====== Halving Reward box ====== */}
       <div className="rounded-md border border-neutral-700 bg-neutral-800/50 p-3 flex items-center justify-between gap-3">
@@ -110,7 +128,12 @@ const Leaderboard: FC = () => {
           <div className="font-semibold">Halving Reward</div>
           {snap ? (
             <div className="text-neutral-300">
-              Snapshot #{snap.snapshotId} {isClaimed ? "• ✅ Claimed" : entitlement ? "• Eligible" : "• Not eligible"}
+              Snapshot #{snap.snapshotId}{" "}
+              {isClaimed
+                ? "• ✅ Claimed"
+                : entitlement
+                ? "• Eligible"
+                : "• Not eligible"}
             </div>
           ) : (
             <div className="text-neutral-400">No active snapshot</div>
@@ -127,7 +150,11 @@ const Leaderboard: FC = () => {
           disabled={claimDisabled}
           className="px-3 py-2 rounded-md bg-white/10 hover:bg-white/15 disabled:opacity-50 text-sm"
         >
-          {isPending || txLoading || claiming ? "Claiming..." : (isClaimed ? "Claimed" : "Claim")}
+          {isPending || txLoading || claiming
+            ? "Claiming..."
+            : isClaimed
+            ? "Claimed"
+            : "Claim"}
         </button>
       </div>
 
@@ -144,35 +171,62 @@ const Leaderboard: FC = () => {
           <tbody>
             {loading && (
               <tr>
-                <td colSpan={3} className="text-center py-4 text-neutral-500">Loading...</td>
+                <td colSpan={3} className="text-center py-4 text-neutral-500">
+                  Loading...
+                </td>
               </tr>
             )}
             {error && (
               <tr>
-                <td colSpan={3} className="text-center py-4 text-red-400">{error}</td>
+                <td colSpan={3} className="text-center py-4 text-red-400">
+                  {error}
+                </td>
               </tr>
             )}
-            {!loading && !error && leaderboardData.map((entry) => (
-              <tr key={entry.fid} className="border-b border-neutral-800 hover:bg-neutral-800/50">
-                <td className="px-4 py-2 font-medium">{entry.rank}</td>
-                <td className="px-4 py-2 flex items-center gap-3">
-                  {entry.pfp_url ? (
-                    <Image src={entry.pfp_url} alt={entry.display_name || ""} width={24} height={24} className="rounded-full" />
-                  ) : (
-                    <div className="w-6 h-6 rounded-full bg-neutral-700" />
-                  )}
-                  <span className="font-semibold">{entry.display_name || `@${entry.username}` || `FID: ${entry.fid}`}</span>
-                </td>
-                <td className="px-4 py-2 text-right font-semibold">{entry.total_points}</td>
-              </tr>
-            ))}
+            {!loading &&
+              !error &&
+              leaderboardData.map((entry) => (
+                <tr
+                  key={entry.fid}
+                  className="border-b border-neutral-800 hover:bg-neutral-800/50"
+                >
+                  <td className="px-4 py-2 font-medium">{entry.rank}</td>
+                  <td className="px-4 py-2 flex items-center gap-3">
+                    {entry.pfp_url ? (
+                      <Image
+                        src={entry.pfp_url}
+                        alt={entry.display_name || ""}
+                        width={24}
+                        height={24}
+                        className="rounded-full"
+                      />
+                    ) : (
+                      <div className="w-6 h-6 rounded-full bg-neutral-700" />
+                    )}
+                    <span className="font-semibold">
+                      {entry.display_name ||
+                        `@${entry.username}` ||
+                        `FID: ${entry.fid}`}
+                    </span>
+                  </td>
+                  <td className="px-4 py-2 text-right font-semibold">
+                    {entry.total_points}
+                  </td>
+                </tr>
+              ))}
           </tbody>
         </table>
       </div>
 
       {/* feedback tx */}
-      {txSuccess && <p className="text-green-400 text-xs">Claim success. 🎉</p>}
-      {isClaimed && <p className="text-neutral-400 text-xs">You have already claimed for this snapshot.</p>}
+      {txSuccess && (
+        <p className="text-green-400 text-xs">Claim success. 🎉</p>
+      )}
+      {isClaimed && (
+        <p className="text-neutral-400 text-xs">
+          You have already claimed for this snapshot.
+        </p>
+      )}
     </div>
   );
 };
