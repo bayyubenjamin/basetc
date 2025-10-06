@@ -1,105 +1,162 @@
 // scripts/snap.ts
-import { createClient } from "@supabase/supabase-js";
-import { ethers } from "ethers";
-import fs from "fs";
-import path from "path";
-import dotenv from "dotenv";
-dotenv.config();
+// @ts-nocheck
+import 'dotenv/config';
+import { createClient } from '@supabase/supabase-js';
+import { writeFileSync, mkdirSync } from 'fs';
+import { join } from 'path';
+import { ethers } from 'ethers';
+import keccak256 from 'keccak256';
+import { MerkleTree } from 'merkletreejs';
 
-const SUPABASE_URL = process.env.SUPABASE_URL!;
-const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY!;
-const RPC = process.env.RPC!;
-const VAULT = process.env.VAULT!;
-const OWNER_PK = process.env.OWNER_PK!;
-const TOTAL_POOL_WEI = BigInt(process.env.TOTAL_POOL_WEI || "0");
-const OUT_DIR = process.env.OUT_DIR || "public/snapshots";
+// ===== ENV =====
+const {
+  SUPABASE_URL,
+  SUPABASE_SERVICE_KEY,
+  RPC,
+  VAULT,
+  OWNER_PK,
+  TOTAL_POOL_WEI = '0',
+  OUT_DIR = 'public/snapshots'
+} = process.env;
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY || !RPC || !VAULT || !OWNER_PK) {
+  throw new Error('Missing env (SUPABASE_URL / SUPABASE_SERVICE_KEY / RPC / VAULT / OWNER_PK)');
+}
+
+// ===== CONFIG TIER (atur via ENV kalau mau) =====
+const TIERS = [
+  { from: 1,   to: 100,  pct: 30 },
+  { from: 101, to: 300,  pct: 20 },
+  { from: 301, to: 1000, pct: 50 },
+];
+
+// ===== HELPERS =====
+const BN = (x: string | number | bigint) => BigInt(x);
+const supabase = createClient(SUPABASE_URL!, SUPABASE_SERVICE_KEY!);
 const provider = new ethers.JsonRpcProvider(RPC);
-const wallet = new ethers.Wallet(OWNER_PK, provider);
+const wallet   = new ethers.Wallet(OWNER_PK!, provider);
 
-const abi = [
-  "function openSnapshot(uint256 id, bytes32 root, uint256 total, uint256 until) external",
+const vaultAbi = [
+  'function openSnapshot(uint256 snapshotId, bytes32 merkleRoot, uint256 totalAmount, uint64 claimUntil) external'
 ];
+const vault = new ethers.Contract(VAULT!, vaultAbi, wallet);
 
-const vault = new ethers.Contract(VAULT, abi, wallet);
-
-const tiers = [
-  { range: [1, 100], pct: 30 },
-  { range: [101, 300], pct: 20 },
-  { range: [301, 1000], pct: 50 },
-];
+// Leaf = keccak256(abi.encodePacked(uint256,address,uint256))
+function leafHash(snapshotId: number, addr: string, amount: bigint): Buffer {
+  const packed = ethers.solidityPacked(
+    ['uint256','address','uint256'],
+    [snapshotId, addr, amount]
+  ); // returns 0x...
+  return Buffer.from(packed.slice(2), 'hex');
+}
 
 async function main() {
   const args = process.argv.slice(2);
-  const snapshotId = parseInt(args[0]);
-  const openNow = args.includes("--open");
-  if (!snapshotId) throw new Error("Harus kasih ID snapshot, contoh: npx ts-node scripts/snap.ts 1 --open");
+  const snapshotId = Number(args[0]);
+  const openNow = args.includes('--open');
+  if (!snapshotId) throw new Error('Usage: npx ts-node scripts/snap.ts <snapshotId> [--open]');
 
-  console.log("📊 Ambil data leaderboard dari Supabase...");
-  const { data, error } = await supabase.from("leaderboard_view").select("*").limit(1000);
+  // 1) Ambil top-1000 dari view
+  const { data, error } = await supabase
+    .from('leaderboard_view')
+    .select('fid, rank, total_points')
+    .order('rank', { ascending: true })
+    .limit(1000);
   if (error) throw error;
+  if (!data || data.length === 0) throw new Error('leaderboard_view empty');
 
-  console.log(`✅ Dapat ${data.length} baris`);
+  // 2) Ambil wallet address dari tabel users
+  const fids = data.map((r:any) => r.fid);
+  const { data: users, error: uerr } = await supabase
+    .from('users')
+    .select('fid, wallet')
+    .in('fid', fids);
+  if (uerr) throw uerr;
 
-  // Hitung pembagian reward per tier
-  const total = Number(TOTAL_POOL_WEI);
-  const tierMap = new Map<number, number>();
-  for (const { range, pct } of tiers) {
-    const users = data.filter((x: any) => x.rank >= range[0] && x.rank <= range[1]);
-    const perUser = (total * (pct / 100)) / users.length;
-    users.forEach((u: any) => tierMap.set(u.fid, perUser));
-  }
+  const addrByFid = new Map<number,string>();
+  (users || []).forEach((u:any)=> {
+    if (u.wallet) addrByFid.set(u.fid, String(u.wallet).toLowerCase());
+  });
 
-  // Build leaf list
-  const entries: Record<string, { amount: string; proof: string[] }> = {};
-  const keccak256 = ethers.keccak256;
-  const pack = ethers.AbiCoder.defaultAbiCoder();
+  // 3) Bagi pool per tier
+  const totalPool = BN(TOTAL_POOL_WEI);
+  const poolA = (totalPool * BN( TIERS[0].pct )) / 100n;
+  const poolB = (totalPool * BN( TIERS[1].pct )) / 100n;
+  const poolC = totalPool - poolA - poolB;
 
-  const leaves: string[] = [];
+  const countA = TIERS[0].to - TIERS[0].from + 1;
+  const countB = TIERS[1].to - TIERS[1].from + 1;
+  const countC = TIERS[2].to - TIERS[2].from + 1;
 
-  for (const user of data) {
-    const addr = user.wallet?.toLowerCase?.() || user.address?.toLowerCase?.();
-    if (!addr) continue;
-    const amount = tierMap.get(user.fid) || 0;
-    const leaf = keccak256(
-      ethers.solidityPacked(["uint256", "address", "uint256"], [snapshotId, addr, amount])
-    );
-    leaves.push(leaf);
-    entries[addr] = { amount: amount.toString(), proof: [] };
-  }
+  const perA = countA>0 ? (poolA / BN(countA)) : 0n;
+  const perB = countB>0 ? (poolB / BN(countB)) : 0n;
+  const perC = countC>0 ? (poolC / BN(countC)) : 0n;
 
-  // Root (tanpa lib merkletree, simpel hash aja biar cepat)
-  const root = keccak256(ethers.concat(leaves));
-
-  const out = {
-    snapshotId,
-    merkleRoot: root,
-    totalAmount: TOTAL_POOL_WEI.toString(),
-    claimUntil: 0,
-    entries,
+  const amountForRank = (rank:number):bigint => {
+    if (rank>=TIERS[0].from && rank<=TIERS[0].to) return perA;
+    if (rank>=TIERS[1].from && rank<=TIERS[1].to) return perB;
+    if (rank>=TIERS[2].from && rank<=TIERS[2].to) return perC;
+    return 0n;
   };
 
-  fs.mkdirSync(OUT_DIR, { recursive: true });
-  fs.writeFileSync(path.join(OUT_DIR, `${snapshotId}.json`), JSON.stringify(out, null, 2));
+  // 4) Build leaves + entries
+  const leaves: Buffer[] = [];
+  const entries: Record<string,{amount:string, proof:string[]}> = {};
 
-  fs.writeFileSync(
-    path.join(OUT_DIR, `index.json`),
-    JSON.stringify({ id: snapshotId, url: `/${OUT_DIR.split("/").pop()}/${snapshotId}.json` }, null, 2)
-  );
+  for (const row of data) {
+    const addr = addrByFid.get(row.fid);
+    if (!addr) continue;
+    const amt  = amountForRank(row.rank);
+    if (amt === 0n) continue;
 
-  console.log(`💾 Snapshot tersimpan di ${OUT_DIR}/${snapshotId}.json`);
+    const leaf = leafHash(snapshotId, addr, amt); // Buffer
+    leaves.push(leaf);
+  }
 
+  // 5) Build Merkle tree (keccak256, sortPairs)
+  const tree = new MerkleTree(leaves, (d:Buffer)=> keccak256(d), { sortPairs: true, sortLeaves: true });
+  const root = '0x' + tree.getRoot().toString('hex');
+
+  // 6) Proof per address
+  for (const row of data) {
+    const addr = addrByFid.get(row.fid);
+    if (!addr) continue;
+    const amt  = amountForRank(row.rank);
+    if (amt === 0n) continue;
+
+    const leaf = leafHash(snapshotId, addr, amt);
+    const proof = tree.getProof(leaf).map(p => '0x' + p.data.toString('hex'));
+    entries[addr] = { amount: amt.toString(), proof };
+  }
+
+  // 7) Tulis JSON
+  mkdirSync(OUT_DIR!, { recursive: true });
+  const payload = {
+    snapshotId,
+    merkleRoot: root,
+    totalAmount: totalPool.toString(),
+    claimUntil: 0,
+    entries
+  };
+  writeFileSync(join(OUT_DIR!, `${snapshotId}.json`), JSON.stringify(payload, null, 2));
+  writeFileSync(join(OUT_DIR!, 'index.json'), JSON.stringify({
+    current: snapshotId,
+    url: `/${OUT_DIR!.split('/').pop()}/${snapshotId}.json`
+  }, null, 2));
+
+  console.log(`✅ Snapshot #${snapshotId} saved. root=${root}`);
+
+  // 8) (opsional) openSnapshot on-chain
   if (openNow) {
-    console.log("🔓 Panggil openSnapshot() ke kontrak...");
-    const tx = await vault.openSnapshot(snapshotId, root, TOTAL_POOL_WEI, 0);
-    console.log("Tx sent:", tx.hash);
+    console.log('🔓 Calling openSnapshot on-chain...');
+    const tx = await vault.openSnapshot(snapshotId, root, totalPool, 0);
+    console.log('tx:', tx.hash);
     await tx.wait();
-    console.log("✅ Snapshot terbuka di kontrak.");
+    console.log('✅ openSnapshot confirmed.');
   }
 }
 
-main().catch((e) => {
+main().catch((e)=> {
   console.error(e);
   process.exit(1);
 });
