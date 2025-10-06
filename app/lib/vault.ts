@@ -2,13 +2,11 @@
 export const VAULT_ADDRESS = "0xb962EB2C83982D78878d02fF4226718338877b91" as const;
 
 export const vaultABI = [
-  // read
   {
     "type":"function","stateMutability":"view","name":"claimed",
     "inputs":[{"name":"snapshotId","type":"uint256"},{"name":"user","type":"address"}],
     "outputs":[{"type":"bool"}]
   },
-  // write
   {
     "type":"function","stateMutability":"nonpayable","name":"claim",
     "inputs":[
@@ -19,4 +17,3 @@ export const vaultABI = [
     "outputs":[]
   }
 ] as const;
-
