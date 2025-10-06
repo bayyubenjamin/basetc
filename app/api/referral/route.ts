@@ -1,23 +1,24 @@
-// app/api/referral/route.ts
+// app/api/referral/route.ts (updated for reward minting)
 //
 // This module defines a Next.js API route for managing referral logic.
 // It includes operations for tracking referrals (`touch`), marking a
 // referral as valid (`mark-valid`), minting rewards (`claim`), and
-// generating signatures for free claims (`free-sign`).  This updated
-// version adjusts the expiry window for free claim signatures: the
-// `deadline` used in the EIP-712 message is extended from 15 minutes
-// to 30 minutes to reduce the likelihood of expired transactions on
-// the bundler/relayer.  No other functional changes are introduced.
+// generating signatures for free claims (`free-sign`).  In this
+// version, the reward minting logic has been updated to call
+// `mintRewardRig` on the RigSale contract rather than
+// `mintBySale`, because reward minting is restricted to the
+// `rewardMinter` role.  The expiry window for free claim
+// signatures is also extended from 15 minutes to 30 minutes to
+// reduce the likelihood of expired transactions on the bundler/relayer.
 
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import { ethers } from "ethers";
 import { getSupabaseAdmin } from "../../lib/supabase/server";
 import { privateKeyToAccount } from "viem/accounts";
 import { rigSaleAddress } from "../../lib/web3Config";
 import { baseSepolia } from "viem/chains";
 
-// Ensures the route is always dynamically rendered, reading the latest
+// Ensure the route is always dynamically rendered, reading latest
 // environment variables on Vercel.
 export const dynamic = "force-dynamic";
 
@@ -48,15 +49,17 @@ const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const MINT_MODE = (process.env.REFERRAL_MINT_MODE || "none").toLowerCase();
 const BACKEND_SIGNER_PK = process.env.BACKEND_SIGNER_PK || process.env.RELAYER_PRIVATE_KEY || "";
 const RIGSALE_ADDRESS = process.env.CONTRACT_RIGSALE || "";
-const RIGNFT_ADDRESS  = process.env.CONTRACT_RIGNFT  || "";
+const RIGNFT_ADDRESS = process.env.CONTRACT_RIGNFT || "";
 const RPC_URL = process.env.RPC_URL || "https://sepolia.base.org";
 const BASIC_ID = 1;
 
 const TABLE_REFERRALS = "referrals";
-const TABLE_CLAIMS    = "claims";
+const TABLE_CLAIMS = "claims";
 
-// FIX: Kembali menggunakan ABI string sederhana untuk menghindari Build Error.
-const ABI_RIGSALE = ["function mintBySale(address to, uint256 id, uint256 amount) external"];
+// Use a minimal ABI that includes only the reward function for RigSale
+const ABI_RIGSALE = [
+  "function mintRewardRig(address to, uint256 id, uint256 amount) external"
+];
 const ABI_RIGNFT = ["function mintByGame(address to, uint256 id, uint256 amount) external"];
 
 /* =========================
@@ -127,7 +130,11 @@ async function trackReferral(
   status: "pending" | "valid" = "pending",
   invitee_wallet: string | null = null,
 ) {
-  const data: { inviter: string; invitee_fid: string; status: "pending" | "valid"; invitee_wallet?: string } = { inviter, invitee_fid, status };
+  const data: { inviter: string; invitee_fid: string; status: "pending" | "valid"; invitee_wallet?: string } = {
+    inviter,
+    invitee_fid,
+    status,
+  };
   if (invitee_wallet) {
     data.invitee_wallet = invitee_wallet;
   }
@@ -137,42 +144,36 @@ async function trackReferral(
   if (error) throw new Error(`Gagal menyimpan referral: ${error.message}`);
 }
 
-// Fungsi Minting Reward NFT via RigSale
-async function mintBasicViaRigSale(to: string) {
+// Mint reward NFT via RigSale. This uses the mintRewardRig function
+// which requires that the signer has the rewardMinter role.
+async function mintRewardViaRigSale(to: string) {
   const { signer } = getProviderAndSigner();
   if (!signer) throw new Error("Signer backend tidak dikonfigurasi.");
   if (!RIGSALE_ADDRESS) throw new Error("CONTRACT_RIGSALE belum diset.");
 
-  // ABI digunakan untuk memanggil fungsi minting di kontrak RigSale
   const contract = new ethers.Contract(RIGSALE_ADDRESS, ABI_RIGSALE, signer);
-
   try {
-    // FIX: Minting Reward menggunakan fungsi yang sama dengan klaim user.
-    // Jika Reward NFT harusnya Basic Rig ID 1, panggil mintBySale.
-    const tx = await contract.mintBySale(to, BASIC_ID, 1);
-
-    // Tunggu konfirmasi, jika gagal, akan ditangkap di catch block
+    const tx = await contract.mintRewardRig(to, BASIC_ID, 1);
     const receipt = await tx.wait();
     return receipt?.hash ?? tx.hash;
   } catch (e: any) {
-    console.error("Relayer Transaction failed with error:", e.message);
+    console.error("Relayer mintReward transaction failed:", e.message);
     throw e;
   }
 }
 
-// Fungsi Minting Reward NFT via RigNFT (jika MINT_MODE = "rignft")
-async function mintBasicViaRigNFT(to: string) {
+// Mint reward NFT via RigNFT if configured
+async function mintRewardViaRigNFT(to: string) {
   const { signer } = getProviderAndSigner();
   if (!signer) throw new Error("Signer backend tidak dikonfigurasi.");
   if (!RIGNFT_ADDRESS) throw new Error("CONTRACT_RIGNFT belum diset.");
-
   const contract = new ethers.Contract(RIGNFT_ADDRESS, ABI_RIGNFT, signer);
   try {
     const tx = await contract.mintByGame(to, BASIC_ID, 1);
     const receipt = await tx.wait();
     return receipt?.hash ?? tx.hash;
   } catch (e: any) {
-    console.error("Relayer Transaction failed with error:", e.message);
+    console.error("Relayer mintByGame transaction failed:", e.message);
     throw e;
   }
 }
@@ -200,7 +201,6 @@ export async function POST(req: NextRequest) {
         const invitee_wallet = body.invitee_wallet as string | undefined;
         const inviter = String(body.inviter || "").toLowerCase();
         if (!inviter) {
-          // inviter optional: Upsert only by invitee_fid
           await trackReferral("", invitee_fid, "valid", invitee_wallet ?? null);
         } else {
           requireAddress(inviter, "inviter");
@@ -217,7 +217,6 @@ export async function POST(req: NextRequest) {
         if (!MINT_MODE || MINT_MODE === "none") {
           return NextResponse.json({ ok: false, error: "Minting not configured." }, { status: 400 });
         }
-        // Check remaining quota
         const [validInvites, usedClaims] = await Promise.all([
           countValidInvites(inviter),
           sumUsedClaims(inviter),
@@ -226,16 +225,14 @@ export async function POST(req: NextRequest) {
         if (remaining <= 0) {
           return NextResponse.json({ ok: false, error: "No remaining claims." }, { status: 400 });
         }
-        // Mint reward based on mint mode
         let txHash: string;
         if (MINT_MODE === "rigsale") {
-          txHash = await mintBasicViaRigSale(receiver);
+          txHash = await mintRewardViaRigSale(receiver);
         } else if (MINT_MODE === "rignft") {
-          txHash = await mintBasicViaRigNFT(receiver);
+          txHash = await mintRewardViaRigNFT(receiver);
         } else {
           return NextResponse.json({ ok: false, error: "Invalid mint mode." }, { status: 500 });
         }
-        // Record claim in database
         await recordClaim(inviter, 1, txHash);
         return NextResponse.json({ ok: true, txHash });
       }
@@ -251,10 +248,7 @@ export async function POST(req: NextRequest) {
         const fid = BigInt(fidStr);
         const to = body.to as `0x${string}`;
         const inviter = (body.inviter as string).toLowerCase() as `0x${string}`;
-
-        // Extend deadline from 15 minutes to 30 minutes to avoid expired signatures.
         const deadline = BigInt(Math.floor(Date.now() / 1000) + 30 * 60);
-
         const account = privateKeyToAccount(pk as `0x${string}`);
         const domain = {
           name: "RigSaleFlexible",
@@ -282,7 +276,6 @@ export async function POST(req: NextRequest) {
     }
   } catch (e: any) {
     console.error("API referral error:", e);
-    // Map specific errors to user-friendly responses
     let errorMessage = String(e?.message || "Server error");
     if (errorMessage.includes("TRANSACTION REVERTED")) {
       return NextResponse.json({ error: errorMessage }, { status: 400 });
