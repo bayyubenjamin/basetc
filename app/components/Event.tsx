@@ -6,10 +6,10 @@ import Staking from "./Staking";
 import Spin from "./Spin";
 import Leaderboard from "./Leaderboard";
 
-type EventTab = "staking" | "spin" | "leaderboard";
+type EventTab = "spin" | "staking" | "leaderboard";
 
 const Event: FC = () => {
-  const [activeTab, setActiveTab] = useState<EventTab>("staking");
+  const [activeTab, setActiveTab] = useState<EventTab>("spin");
 
   // render dynamic content
   const renderContent = () => {
