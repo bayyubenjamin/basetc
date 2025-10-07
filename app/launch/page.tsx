@@ -1,61 +1,66 @@
 // app/launch/page.tsx
+"use client";
 
-// ... (impor dan kode lain di atas biarkan sama)
+import { useEffect, useMemo, useState, type ReactNode, Suspense } from "react";
+import { useAccount } from "wagmi";
+import { Providers } from "../Providers";
+import { FarcasterProvider, useFarcaster } from "../context/FarcasterProvider";
+import Navigation, { type TabName } from "../components/Navigation";
+import Monitoring from "../components/Monitoring";
+import Rakit from "../components/Rakit";
+import Market from "../components/Market";
+import Profil from "../components/Profil";
+import Event from "../components/Event";
+import FidInput from "../components/FidInput";
+import { isAddress } from "ethers";
+import { useSearchParams } from "next/navigation";
 
 const DEFAULT_TAB: TabName = "monitoring";
 const TAB_KEY = "basetc_active_tab";
 
-// Universal Link ANDA
+// Universal Link Farcaster Anda
 const UNIVERSAL_LINK = "https://farcaster.xyz/miniapps/PkHG0AuDhXrd/basetc-console";
 const FARCASTER_HINTS = ["Warpcast", "Farcaster", "V2Frame"];
 
 /**
- * INI BAGIAN YANG DIPERBAIKI (FINAL)
- * Menggunakan Universal Link dan menambahkan URL target sebagai parameter.
+ * Komponen Guard Final:
+ * - Mendeteksi jika dibuka di luar Farcaster.
+ * - Mengalihkan ke Universal Link sambil MENYALIN semua parameter query.
  */
 function ReferralRedirectGuard({ children }: { children: ReactNode }) {
   const searchParams = useSearchParams();
-  const [isRedirecting, setIsRedirecting] = useState(false);
-
-  const hasReferral = useMemo(() => {
-    const ref = searchParams.get("ref");
-    const fid = searchParams.get("fid");
-    const fidref = searchParams.get("fidref");
-    return Boolean(ref || fid || fidref);
-  }, [searchParams]);
+  const [isRedirecting, setIsRedirecting] = useState(true); // Mulai dengan state redirecting
 
   useEffect(() => {
-    if (typeof window === 'undefined' || isRedirecting) return;
+    // Cek hanya di sisi client
+    if (typeof window === 'undefined') return;
 
     const currentUrl = new URL(window.location.href);
     const isWebPreview = currentUrl.searchParams.get("web") === "1";
-    
-    if (hasReferral && !isWebPreview) {
-      const ua = navigator.userAgent || "";
-      const isFarcasterClient = FARCASTER_HINTS.some((k) => ua.includes(k));
+    const ua = navigator.userAgent || "";
+    const isFarcasterClient = FARCASTER_HINTS.some((k) => ua.includes(k));
 
-      if (!isFarcasterClient) {
-        setIsRedirecting(true);
-
-        // ---- LOGIKA PENGALIHAN YANG BENAR ----
+    // Kapan kita HARUS redirect?
+    // JIKA: (ada parameter referral ATAU ini halaman /launch) DAN kita TIDAK di dalam Farcaster DAN ini BUKAN mode web preview.
+    if ((currentUrl.searchParams.toString().length > 0 || currentUrl.pathname.includes('/launch')) && !isFarcasterClient && !isWebPreview) {
         
-        // 1. Siapkan URL Universal Link dari Farcaster.
+        // Buat URL Universal Link
         const redirectUrl = new URL(UNIVERSAL_LINK);
-
-        // 2. Siapkan URL mini-app Anda yang asli, pastikan path-nya /launch
-        //    dan semua parameter referral ikut serta.
-        const targetMiniAppUrl = new URL(currentUrl.origin);
-        targetMiniAppUrl.pathname = '/launch';
-        targetMiniAppUrl.search = currentUrl.search; // Ini menyalin SEMUA parameter (?fidref=... dll)
-
-        // 3. Tambahkan URL mini-app Anda sebagai search parameter 'url' ke Universal Link.
-        redirectUrl.searchParams.set('url', targetMiniAppUrl.toString());
         
-        // 4. Lakukan pengalihan.
+        // Salin SEMUA parameter dari URL saat ini (?fidref=... dll) ke Universal Link.
+        redirectUrl.search = currentUrl.searchParams.toString();
+        
+        // Lakukan pengalihan
         window.location.replace(redirectUrl.toString());
-      }
+        
+        // State isRedirecting sudah true, jadi loading screen akan tampil.
+        return;
     }
-  }, [hasReferral, isRedirecting, searchParams]);
+
+    // Jika tidak perlu redirect, langsung tampilkan aplikasi.
+    setIsRedirecting(false);
+
+  }, [searchParams]);
 
   if (isRedirecting) {
     return (
@@ -69,8 +74,11 @@ function ReferralRedirectGuard({ children }: { children: ReactNode }) {
 }
 
 
-// ... Sisa dari file (MainApp, AppInitializer, export default, dll.)
-// TIDAK PERLU DIUBAH. Biarkan seperti sebelumnya.
+// ===============================================================
+// TIDAK ADA PERUBAHAN DARI SINI KE BAWAH
+// Semua fungsi aplikasi Anda tetap aman.
+// ===============================================================
+
 function MainApp() {
   const [activeTab, setActiveTab] = useState<TabName>(DEFAULT_TAB);
   const { address } = useAccount();
