@@ -12,12 +12,14 @@ import Market from "../components/Market";
 import Profil from "../components/Profil";
 import Event from "../components/Event";
 import FidInput from "../components/FidInput";
+import ClaimPopup from "../components/ClaimPopup"; // <-- Impor komponen baru
 import { isAddress } from "ethers";
 
 const DEFAULT_TAB: TabName = "monitoring";
 const TAB_KEY = "basetc_active_tab";
 const FID_REF_KEY = "basetc_fid_ref";
 const FID_KEY = "basetc_fid";
+const HAS_VISITED_KEY = "basetc_has_visited"; // <-- Kunci untuk localStorage
 
 // ---- helper: cari fidref dari URL, referrer, lalu sessionStorage
 function getFidRefFallback(): string | undefined {
@@ -44,6 +46,16 @@ function getFidRefFallback(): string | undefined {
 function MainApp() {
   const [activeTab, setActiveTab] = useState<TabName>(DEFAULT_TAB);
   const { address } = useAccount();
+  const [showClaimPopup, setShowClaimPopup] = useState(false); // <-- State untuk pop-up
+
+  // Cek apakah pengguna baru dan tampilkan pop-up
+  useEffect(() => {
+    const hasVisited = localStorage.getItem(HAS_VISITED_KEY);
+    if (!hasVisited) {
+      setShowClaimPopup(true);
+      localStorage.setItem(HAS_VISITED_KEY, "true");
+    }
+  }, []);
 
   // restore tab awal
   useEffect(() => {
@@ -88,8 +100,19 @@ function MainApp() {
     }
   }, [activeTab]);
 
+  const handleClaimNow = () => {
+    setActiveTab("market");
+    setShowClaimPopup(false);
+  };
+
   return (
     <div className="flex flex-col min-h-screen">
+      {showClaimPopup && (
+        <ClaimPopup
+          onClose={() => setShowClaimPopup(false)}
+          onClaim={handleClaimNow}
+        />
+      )}
       <main className="flex-1 pb-24">{content}</main>
       <Navigation activeTab={activeTab} setActiveTab={setActiveTab} />
     </div>
@@ -208,4 +231,3 @@ export default function Page() {
     </Providers>
   );
 }
-
