@@ -15,9 +15,9 @@ export function middleware(req: NextRequest) {
     res.cookies.set("fid_ref", fidref, {
       path: "/",
       httpOnly: true,
-      sameSite: "Lax",
+      sameSite: "lax",   // <-- lowercase (fix)
       secure: true,
-      maxAge: 60 * 60 * 24, // 1 hari
+      maxAge: 60 * 60 * 24,
     });
   }
 
@@ -35,14 +35,14 @@ export function middleware(req: NextRequest) {
 
   if (!isFarcasterClient && isMobile && url.pathname === "/launch") {
     const to = new URL(UNIVERSAL_LINK);
-    to.search = url.search; // bawa ?fidref=...
-    const redirectRes = NextResponse.redirect(to, 307); // 307 agar cookie yang baru diset ikut terkirim
+    to.search = url.search;
+    const redirectRes = NextResponse.redirect(to, 307);
 
     if (fidref && /^\d+$/.test(fidref)) {
       redirectRes.cookies.set("fid_ref", fidref, {
         path: "/",
         httpOnly: true,
-        sameSite: "Lax",
+        sameSite: "lax",  // <-- lowercase (fix)
         secure: true,
         maxAge: 60 * 60 * 24,
       });
