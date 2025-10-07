@@ -5,7 +5,9 @@ import { getSupabaseAdmin } from "../../lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
-// ============ GET ============
+/* =========================
+   GET
+   ========================= */
 export async function GET(req: NextRequest) {
   try {
     const sb = getSupabaseAdmin();
@@ -36,10 +38,12 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// ============ POST ============
-// Body:
-// { fid: number, wallet?: string, username?: string, display_name?: string, pfp_url?: string }
-// atau { mode: "get_wallet_by_fid", fid: number }
+/* =========================
+   POST
+   Body:
+   { fid: number, wallet?: string, username?: string, display_name?: string, pfp_url?: string, fid_ref?: string }
+   atau { mode: "get_wallet_by_fid", fid: number }
+   ========================= */
 export async function POST(req: NextRequest) {
   const sb = getSupabaseAdmin();
 
@@ -92,12 +96,25 @@ export async function POST(req: NextRequest) {
     // siapkan response (supaya bisa hapus cookie via header)
     const res = NextResponse.json({ ok: true, user: upsertedUser });
 
-    // === REFERRAL: (inviter TEXT wallet, invitee_fid TEXT) ===
-    const fidRefRaw = cookies().get("fid_ref")?.value; // FID inviter di cookie
-    if (fidRefRaw && /^\d+$/.test(fidRefRaw)) {
-      const inviterFid = Number(fidRefRaw);
+    /* =========================
+       REFERRAL (cookie fallback ke body)
+       - inviter TEXT (wallet)
+       - invitee_fid TEXT
+       ========================= */
+    const cookieStore = cookies();
+    const fid_ref_cookie = cookieStore.get("fid_ref")?.value;
 
-      if (inviterFid !== inviteeFidNum) {
+    const fid_ref_body =
+      typeof body?.fid_ref === "string" && /^\d+$/.test(body.fid_ref)
+        ? body.fid_ref
+        : undefined;
+
+    const fidRef = fid_ref_cookie ?? fid_ref_body;
+
+    if (fidRef) {
+      const inviterFid = Number(fidRef);
+
+      if (Number.isFinite(inviterFid) && inviterFid > 0 && inviterFid !== inviteeFidNum) {
         // cari inviter by FID → wallet & id
         const { data: inviterUser, error: inviterErr } = await sb
           .from("users")
@@ -112,14 +129,13 @@ export async function POST(req: NextRequest) {
         const inviterId: string | null = inviterUser?.id ?? null;
 
         if (inviterWallet) {
-          // onConflict sesuai PK (inviter, invitee_fid)
           const payload: Record<string, any> = {
-            inviter: inviterWallet,                 // TEXT (PK part #1)
-            invitee_fid: String(inviteeFidNum),    // TEXT (PK part #2)
+            inviter: inviterWallet,              // TEXT (PK part #1)
+            invitee_fid: String(inviteeFidNum),  // TEXT (PK part #2)
             status: "pending",
-            invitee_wallet: inviteeWallet,         // nullable
-            inviter_id: inviterId,                 // nullable
-            invitee_id: inviteeId,                 // nullable
+            invitee_wallet: inviteeWallet ?? null,
+            inviter_id: inviterId ?? null,
+            invitee_id: inviteeId ?? null,
           };
 
           const { error: refErr } = await sb
@@ -131,10 +147,10 @@ export async function POST(req: NextRequest) {
           console.warn("[referral] inviter wallet not found yet for fid", inviterFid);
         }
       }
-
-      // HAPUS cookie via response (pasti kirim Set-Cookie delete)
-      res.cookies.set("fid_ref", "", { path: "/", maxAge: 0 });
     }
+
+    // HAPUS cookie via response (no-op jika tidak ada)
+    res.cookies.set("fid_ref", "", { path: "/", maxAge: 0 });
 
     return res;
   } catch (e: any) {

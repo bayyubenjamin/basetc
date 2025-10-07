@@ -40,13 +40,16 @@ function MainApp() {
     window.scrollTo({ top: 0, behavior: "instant" });
   }, [activeTab]);
 
+  // NOTE: kalau wallet muncul belakangan, ikutkan fid_ref fallback juga
   useEffect(() => {
     const fidStr = localStorage.getItem("basetc_fid");
     if (!address || !fidStr) return;
+    const fid_ref = sessionStorage.getItem("basetc_fid_ref") || undefined;
+
     fetch("/api/user", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ fid: Number(fidStr), wallet: address }),
+      body: JSON.stringify({ fid: Number(fidStr), wallet: address, fid_ref }),
     }).catch(err => console.error("Wallet mapping upsert failed:", err));
   }, [address]);
 
@@ -72,14 +75,26 @@ function AppInitializer() {
   const { user, ready } = useFarcaster();
   const [resolvedFid, setResolvedFid] = useState<number | null>(null);
 
+  // Simpan fidref dari URL (fallback untuk iframe/cookie terblokir)
+  useEffect(() => {
+    try {
+      const url = new URL(window.location.href);
+      const fidref = url.searchParams.get("fidref");
+      if (fidref && /^\d+$/.test(fidref)) {
+        sessionStorage.setItem("basetc_fid_ref", fidref);
+      }
+    } catch {}
+  }, []);
+
   useEffect(() => {
     if (!ready) return;
 
     let finalFid: number | null = null;
-    // Prioritaskan FID dari konteks Farcaster
     if (user?.fid) {
       finalFid = user.fid;
-      // Kirim data profil lengkap ke API
+      const fid_ref = sessionStorage.getItem("basetc_fid_ref") || undefined;
+
+      // Kirim data profil + fid_ref fallback
       fetch("/api/user", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -88,10 +103,10 @@ function AppInitializer() {
           username: user.username,
           display_name: user.displayName,
           pfp_url: user.pfpUrl,
+          fid_ref,
         }),
       }).catch(err => console.error("Context user auto-upsert failed:", err));
     } else {
-      // Fallback ke localStorage atau query param 'fid' jika ada
       try {
         const url = new URL(window.location.href);
         const qfid = url.searchParams.get("fid") || localStorage.getItem("basetc_fid");
@@ -102,13 +117,13 @@ function AppInitializer() {
     if (finalFid) {
       localStorage.setItem("basetc_fid", String(finalFid));
       setResolvedFid(finalFid);
-      
-      // Simpan `ref` dari wallet address jika ada (untuk backward compatibility)
+
+      // Back-compat: simpan ref dari wallet address jika ada
       try {
         const url = new URL(window.location.href);
         const ref = url.searchParams.get("ref");
         if (ref && isAddress(ref)) {
-            localStorage.setItem("basetc_ref", ref);
+          localStorage.setItem("basetc_ref", ref);
         }
       } catch {}
     }
@@ -125,11 +140,15 @@ function AppInitializer() {
   if (resolvedFid) {
     return <MainApp />;
   }
-  
-  return <FidInput setFid={(fid) => {
-    localStorage.setItem("basetc_fid", String(fid));
-    setResolvedFid(fid);
-  }} />;
+
+  return (
+    <FidInput
+      setFid={(fid) => {
+        localStorage.setItem("basetc_fid", String(fid));
+        setResolvedFid(fid);
+      }}
+    />
+  );
 }
 
 export default function Page() {
@@ -143,3 +162,4 @@ export default function Page() {
     </Providers>
   );
 }
+
