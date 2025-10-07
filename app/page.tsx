@@ -1,57 +1,81 @@
-// app/layout.tsx
-import "./globals.css";
-import type { Metadata } from "next";
+"use client";
 
-const imageUrl = "https://basetc.vercel.app/img/feed.png";
-const launchUrl = "https://basetc.vercel.app/launch";
-const splashUrl = "https://basetc.vercel.app/s.png";
+import { Suspense, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 
-const payload = {
-  version: "1",
-  imageUrl,
-  button: {
-    title: "Open BaseTC",
-    action: {
-      type: "launch_miniapp",
-      name: "BaseTC Mini App",
-      url: launchUrl,
-      splashImageUrl: splashUrl,
-      splashBackgroundColor: "#0b0b0b",
-    },
-  },
-};
+export const dynamic = "force-dynamic"; // cegah error prerender
 
-export const metadata: Metadata = {
-  title: "BaseTC Console",
-  description: "Farcaster BaseTC mining console.",
-  other: {
-    // Spec baru (JSON tunggal)
-    "fc:miniapp": JSON.stringify(payload),
-    "fc:frame": JSON.stringify(payload),
+// Universal Link MiniApp resmi (punyamu)
+const UNIVERSAL_LINK = "https://farcaster.xyz/miniapps/PkHG0AuDhXrd/basetc-console";
+const FARCASTER_HINTS = ["Warpcast", "Farcaster", "V2Frame"];
 
-    // ---- LEGACY (vNext) — kompat maksimal ----
-    "fc:frame-legacy": "1", // penanda internal—abaikan, tidak akan dirender
-    "fc:frame (legacy format)": "vNext",
-    "fc:frame:image": imageUrl,
-    "fc:frame:post_url": "https://basetc.vercel.app/api/frame/actions",
+function Redirector() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
 
-    // Satu tombol "Open" yang langsung launch (link ke /launch)
-    "fc:frame:button:1": "Open BaseTC",
-    "fc:frame:button:1:action": "link",
-    "fc:frame:button:1:target": launchUrl,
+  useEffect(() => {
+    const ua = navigator.userAgent || "";
+    const isFarcaster = FARCASTER_HINTS.some((k) => ua.includes(k));
+    const forceWeb = searchParams.get("web") === "1"; // debug bypass
 
-    // (Opsional) tombol kedua untuk “Open Monitoring”
-    // "fc:frame:button:2": "Monitoring",
-    // "fc:frame:button:2:action": "link",
-    // "fc:frame:button:2:target": `${launchUrl}?tab=monitoring`,
-  },
-};
+    const ref = searchParams.get("ref");
+    const fid = searchParams.get("fid");
+    const queryString = window.location.search; // bawa semua param
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+    if (isFarcaster) {
+      // 🚀 Kalau dari Farcaster → lempar ke /launch + param (supaya referral tetap terbawa)
+      router.replace("/launch" + queryString);
+      return;
+    }
+
+    if (forceWeb) {
+      // 👨‍💻 Debug manual di browser tanpa redirect
+      return;
+    }
+
+    // 🌐 Kalau dari browser biasa → lempar ke Universal Link Farcaster
+    const url = new URL(UNIVERSAL_LINK);
+    if (ref) url.searchParams.set("ref", ref);
+    if (fid) url.searchParams.set("fid", fid);
+
+    window.location.replace(url.toString());
+  }, [router, searchParams]);
+
   return (
-    <html lang="en">
-      <body className="min-h-screen flex flex-col">{children}</body>
-    </html>
+    <main
+      style={{
+        minHeight: "100vh",
+        display: "grid",
+        placeItems: "center",
+        fontFamily: "system-ui, sans-serif",
+        color: "#fff",
+        background: "#000",
+      }}
+    >
+      <div>Redirecting…</div>
+    </main>
   );
 }
 
+export default function Home() {
+  return (
+    <Suspense
+      fallback={
+        <main
+          style={{
+            minHeight: "100vh",
+            display: "grid",
+            placeItems: "center",
+            fontFamily: "system-ui, sans-serif",
+            color: "#fff",
+            background: "#000",
+          }}
+        >
+          <div>Loading…</div>
+        </main>
+      }
+    >
+      <Redirector />
+    </Suspense>
+  );
+}
