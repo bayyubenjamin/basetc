@@ -1,7 +1,8 @@
 // app/launch/page.tsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+// PERBAIKAN DI SINI: Menambahkan 'Suspense' ke dalam import
+import { useEffect, useMemo, useState, type ReactNode, Suspense } from "react"; 
 import { useAccount } from "wagmi";
 import { Providers } from "../Providers";
 import { FarcasterProvider, useFarcaster } from "../context/FarcasterProvider";
@@ -13,6 +14,9 @@ import Profil from "../components/Profil";
 import Event from "../components/Event";
 import FidInput from "../components/FidInput";
 import { isAddress } from "ethers";
+import { useSearchParams } from "next/navigation";
+
+// --- Sisa file ini sudah benar dan tidak perlu diubah ---
 
 const DEFAULT_TAB: TabName = "monitoring";
 const TAB_KEY = "basetc_active_tab";
@@ -100,7 +104,6 @@ function AppInitializer() {
       localStorage.setItem("basetc_fid", String(finalFid));
       setResolvedFid(finalFid);
       
-      // Logika untuk mencatat referral, sekarang bisa membaca semua jenis parameter
       (async () => {
         try {
           const url = new URL(window.location.href);
@@ -108,7 +111,6 @@ function AppInitializer() {
           const ref = url.searchParams.get("ref");
           let inviterWallet: string | null = null;
 
-          // Prioritaskan fidref
           if (fidref && /^\d+$/.test(fidref)) {
             const res = await fetch("/api/user", {
               method: "POST",
@@ -120,7 +122,6 @@ function AppInitializer() {
               inviterWallet = data.wallet;
             }
           } 
-          // Fallback ke 'ref' jika fidref tidak ada
           else if (ref && isAddress(ref)) {
             inviterWallet = ref;
           }
