@@ -1,8 +1,7 @@
 // app/launch/page.tsx
 "use client";
 
-// PERBAIKAN DI SINI: Menambahkan 'Suspense' ke dalam import
-import { useEffect, useMemo, useState, type ReactNode, Suspense } from "react"; 
+import { useEffect, useMemo, useState, Suspense } from "react";
 import { useAccount } from "wagmi";
 import { Providers } from "../Providers";
 import { FarcasterProvider, useFarcaster } from "../context/FarcasterProvider";
@@ -14,9 +13,6 @@ import Profil from "../components/Profil";
 import Event from "../components/Event";
 import FidInput from "../components/FidInput";
 import { isAddress } from "ethers";
-import { useSearchParams } from "next/navigation";
-
-// --- Sisa file ini sudah benar dan tidak perlu diubah ---
 
 const DEFAULT_TAB: TabName = "monitoring";
 const TAB_KEY = "basetc_active_tab";
@@ -103,7 +99,7 @@ function AppInitializer() {
     if (finalFid) {
       localStorage.setItem("basetc_fid", String(finalFid));
       setResolvedFid(finalFid);
-      
+
       (async () => {
         try {
           const url = new URL(window.location.href);
