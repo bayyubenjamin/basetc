@@ -1,7 +1,6 @@
 // middleware.ts
-
-import { NextResponse } from 'next/server'
-import type { NextRequest } from 'next/server'
+import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
 
 // Daftar User-Agent dari klien Farcaster
 const FARCASTER_HINTS = ["Warpcast", "Farcaster", "V2Frame"];
@@ -17,28 +16,28 @@ export function middleware(request: NextRequest) {
   // Ambil semua parameter dari URL yang masuk
   const searchParams = request.nextUrl.search;
 
-  // --- LOGIKA UTAMA ---
+  // --- LOGIKA UTAMA YANG DIPERBAIKI ---
 
-  // KASUS 1: Jika request datang dari DALAM Farcaster
-  // Biarkan saja, jangan lakukan apa-apa. Biarkan Next.js merender halaman seperti biasa.
+  // KASUS 1: Jika request datang DARI DALAM Klien Farcaster.
+  // Biarkan saja, jangan lakukan apa-apa.
   if (isFarcasterClient) {
     return NextResponse.next();
   }
 
-  // KASUS 2: Jika request datang dari LUAR Farcaster (misal: Chrome di HP)
-  // dan berasal dari perangkat mobile.
+  // KASUS 2: Jika request datang dari LUAR Farcaster DAN dari PERANGKAT MOBILE.
+  // Ini adalah kondisi untuk redirect.
   if (isMobile) {
     // Buat URL baru menggunakan Universal Link
     const redirectUrl = new URL(UNIVERSAL_LINK);
     // Salin semua parameter dari URL asli (?fidref=... dll) ke Universal Link
     redirectUrl.search = searchParams;
     
-    // Lakukan redirect permanen di sisi server. Ini sangat cepat dan andal.
+    // Lakukan redirect.
     return NextResponse.redirect(redirectUrl);
   }
 
-  // KASUS 3: Jika request datang dari browser desktop
-  // Biarkan saja, yang akan tampil adalah halaman landing page Anda.
+  // KASUS 3: Jika bukan dari Farcaster dan bukan dari Mobile (artinya DESKTOP).
+  // Jangan lakukan apa-apa, biarkan Next.js merender halaman seperti biasa (landing page).
   return NextResponse.next();
 }
 
