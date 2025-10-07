@@ -80,18 +80,84 @@ const NFT_DATA: NFTTier[] = [
 ];
 
 /* =============================
+   Lightweight Popup & Loading Overlay
+   ============================= */
+const CenterPopup: FC<{
+  open: boolean;
+  message: string;
+  onOK: () => void;
+}> = ({ open, message, onOK }) => {
+  if (!open) return null;
+  return (
+    <>
+      <div className="fixed inset-0 z-[1100] bg-black/60 backdrop-blur-sm" />
+      <div className="fixed inset-0 z-[1200] grid place-items-center p-4">
+        <div className="w-full max-w-sm rounded-2xl bg-neutral-900 text-white shadow-2xl border border-white/10">
+          <div className="p-5">
+            <div className="text-center text-sm leading-relaxed whitespace-pre-line">
+              {message || "Done."}
+            </div>
+            <div className="mt-5 flex justify-center">
+              <button
+                onClick={onOK}
+                className="px-4 py-2 rounded-md bg-blue-600 text-white text-sm hover:bg-blue-500 active:scale-[0.99]"
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+};
+
+const LoadingOverlay: FC<{ show: boolean; label?: string }> = ({ show, label }) => {
+  if (!show) return null;
+  return (
+    <>
+      <div className="fixed inset-0 z-[1000] bg-black/40 backdrop-blur-[1px]" />
+      <div className="fixed inset-0 z-[1010] grid place-items-center">
+        <div className="flex items-center gap-3 rounded-xl bg-neutral-900 text-white border border-white/10 px-4 py-3 shadow-xl">
+          <div className="h-5 w-5 rounded-full border-2 border-white/30 border-t-transparent animate-spin" />
+          <span className="text-sm whitespace-pre-line">{label ?? "Processing…"}</span>
+        </div>
+      </div>
+    </>
+  );
+};
+
+/* =============================
    Component
    ============================= */
 const Market: FC = () => {
   const { address } = useAccount();
+
+  // Status text (also shown in popup on finish)
   const [message, setMessage] = useState<string>("");
+
+  // Global loading flag
   const [loading, setLoading] = useState(false);
+
+  // Popup control (OK shows only on success/fail)
+  const [popupOpen, setPopupOpen] = useState(false);
+
   const publicClient = usePublicClient();
 
   /* ---------- Rig IDs ---------- */
   const { data: BASIC } = useReadContract({ address: rigNftAddress, abi: rigNftABI as any, functionName: "BASIC" });
   const { data: PRO } = useReadContract({ address: rigNftAddress, abi: rigNftABI as any, functionName: "PRO" });
   const { data: LEGEND } = useReadContract({ address: rigNftAddress, abi: rigNftABI as any, functionName: "LEGEND" });
+
+  /* ---------- Wallet Legend balance (for per-wallet cap check) ---------- */
+  const legendBal = useReadContract({
+    address: rigNftAddress,
+    abi: rigNftABI as any,
+    functionName: "balanceOf",
+    args: address && LEGEND !== undefined ? [address, LEGEND] : undefined,
+    query: { enabled: Boolean(address && LEGEND !== undefined) },
+  });
+  const ownedLegend = (legendBal.data as bigint | undefined) ?? 0n;
 
   /* ---------- Payment mode & token ---------- */
   const { data: modeVal } = useReadContract({ address: rigSaleAddress, abi: rigSaleABI as any, functionName: "currentMode" }); // 0=ETH, 1=ERC20
@@ -156,19 +222,33 @@ const Market: FC = () => {
   /* ---------- Writer ---------- */
   const { writeContractAsync } = useWriteContract();
 
+  /* ============= UX helpers ============= */
+  function beginProcessing(label: string) {
+    setMessage(label);
+    setLoading(true);     // show overlay
+    setPopupOpen(false);  // hide popup during processing
+  }
+  function finishSuccess(label: string) {
+    setMessage(label);
+    setLoading(false);    // hide overlay
+    setPopupOpen(true);   // show OK popup
+  }
+  function finishError(label: string) {
+    setMessage(label);
+    setLoading(false);
+    setPopupOpen(true);
+  }
+
   /* =============================
      Actions — CLAIM FREE BASIC RIG (BY INVITEE)
      ============================== */
-
   const handleClaimBasicFree = async () => {
-    setLoading(true);
-    setMessage("");
+    beginProcessing("1/3: Requesting server signature…");
     try {
       if (!address) throw new Error("Please connect your wallet.");
       if (!isBasicFreeForMe) throw new Error("You are not eligible for free mint.");
       if (!fid) throw new Error("Farcaster FID not found. Open from Farcaster app.");
 
-      setMessage("1/3: Requesting server signature…");
       const sigRes = await fetch("/api/referral", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -190,37 +270,37 @@ const Market: FC = () => {
       setMessage("3/3: Waiting for confirmation…");
       await publicClient?.waitForTransactionReceipt({ hash: txHash });
 
-      // === PATCH FINAL: validasi referral otomatis di backend ===
-      setMessage("Finalizing: Validating referral...");
+      setMessage("Finalizing: Validating referral…");
       await fetch("/api/user", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          fid: Number(fid),             // FID invitee (kamu)
-          validate_referral_now: true,  // trigger backend → /api/referral/validate
+          fid: Number(fid),
+          validate_referral_now: true,
         }),
       });
-      // === END PATCH ===
 
-      setMessage("Claim successful! Referral counted.");
+      finishSuccess("Claim successful! Referral counted.");
       refetchFreeUsed?.();
     } catch (e: any) {
-      setMessage(e?.shortMessage || e?.message || "Transaction failed");
-    } finally {
-      setLoading(false);
+      finishError(e?.shortMessage || e?.message || "Transaction failed");
     }
   };
 
   /* ---------- Buy with ETH / ERC20 ---------- */
   const handleBuy = async (id: bigint) => {
-    setLoading(true);
-    setMessage("");
     try {
-      if (!address) throw new Error("Please connect your wallet.");
+      if (!address) return finishError("Please connect your wallet.");
       const price = priceOf(id) as bigint | undefined;
-      if (!price || price === 0n) throw new Error("Item is not for sale.");
+      if (!price || price === 0n) return finishError("Item is not for sale.");
+
+      // Legend cap check (3 per wallet)
+      if (id === (LEGEND as bigint | undefined) && ownedLegend >= 3n) {
+        return finishError("Per-wallet limit is 3 Legend rigs.");
+      }
 
       if (mode === 0) {
+        beginProcessing("Sending transaction (ETH) …");
         const txHash = await writeContractAsync({
           address: rigSaleAddress,
           abi: rigSaleABI as any,
@@ -230,9 +310,11 @@ const Market: FC = () => {
           account: address,
           chain: baseSepolia,
         });
+        setMessage("Waiting for confirmation…");
         await publicClient?.waitForTransactionReceipt({ hash: txHash });
       } else if (mode === 1 && tokenAddr) {
         if ((allowance as bigint) < price) {
+          beginProcessing("Approving spending limit…");
           const approveHash = await writeContractAsync({
             address: tokenAddr as Address,
             abi: erc20ABI,
@@ -241,8 +323,10 @@ const Market: FC = () => {
             account: address,
             chain: baseSepolia,
           });
+          setMessage("Waiting for approval confirmation…");
           await publicClient?.waitForTransactionReceipt({ hash: approveHash });
         }
+        beginProcessing("Sending transaction (ERC20) …");
         const buyHash = await writeContractAsync({
           address: rigSaleAddress,
           abi: rigSaleABI as any,
@@ -251,16 +335,15 @@ const Market: FC = () => {
           account: address,
           chain: baseSepolia,
         });
+        setMessage("Waiting for confirmation…");
         await publicClient?.waitForTransactionReceipt({ hash: buyHash });
       } else {
-        throw new Error("Unsupported payment mode.");
+        return finishError("Unsupported payment mode.");
       }
 
-      setMessage("Purchase success!");
+      finishSuccess("Purchase successful! Please go to Monitoring and start mining to sync your RigNFT.");
     } catch (e: any) {
-      setMessage(e?.shortMessage || e?.message || "Transaction failed");
-    } finally {
-      setLoading(false);
+      finishError(e?.shortMessage || e?.message || "Transaction failed");
     }
   };
 
@@ -301,7 +384,7 @@ const Market: FC = () => {
   const [inviteMsg, setInviteMsg] = useState<string>("");
   const [busyInvite, setBusyInvite] = useState(false);
 
-  // Klaim NFT dari kuota undangan (flow asli, tetap dipertahankan)
+  // Claim NFT from invite quota (original flow, preserved)
   async function handleClaimInviteReward() {
     try {
       if (!address) throw new Error("Please connect your wallet.");
@@ -312,7 +395,9 @@ const Market: FC = () => {
         return setInviteMsg(`Need ${needMoreInv} more valid invite(s) for the next claim.`);
       }
       setBusyInvite(true);
-      setMessage("Klaim Reward NFT sedang diproses oleh Relayer...");
+
+      // Also show global processing overlay
+      beginProcessing("Relayer is processing your reward claim…");
 
       const res = await fetch("/api/referral", {
         method: "POST",
@@ -325,16 +410,17 @@ const Market: FC = () => {
         }),
       });
       const json = await res.json();
-      if (!json?.ok) throw new Error(json?.error || "Klaim gagal. Periksa logs server.");
+      if (!json?.ok) throw new Error(json?.error || "Claim failed. Check server logs.");
 
       setClaimedRewards(claimedRewards + 1);
-      setInviteMsg(`Reward diklaim! Transaksi relayer: ${json.txHash?.slice?.(0, 8) ?? ""}...`);
+      setInviteMsg(`Reward claimed! Relayer tx: ${json.txHash?.slice?.(0, 8) ?? ""}…`);
+      finishSuccess("Invite reward claimed successfully.");
     } catch (e: any) {
-      setInviteMsg(e?.shortMessage || e?.message || "Klaim gagal.");
-      setMessage("");
+      const err = e?.shortMessage || e?.message || "Claim failed.";
+      setInviteMsg(err);
+      finishError(err);
     } finally {
       setBusyInvite(false);
-      setLoading(false);
     }
   }
 
@@ -361,7 +447,14 @@ const Market: FC = () => {
             disabled={busyInvite || availableClaims <= 0 || !address}
             className={`fin-btn fin-btn-claim text-xs ${busyInvite || availableClaims <= 0 || !address ? "opacity-50 cursor-not-allowed" : ""}`}
           >
-            {busyInvite ? "Klaim diproses…" : `Klaim${availableClaims > 0 ? ` (${availableClaims})` : ""}`}
+            {busyInvite ? (
+              <span className="inline-flex items-center gap-2">
+                <span className="h-3 w-3 rounded-full border-2 border-white/30 border-t-transparent animate-spin" />
+                Processing…
+              </span>
+            ) : (
+              `Claim${availableClaims > 0 ? ` (${availableClaims})` : ""}`
+            )}
           </button>
         </div>
         <div className="mt-2 text-xs text-neutral-400">
@@ -369,7 +462,7 @@ const Market: FC = () => {
         </div>
         {availableClaims <= 0 && (
           <div className="text-xs text-neutral-400">
-            Butuh <b>{needMoreInv}</b> undangan valid lagi untuk klaim berikutnya.
+            Need <b>{needMoreInv}</b> more valid invite(s) for the next claim.
           </div>
         )}
         {!!inviteMsg && <div className="mt-2 text-xs text-blue-400">{inviteMsg}</div>}
@@ -382,12 +475,13 @@ const Market: FC = () => {
           const p = priceOf(id);
           const priceText =
             tier.id === "basic" && isBasicFreeForMe
-              ? "GRATIS"
+              ? "FREE"
               : p
               ? mode === 0
                 ? `${formatEther(p as bigint)} ETH`
                 : `${formatUnits(p as bigint, tokenDecimals)} ${tokenSymbol}`
               : "N/A";
+          const disabled = loading || !address || !id;
           return (
             <div key={tier.id} className="fin-card p-3 flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -404,11 +498,18 @@ const Market: FC = () => {
                 <span className="text-xs text-neutral-400 mb-1">{priceText}</span>
                 <button
                   onClick={onClickCta(tier.id)}
-                  disabled={loading || !address || !id}
-                  title={!address ? "Hubungkan dompet terlebih dahulu" : undefined}
-                  className={`fin-btn fin-btn-claim px-3 py-1.5 text-xs ${loading || !address || !id ? "opacity-50 cursor-not-allowed" : ""}`}
+                  disabled={disabled}
+                  title={!address ? "Connect wallet first" : undefined}
+                  className={`fin-btn fin-btn-claim px-3 py-1.5 text-xs transition-transform active:scale-[0.98] ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
                 >
-                  {ctaText(tier.id)}
+                  {loading ? (
+                    <span className="inline-flex items-center gap-2">
+                      <span className="h-3 w-3 rounded-full border-2 border-white/30 border-t-transparent animate-spin" />
+                      Processing…
+                    </span>
+                  ) : (
+                    ctaText(tier.id)
+                  )}
                 </button>
               </div>
             </div>
@@ -416,11 +517,21 @@ const Market: FC = () => {
         })}
       </section>
 
-      {!!message && <p className="text-center text-xs text-neutral-400">{message}</p>}
+      {/* Inline message (kept) */}
+      {!!message && <p className="text-center text-xs text-neutral-400 whitespace-pre-line">{message}</p>}
       <div className="fin-bottom-space" />
+
+      {/* Global loading overlay mirrors current status */}
+      <LoadingOverlay show={loading} label={message || "Processing…"} />
+
+      {/* Popup with OK only on success/fail */}
+      <CenterPopup
+        open={popupOpen}
+        message={message}
+        onOK={() => setPopupOpen(false)}
+      />
     </div>
   );
 };
 
 export default Market;
-

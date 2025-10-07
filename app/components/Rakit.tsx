@@ -1,3 +1,4 @@
+// app/components/Rakit.tsx
 "use client";
 
 import { useEffect, useMemo, useState, type FC } from "react";
@@ -36,7 +37,7 @@ const TierImg: Record<"basic"|"pro"|"legend", string> = {
   legend: "/img/vga_legend.gif",
 };
 
-/* Slot kecil preview kepemilikan — mengikuti tema fin-* */
+/* Small slot preview component (keeps fin-* theme) */
 const NftSlot: FC<{ filled: boolean; tier: "basic" | "pro" | "legend" }> = ({ filled, tier }) => (
   <div
     className={`rounded-md grid place-items-center border
@@ -57,6 +58,48 @@ const NftSlot: FC<{ filled: boolean; tier: "basic" | "pro" | "legend" }> = ({ fi
   </div>
 );
 
+/* ---------------- Popup (shown only on success/fail) + Processing overlay ---------------- */
+const CenterPopup: FC<{ open: boolean; message: string; onOK: () => void }> = ({ open, message, onOK }) => {
+  if (!open) return null;
+  return (
+    <>
+      <div className="fixed inset-0 z-[1100] bg-black/60 backdrop-blur-sm" />
+      <div className="fixed inset-0 z-[1200] grid place-items-center p-4">
+        <div className="w-full max-w-sm rounded-2xl bg-neutral-900 text-white shadow-2xl border border-white/10">
+          <div className="p-5">
+            <div className="text-center text-sm leading-relaxed whitespace-pre-line">
+              {message || "Done."}
+            </div>
+            <div className="mt-5 flex justify-center">
+              <button
+                onClick={onOK}
+                className="px-4 py-2 rounded-md bg-blue-600 text-white text-sm hover:bg-blue-500 active:scale-[0.99]"
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+};
+
+const LoadingOverlay: FC<{ show: boolean; label?: string }> = ({ show, label }) => {
+  if (!show) return null;
+  return (
+    <>
+      <div className="fixed inset-0 z-[1000] bg-black/40 backdrop-blur-[1px]" />
+      <div className="fixed inset-0 z-[1010] grid place-items-center">
+        <div className="flex items-center gap-3 rounded-xl bg-neutral-900 text-white border border-white/10 px-4 py-3 shadow-xl">
+          <div className="h-5 w-5 rounded-full border-2 border-white/30 border-t-transparent animate-spin" />
+          <span className="text-sm whitespace-pre-line">{label ?? "Processing…"}</span>
+        </div>
+      </div>
+    </>
+  );
+};
+
 /* ---------------- component ---------------- */
 export default function Rakit() {
   const { address, chainId } = useAccount();
@@ -64,7 +107,9 @@ export default function Rakit() {
   const onBase = !chainId || chainId === BASE_CHAIN_ID;
   const publicClient = usePublicClient();
 
-  const [status, setStatus] = useState<string>("");
+  const [status, setStatus] = useState<string>("");       // step status (also shown in popup on finish)
+  const [loading, setLoading] = useState<boolean>(false);  // processing overlay
+  const [popupOpen, setPopupOpen] = useState<boolean>(false); // OK popup (only on success/fail)
 
   /* IDs */
   const basicId  = useReadContract({ address: rigNftAddress as `0x${string}`, abi: rigNftABI as any, functionName: "BASIC" });
@@ -101,7 +146,7 @@ export default function Rakit() {
   const ownedPro    = (proBal.data    as bigint | undefined) ?? 0n;
   const ownedLegend = (legendBal.data as bigint | undefined) ?? 0n;
 
-  /* Usage (dipakai untuk hitung slot terisi) */
+  /* Usage for slot usage display */
   const miningUsage = useReadContract({
     address: gameCoreAddress as `0x${string}`,
     abi: gameCoreABI as any,
@@ -164,10 +209,27 @@ export default function Rakit() {
   /* writer */
   const { writeContractAsync } = useWriteContract();
 
+  // === helpers for consistent UX ===
+  function beginProcessing(label: string) {
+    setStatus(label);
+    setLoading(true);      // show overlay
+    setPopupOpen(false);   // make sure popup hidden during processing
+  }
+  function finishSuccess(label: string) {
+    setStatus(label);
+    setLoading(false);     // hide overlay
+    setPopupOpen(true);    // show OK popup
+  }
+  function finishError(label: string) {
+    setStatus(label);
+    setLoading(false);
+    setPopupOpen(true);
+  }
+
   async function ensureApprove(amount: bigint) {
     if (!user || !feeToken) throw new Error("Fee token not set / wallet not connected.");
     if (allowance >= amount) return;
-    setStatus(`Approving ${formatUnits(amount, feeDecimals)} ${feeSymbol}…`);
+    beginProcessing(`Approving ${formatUnits(amount, feeDecimals)} ${feeSymbol}…`);
     const tx = await writeContractAsync({
       address: feeToken,
       abi: erc20Abi,
@@ -176,9 +238,10 @@ export default function Rakit() {
       account: user,
       chain: baseSepolia,
     });
-    setStatus(`Waiting approval receipt…`);
+    setStatus(`Waiting for approval confirmation…`);
     await publicClient!.waitForTransactionReceipt({ hash: tx });
     setStatus(`Approval confirmed.`);
+    // keep overlay on; next steps will continue
   }
 
   async function runMerge(kind: "BASIC_TO_PRO" | "PRO_TO_LEGEND") {
@@ -197,43 +260,51 @@ export default function Rakit() {
   }
 
   async function onMergeBasicToPro() {
-    if (!user) return setStatus("Connect wallet dulu.");
-    setStatus("");
-    if (!onBase) return setStatus("Please switch network to Base Sepolia.");
-    if (ownedBasic < needBP) return setStatus(`Butuh ${String(needBP)} Basic untuk merge.`);
-    if (caps.p <= 0) return setStatus("rigCaps.p = 0 (slot Pro belum di-set).");
-    if (Number(pUsed) >= caps.p) return setStatus(`Pro slot penuh (${Number(pUsed)}/${caps.p}).`);
+    if (!user) { finishError("Please connect your wallet."); return; }
+    if (!onBase) { finishError("Please switch network to Base Sepolia."); return; }
+    if (ownedBasic < needBP) { finishError(`You need ${String(needBP)} Basic to merge.`); return; }
+    if (caps.p <= 0) { finishError("rigCaps.p = 0 (Pro slots not configured)."); return; }
+    if (Number(pUsed) >= caps.p) { finishError(`Pro slots are full (${Number(pUsed)}/${caps.p}).`); return; }
 
     try {
+      beginProcessing("Starting merge to Pro…");
       await ensureApprove(feeB2P);
       await runMerge("BASIC_TO_PRO");
+
+      setStatus("Refreshing balances…");
       await Promise.all([basicBal.refetch?.(), proBal.refetch?.(), miningUsage.refetch?.()]);
+
+      finishSuccess("Merge to Pro successful!. Please go to Monitoring and start mining to sync your RigNFT.");
     } catch (e: any) {
-      setStatus(e?.shortMessage || e?.message || "Merge failed");
+      finishError(e?.shortMessage || e?.message || "Merge failed");
     }
   }
 
   async function onMergeProToLegend() {
-    if (!user) return setStatus("Connect wallet dulu.");
-    setStatus("");
-    if (!onBase) return setStatus("Please switch network to Base Sepolia.");
-    if (ownedPro < needPL) return setStatus(`Butuh ${String(needPL)} Pro untuk merge.`);
-    if (caps.l <= 0) return setStatus("rigCaps.l = 0 (slot Legend belum di-set).");
-    if (Number(lUsed) >= caps.l) return setStatus(`Legend slot penuh (${Number(lUsed)}/${caps.l}).`);
+    if (!user) { finishError("Please connect your wallet."); return; }
+    if (!onBase) { finishError("Please switch network to Base Sepolia."); return; }
+    if (ownedPro < needPL) { finishError(`You need ${String(needPL)} Pro to merge.`); return; }
+    if (caps.l <= 0) { finishError("rigCaps.l = 0 (Legend slots not configured)."); return; }
+    if (Number(lUsed) >= caps.l) { finishError(`Legend slots are full (${Number(lUsed)}/${caps.l}).`); return; }
 
     try {
+      beginProcessing("Starting merge to Legend…");
       await ensureApprove(feeP2L);
       await runMerge("PRO_TO_LEGEND");
+
+      setStatus("Refreshing balances…");
       await Promise.all([proBal.refetch?.(), legendBal.refetch?.(), miningUsage.refetch?.()]);
+
+      finishSuccess("Merge to Legend successful!. Please go to Monitoring and start mining to sync your RigNFT.");
     } catch (e: any) {
-      setStatus(e?.shortMessage || e?.message || "Merge failed");
+      finishError(e?.shortMessage || e?.message || "Merge failed");
     }
   }
 
-  /* ---------------- UI (tema fintech selaras Monitoring) ---------------- */
+  /* ---------------- UI (fintech-aligned) ---------------- */
   return (
     <div className="fin-wrap fin-content-pad-bottom">
-      {/* Hero title (gradient statis datang dari html::before / .fin-wrap::before) */}
+      {/* Page head */}
       <div className="fin-page-head">
         <h1>Build Rig</h1>
         <p>Upgrade &amp; merge your rigs</p>
@@ -270,11 +341,18 @@ export default function Rakit() {
           </div>
           <button
             onClick={(e) => { e.preventDefault(); onMergeBasicToPro(); }}
-            className="fin-btn fin-btn-claim"
-            disabled={!user}
+            className="fin-btn fin-btn-claim transition-transform active:scale-[0.98]"
+            disabled={!user || loading}
             title={!user ? "Connect wallet" : "Merge to Pro"}
           >
-            Merge to Pro
+            {loading ? (
+              <span className="inline-flex items-center gap-2">
+                <span className="h-3 w-3 rounded-full border-2 border-white/30 border-t-transparent animate-spin" />
+                Processing…
+              </span>
+            ) : (
+              "Merge to Pro"
+            )}
           </button>
         </div>
       </section>
@@ -310,16 +388,23 @@ export default function Rakit() {
           </div>
           <button
             onClick={(e) => { e.preventDefault(); onMergeProToLegend(); }}
-            className="fin-btn fin-btn-claim"
-            disabled={!user}
+            className="fin-btn fin-btn-claim transition-transform active:scale-[0.98]"
+            disabled={!user || loading}
             title={!user ? "Connect wallet" : "Merge to Legend"}
           >
-            Merge to Legend
+            {loading ? (
+              <span className="inline-flex items-center gap-2">
+                <span className="h-3 w-3 rounded-full border-2 border-white/30 border-t-transparent animate-spin" />
+                Processing…
+              </span>
+            ) : (
+              "Merge to Legend"
+            )}
           </button>
         </div>
       </section>
 
-      {/* LEGEND (display only + note) */}
+      {/* LEGEND (display only) */}
       <section className="fin-card fin-card-pad" aria-label="Legend rigs">
         <div className="fin-row">
           <div className="fin-epoch">
@@ -340,16 +425,15 @@ export default function Rakit() {
             />
           ))}
         </div>
-
-        <p className="fin-cooldown mt-2">
-          Per-wallet Legend limit mengikuti <code>rigCaps.l</code> (default 3). Jika sudah
-          penuh, merge ke Legend akan dinonaktifkan oleh guard server.
-        </p>
       </section>
 
-      {/* status */}
-      <div className="fin-msg min-h-5">{status}</div>
+      {/* legacy inline status (still kept for compatibility) */}
+      <div className="fin-msg min-h-5 whitespace-pre-line">{status}</div>
       <div className="fin-bottom-space" />
+
+      {/* overlays */}
+      <LoadingOverlay show={loading} label={status || "Processing…"} />
+      <CenterPopup open={popupOpen} message={status} onOK={() => setPopupOpen(false)} />
     </div>
   );
 }
