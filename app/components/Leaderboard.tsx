@@ -116,117 +116,129 @@ const Leaderboard: FC = () => {
     Boolean(isClaimed);
 
   return (
-    <div className="space-y-4 rounded-lg bg-neutral-900/50 p-4 border border-neutral-700">
-      <h2 className="text-lg font-semibold text-center">Leaderboard</h2>
-      <p className="text-sm text-neutral-400 text-center">
-        Peringkat poin untuk ronde saat ini.
-      </p>
+    <div className="relative">
+      {/* OVERLAY SOON */}
+      <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center bg-black/40 backdrop-blur-sm">
+        <span className="text-4xl md:text-5xl font-extrabold tracking-widest text-white/90 drop-shadow">
+          SOON!
+        </span>
+      </div>
 
-      {/* ====== Halving Reward box ====== */}
-      <div className="rounded-md border border-neutral-700 bg-neutral-800/50 p-3 flex items-center justify-between gap-3">
-        <div className="text-sm">
-          <div className="font-semibold">Halving Reward</div>
-          {snap ? (
-            <div className="text-neutral-300">
-              Snapshot #{snap.snapshotId}{" "}
-              {isClaimed
-                ? "• ✅ Claimed"
-                : entitlement
-                ? "• Eligible"
-                : "• Not eligible"}
+      {/* ASLI (DIBIARKAN, HANYA DIBUAT BLUR & NON-INTERAKTIF) */}
+      <div className="blur-sm select-none pointer-events-none">
+        <div className="space-y-4 rounded-lg bg-neutral-900/50 p-4 border border-neutral-700">
+          <h2 className="text-lg font-semibold text-center">Leaderboard</h2>
+          <p className="text-sm text-neutral-400 text-center">
+            Peringkat poin untuk ronde saat ini.
+          </p>
+
+          {/* ====== Halving Reward box ====== */}
+          <div className="rounded-md border border-neutral-700 bg-neutral-800/50 p-3 flex items-center justify-between gap-3">
+            <div className="text-sm">
+              <div className="font-semibold">Halving Reward</div>
+              {snap ? (
+                <div className="text-neutral-300">
+                  Snapshot #{snap.snapshotId}{" "}
+                  {isClaimed
+                    ? "• ✅ Claimed"
+                    : entitlement
+                    ? "• Eligible"
+                    : "• Not eligible"}
+                </div>
+              ) : (
+                <div className="text-neutral-400">No active snapshot</div>
+              )}
+              {entitlement && (
+                <div className="text-xs text-neutral-400">
+                  Your allocation: {formatEther(BigInt(entitlement.amount))} $BaseTC
+                </div>
+              )}
             </div>
-          ) : (
-            <div className="text-neutral-400">No active snapshot</div>
+
+            <button
+              onClick={onClaim}
+              disabled={claimDisabled}
+              className="px-3 py-2 rounded-md bg-white/10 hover:bg-white/15 disabled:opacity-50 text-sm"
+            >
+              {isPending || txLoading || claiming
+                ? "Claiming..."
+                : isClaimed
+                ? "Claimed"
+                : "Claim"}
+            </button>
+          </div>
+
+          {/* ====== Tabel leaderboard ====== */}
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead className="text-neutral-400">
+                <tr>
+                  <th className="px-4 py-2 text-left">Rank</th>
+                  <th className="px-4 py-2 text-left">User</th>
+                  <th className="px-4 py-2 text-right">Points</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading && (
+                  <tr>
+                    <td colSpan={3} className="text-center py-4 text-neutral-500">
+                      Loading...
+                    </td>
+                  </tr>
+                )}
+                {error && (
+                  <tr>
+                    <td colSpan={3} className="text-center py-4 text-red-400">
+                      {error}
+                    </td>
+                  </tr>
+                )}
+                {!loading &&
+                  !error &&
+                  leaderboardData.map((entry) => (
+                    <tr
+                      key={entry.fid}
+                      className="border-b border-neutral-800 hover:bg-neutral-800/50"
+                    >
+                      <td className="px-4 py-2 font-medium">{entry.rank}</td>
+                      <td className="px-4 py-2 flex items-center gap-3">
+                        {entry.pfp_url ? (
+                          <Image
+                            src={entry.pfp_url}
+                            alt={entry.display_name || ""}
+                            width={24}
+                            height={24}
+                            className="rounded-full"
+                          />
+                        ) : (
+                          <div className="w-6 h-6 rounded-full bg-neutral-700" />
+                        )}
+                        <span className="font-semibold">
+                          {entry.display_name ||
+                            `@${entry.username}` ||
+                            `FID: ${entry.fid}`}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2 text-right font-semibold">
+                        {entry.total_points}
+                      </td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* feedback tx */}
+          {txSuccess && (
+            <p className="text-green-400 text-xs">Claim success. 🎉</p>
           )}
-          {entitlement && (
-            <div className="text-xs text-neutral-400">
-              Your allocation: {formatEther(BigInt(entitlement.amount))} $BaseTC
-            </div>
+          {isClaimed && (
+            <p className="text-neutral-400 text-xs">
+              You have already claimed for this snapshot.
+            </p>
           )}
         </div>
-
-        <button
-          onClick={onClaim}
-          disabled={claimDisabled}
-          className="px-3 py-2 rounded-md bg-white/10 hover:bg-white/15 disabled:opacity-50 text-sm"
-        >
-          {isPending || txLoading || claiming
-            ? "Claiming..."
-            : isClaimed
-            ? "Claimed"
-            : "Claim"}
-        </button>
       </div>
-
-      {/* ====== Tabel leaderboard ====== */}
-      <div className="overflow-x-auto">
-        <table className="min-w-full text-sm">
-          <thead className="text-neutral-400">
-            <tr>
-              <th className="px-4 py-2 text-left">Rank</th>
-              <th className="px-4 py-2 text-left">User</th>
-              <th className="px-4 py-2 text-right">Points</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading && (
-              <tr>
-                <td colSpan={3} className="text-center py-4 text-neutral-500">
-                  Loading...
-                </td>
-              </tr>
-            )}
-            {error && (
-              <tr>
-                <td colSpan={3} className="text-center py-4 text-red-400">
-                  {error}
-                </td>
-              </tr>
-            )}
-            {!loading &&
-              !error &&
-              leaderboardData.map((entry) => (
-                <tr
-                  key={entry.fid}
-                  className="border-b border-neutral-800 hover:bg-neutral-800/50"
-                >
-                  <td className="px-4 py-2 font-medium">{entry.rank}</td>
-                  <td className="px-4 py-2 flex items-center gap-3">
-                    {entry.pfp_url ? (
-                      <Image
-                        src={entry.pfp_url}
-                        alt={entry.display_name || ""}
-                        width={24}
-                        height={24}
-                        className="rounded-full"
-                      />
-                    ) : (
-                      <div className="w-6 h-6 rounded-full bg-neutral-700" />
-                    )}
-                    <span className="font-semibold">
-                      {entry.display_name ||
-                        `@${entry.username}` ||
-                        `FID: ${entry.fid}`}
-                    </span>
-                  </td>
-                  <td className="px-4 py-2 text-right font-semibold">
-                    {entry.total_points}
-                  </td>
-                </tr>
-              ))}
-          </tbody>
-        </table>
-      </div>
-
-      {/* feedback tx */}
-      {txSuccess && (
-        <p className="text-green-400 text-xs">Claim success. 🎉</p>
-      )}
-      {isClaimed && (
-        <p className="text-neutral-400 text-xs">
-          You have already claimed for this snapshot.
-        </p>
-      )}
     </div>
   );
 };

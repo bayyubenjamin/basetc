@@ -150,52 +150,65 @@ const Staking: FC = () => {
   };
 
   return (
-    <div className="space-y-4 rounded-lg bg-neutral-900/50 p-4 border border-neutral-700">
-        <div className="grid grid-cols-2 gap-4 text-center">
-            <div>
-                <p className="text-sm text-neutral-400">Your Staked Amount</p>
-                <p className="text-xl font-bold">{stakedAmount.toLocaleString()}</p>
-            </div>
-            <div>
-                <p className="text-sm text-neutral-400">Pending Rewards</p>
-                <p className="text-xl font-bold text-emerald-400">{rewards.toFixed(6)}</p>
-            </div>
-        </div>
+    <div className="relative">
+      {/* OVERLAY SOON */}
+      <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center bg-black/40 backdrop-blur-sm">
+        <span className="text-4xl md:text-5xl font-extrabold tracking-widest text-white/90 drop-shadow">
+          SOON!
+        </span>
+      </div>
 
-        <div className="space-y-2">
-            <label className="text-xs text-neutral-400">Amount to Stake</label>
-            <input
-                type="number"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                placeholder="0.0"
-                className="w-full rounded-md bg-neutral-800 px-3 py-2 text-white placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-        </div>
-
-        <div className="space-y-2">
-             <label className="text-xs text-neutral-400">Lock Duration</label>
-            <div className="flex gap-2">
-                <button onClick={() => setLockType(1)} className={`flex-1 rounded px-2 py-1 text-xs ${lockType === 1 ? 'bg-blue-600' : 'bg-neutral-700'}`}>7 Days (1.0x)</button>
-                <button onClick={() => setLockType(2)} className={`flex-1 rounded px-2 py-1 text-xs ${lockType === 2 ? 'bg-blue-600' : 'bg-neutral-700'}`}>30 Days (1.2x)</button>
-                <button onClick={() => setLockType(3)} className={`flex-1 rounded px-2 py-1 text-xs ${lockType === 3 ? 'bg-blue-600' : 'bg-neutral-700'}`}>365 Days (1.5x)</button>
+      {/* ASLI (DIBIARKAN, HANYA DIBUAT BLUR & NON-INTERAKTIF) */}
+      <div className="blur-sm select-none pointer-events-none">
+        <div className="space-y-4 rounded-lg bg-neutral-900/50 p-4 border border-neutral-700">
+            <div className="grid grid-cols-2 gap-4 text-center">
+                <div>
+                    <p className="text-sm text-neutral-400">Your Staked Amount</p>
+                    <p className="text-xl font-bold">{stakedAmount.toLocaleString()}</p>
+                </div>
+                <div>
+                    <p className="text-sm text-neutral-400">Pending Rewards</p>
+                    <p className="text-xl font-bold text-emerald-400">{rewards.toFixed(6)}</p>
+                </div>
             </div>
-        </div>
 
-        <div className="grid grid-cols-3 gap-2 pt-2">
-            <button onClick={() => handleAction("stake")} disabled={loading} className="rounded-md bg-green-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">
-                {loading ? "..." : "Stake"}
-            </button>
-            <button onClick={() => handleAction("harvest")} disabled={loading || rewards <= 0} className="rounded-md bg-yellow-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">
-                {loading ? "..." : "Harvest"}
-            </button>
-            <button onClick={() => handleAction("unstake")} disabled={loading || stakedAmount <= 0} className="rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">
-                {loading ? "..." : "Unstake"}
-            </button>
+            <div className="space-y-2">
+                <label className="text-xs text-neutral-400">Amount to Stake</label>
+                <input
+                    type="number"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    placeholder="0.0"
+                    className="w-full rounded-md bg-neutral-800 px-3 py-2 text-white placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+            </div>
+
+            <div className="space-y-2">
+                <label className="text-xs text-neutral-400">Lock Duration</label>
+                <div className="flex gap-2">
+                    <button onClick={() => setLockType(1)} className={`flex-1 rounded px-2 py-1 text-xs ${lockType === 1 ? 'bg-blue-600' : 'bg-neutral-700'}`}>7 Days (1.0x)</button>
+                    <button onClick={() => setLockType(2)} className={`flex-1 rounded px-2 py-1 text-xs ${lockType === 2 ? 'bg-blue-600' : 'bg-neutral-700'}`}>30 Days (1.2x)</button>
+                    <button onClick={() => setLockType(3)} className={`flex-1 rounded px-2 py-1 text-xs ${lockType === 3 ? 'bg-blue-600' : 'bg-neutral-700'}`}>365 Days (1.5x)</button>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2 pt-2">
+                <button onClick={() => handleAction("stake")} disabled={loading} className="rounded-md bg-green-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">
+                    {loading ? "..." : "Stake"}
+                </button>
+                <button onClick={() => handleAction("harvest")} disabled={loading || rewards <= 0} className="rounded-md bg-yellow-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">
+                    {loading ? "..." : "Harvest"}
+                </button>
+                <button onClick={() => handleAction("unstake")} disabled={loading || stakedAmount <= 0} className="rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">
+                    {loading ? "..." : "Unstake"}
+                </button>
+            </div>
+            {status && <p className="text-center text-xs text-neutral-400 pt-2">{status}</p>}
         </div>
-         {status && <p className="text-center text-xs text-neutral-400 pt-2">{status}</p>}
+      </div>
     </div>
   );
 };
 
 export default Staking;
+
