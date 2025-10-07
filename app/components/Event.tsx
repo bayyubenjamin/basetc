@@ -14,10 +14,10 @@ const Event: FC = () => {
   // render dynamic content
   const renderContent = () => {
     switch (activeTab) {
-      case "staking":
-        return <Staking />;
       case "spin":
         return <Spin />;
+      case "staking":
+        return <Staking />;
       case "leaderboard":
         return <Leaderboard />;
       default:
