@@ -7,7 +7,7 @@ import {
   useAccount,
   useReadContract,
   useWriteContract,
-  usePublicClient, // <-- tambahkan import hook di sini
+  usePublicClient,
 } from "wagmi";
 import { baseSepolia } from "viem/chains";
 import {
@@ -84,11 +84,8 @@ const NFT_DATA: NFTTier[] = [
    ============================= */
 const Market: FC = () => {
   const { address } = useAccount();
-  // const publicClient dihapus karena tidak lagi digunakan di handleClaimInviteReward (komentar lama)
   const [message, setMessage] = useState<string>("");
   const [loading, setLoading] = useState(false);
-
-  // <-- gunakan hook di level atas komponen (perbaikan utama)
   const publicClient = usePublicClient();
 
   /* ---------- Rig IDs ---------- */
@@ -127,7 +124,7 @@ const Market: FC = () => {
   const { data: freeOpen } = useReadContract({ address: rigSaleAddress, abi: rigSaleABI as any, functionName: "freeMintOpen" });
   const { data: freeId } = useReadContract({ address: rigSaleAddress, abi: rigSaleABI as any, functionName: "freeMintId" });
 
-  // fid + inviter from localStorage (original flow)
+  // fid + inviter (legacy ref wallet for older flow)
   const [fid, setFid] = useState<bigint | null>(null);
   const [inviter, setInviter] = useState<Address>("0x0000000000000000000000000000000000000000");
   useEffect(() => {
@@ -163,7 +160,6 @@ const Market: FC = () => {
      Actions — CLAIM FREE BASIC RIG (BY INVITEE)
      ============================== */
 
-  // Free claim (Basic) via server signature
   const handleClaimBasicFree = async () => {
     setLoading(true);
     setMessage("");
@@ -181,7 +177,6 @@ const Market: FC = () => {
       const sig = await sigRes.json();
       if (!sigRes.ok) throw new Error(sig?.error || "Failed to obtain signature.");
 
-      // Menggunakan useWriteContract untuk meminta konfirmasi dompet pengguna
       setMessage("2/3: Sending transaction…");
       const txHash = await writeContractAsync({
         address: rigSaleAddress,
@@ -193,19 +188,19 @@ const Market: FC = () => {
       });
 
       setMessage("3/3: Waiting for confirmation…");
-      // PERBAIKAN: gunakan publicClient dari hook top-level
       await publicClient?.waitForTransactionReceipt({ hash: txHash });
 
-      // --- SINKRONISASI REFERRAL: Tandai referral sebagai 'valid' di Supabase
-      if (inviter !== "0x0000000000000000000000000000000000000000") {
-        setMessage("Finalizing: Updating referral status...");
-        await fetch("/api/referral", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ mode: "mark-valid", invitee_fid: String(fid), invitee_wallet: address }),
-        });
-      }
-      // --- AKHIR SINKRONISASI ---
+      // === PATCH FINAL: validasi referral otomatis di backend ===
+      setMessage("Finalizing: Validating referral...");
+      await fetch("/api/user", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fid: Number(fid),             // FID invitee (kamu)
+          validate_referral_now: true,  // trigger backend → /api/referral/validate
+        }),
+      });
+      // === END PATCH ===
 
       setMessage("Claim successful! Referral counted.");
       refetchFreeUsed?.();
@@ -216,7 +211,7 @@ const Market: FC = () => {
     }
   };
 
-  // Buy with ETH / ERC20 (approval preserved)
+  /* ---------- Buy with ETH / ERC20 ---------- */
   const handleBuy = async (id: bigint) => {
     setLoading(true);
     setMessage("");
@@ -225,7 +220,6 @@ const Market: FC = () => {
       const price = priceOf(id) as bigint | undefined;
       if (!price || price === 0n) throw new Error("Item is not for sale.");
 
-      // PERBAIKAN: hapus dynamic import; gunakan publicClient dari hook top-level
       if (mode === 0) {
         const txHash = await writeContractAsync({
           address: rigSaleAddress,
@@ -307,11 +301,10 @@ const Market: FC = () => {
   const [inviteMsg, setInviteMsg] = useState<string>("");
   const [busyInvite, setBusyInvite] = useState(false);
 
-  // FIX: Fungsi untuk mengklaim NFT dari kuota undangan yang valid
+  // Klaim NFT dari kuota undangan (flow asli, tetap dipertahankan)
   async function handleClaimInviteReward() {
     try {
       if (!address) throw new Error("Please connect your wallet.");
-      // Tambahkan pengecekan FID, karena API 'claim' membutuhkan FID Inviter untuk poin
       if (!fid) throw new Error("Farcaster FID required for reward claim.");
 
       setInviteMsg("");
@@ -319,31 +312,26 @@ const Market: FC = () => {
         return setInviteMsg(`Need ${needMoreInv} more valid invite(s) for the next claim.`);
       }
       setBusyInvite(true);
-      setMessage("Klaim Reward NFT sedang diproses oleh Relayer..."); // Pesan yang lebih akurat
+      setMessage("Klaim Reward NFT sedang diproses oleh Relayer...");
 
       const res = await fetch("/api/referral", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          mode: "claim", // FIX: Tambahkan mode operasi yang benar untuk klaim reward
-          inviter: address, // Alamat Anda (untuk pengecekan kuota)
-          receiver: address, // Alamat yang akan menerima NFT (Anda)
-          invitee_fid: String(fid), // FID Anda (Inviter) untuk dicatat sebagai referensi poin
+          mode: "claim",
+          inviter: address,
+          receiver: address,
+          invitee_fid: String(fid),
         }),
       });
       const json = await res.json();
       if (!json?.ok) throw new Error(json?.error || "Klaim gagal. Periksa logs server.");
 
-      // Karena minting dilakukan oleh relayer, kita hanya menunggu konfirmasi bahwa
-      // backend telah mengirim transaksi dan mencatat kuota (yang sudah dilakukan).
-
-      // Langsung perbarui status klaim lokal setelah respons sukses dari API
       setClaimedRewards(claimedRewards + 1);
-      setInviteMsg(`Reward diklaim! Transaksi relayer: ${json.txHash.slice(0, 8)}...`);
+      setInviteMsg(`Reward diklaim! Transaksi relayer: ${json.txHash?.slice?.(0, 8) ?? ""}...`);
     } catch (e: any) {
-      // Tampilkan pesan error klaim ke kotak pesan kecil
       setInviteMsg(e?.shortMessage || e?.message || "Klaim gagal.");
-      setMessage(""); // Pastikan pesan transaksi umum dibersihkan
+      setMessage("");
     } finally {
       setBusyInvite(false);
       setLoading(false);
@@ -351,7 +339,7 @@ const Market: FC = () => {
   }
 
   /* =============================
-     UI (Fin look; logic intact)
+     UI
    ============================== */
   return (
     <div className="fin-wrap fin-content-pad-bottom px-4 pt-4 space-y-5">
@@ -361,7 +349,7 @@ const Market: FC = () => {
         <p className="text-sm text-neutral-400">Mint rigs and invite to earn</p>
       </header>
 
-      {/* Invite card — simplified but keeps the full logic */}
+      {/* Invite card */}
       <section className="fin-card p-4">
         <div className="flex items-center justify-between gap-3">
           <div>
@@ -370,7 +358,7 @@ const Market: FC = () => {
           </div>
           <button
             onClick={handleClaimInviteReward}
-            disabled={busyInvite || availableClaims <= 0 || !address} // Tambahkan !address untuk mencegah error
+            disabled={busyInvite || availableClaims <= 0 || !address}
             className={`fin-btn fin-btn-claim text-xs ${busyInvite || availableClaims <= 0 || !address ? "opacity-50 cursor-not-allowed" : ""}`}
           >
             {busyInvite ? "Klaim diproses…" : `Klaim${availableClaims > 0 ? ` (${availableClaims})` : ""}`}
@@ -384,7 +372,6 @@ const Market: FC = () => {
             Butuh <b>{needMoreInv}</b> undangan valid lagi untuk klaim berikutnya.
           </div>
         )}
-        {/* Pesan spesifik untuk reward claim (bukan pesan transaksi umum) */}
         {!!inviteMsg && <div className="mt-2 text-xs text-blue-400">{inviteMsg}</div>}
       </section>
 
@@ -428,7 +415,7 @@ const Market: FC = () => {
           );
         })}
       </section>
-      {/* Pesan transaksi umum (untuk klaim Basic atau Buy) */}
+
       {!!message && <p className="text-center text-xs text-neutral-400">{message}</p>}
       <div className="fin-bottom-space" />
     </div>
@@ -436,3 +423,4 @@ const Market: FC = () => {
 };
 
 export default Market;
+

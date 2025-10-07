@@ -4,17 +4,6 @@ import { getSupabaseAdmin } from "../../../lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
-/**
- * Body yang diterima:
- * - inviter_wallet?: string (0x...)
- * - inviter_fid?: number
- * - invitee_fid: number (wajib)
- *
- * Aturan:
- * - Minimal salah satu dari inviter_wallet / inviter_fid harus ada.
- * - invitee_fid wajib.
- * - Endpoint ini TIDAK membuat baris referrals baru; hanya mem-validasi baris pending yang sudah ada.
- */
 export async function POST(req: NextRequest) {
   try {
     const sb = getSupabaseAdmin();
@@ -39,7 +28,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "either inviter_wallet or inviter_fid is required" }, { status: 400 });
     }
 
-    // 1) Resolve inviter user (by wallet OR fid)
+    // resolve inviter
     let inviterUser: { id: string; wallet: string | null } | null = null;
     if (rawInviterWallet) {
       const { data, error } = await sb
@@ -67,7 +56,7 @@ export async function POST(req: NextRequest) {
     }
     const inviterWallet = inviterUser.wallet.toLowerCase();
 
-    // 2) Resolve invitee user (by FID)
+    // resolve invitee
     const { data: inviteeUser, error: inviteeErr } = await sb
       .from("users")
       .select("id, wallet")
@@ -86,7 +75,7 @@ export async function POST(req: NextRequest) {
       ? String((inviteeUser as any).wallet).toLowerCase()
       : null;
 
-    // 3) Update referrals: pending -> valid
+    // pending -> valid
     const { data: updated, error: updErr } = await sb
       .from("referrals")
       .update({
@@ -104,7 +93,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: updErr.message }, { status: 500 });
     }
 
-    // Jika sudah valid sebelumnya, updated akan kosong – anggap idempotent
     const changed = Array.isArray(updated) ? updated.length : 0;
 
     return NextResponse.json({

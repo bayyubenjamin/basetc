@@ -51,7 +51,6 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({}));
     const mode: string | undefined = body?.mode;
 
-    // helper: ambil wallet by fid
     if (mode === "get_wallet_by_fid") {
       const fid = Number(body?.fid);
       if (!fid || Number.isNaN(fid)) {
@@ -93,17 +92,14 @@ export async function POST(req: NextRequest) {
       (userData.wallet ? String(userData.wallet).toLowerCase() : null) ??
       null;
 
-    // siapkan response (supaya bisa hapus cookie via header)
+    // siapkan response
     const res = NextResponse.json({ ok: true, user: upsertedUser });
 
     /* =========================
-       REFERRAL (prioritaskan body, abaikan cookie kosong)
-       - inviter TEXT (wallet)
-       - invitee_fid TEXT
+       REFERRAL pending (prioritas body, lalu cookie)
        ========================= */
     const cookieStore = cookies();
 
-    // Konversi fid_ref dari body ke string dan pastikan hanya berisi digit.
     const fid_ref_body_raw = body?.fid_ref;
     let fid_ref_body: string | undefined = undefined;
     if (fid_ref_body_raw !== undefined) {
@@ -111,14 +107,12 @@ export async function POST(req: NextRequest) {
       if (/^\d+$/.test(str)) fid_ref_body = str;
     }
 
-    // Ambil fid_ref dari cookie. Abaikan jika kosong atau hanya whitespace.
     const rawCookie = cookieStore.get("fid_ref")?.value;
     const fid_ref_cookie = rawCookie && rawCookie.trim().length > 0 ? rawCookie : undefined;
 
-    // Gunakan body terlebih dahulu; jika tidak ada, gunakan cookie.
     const fidRef = fid_ref_body ?? fid_ref_cookie;
 
-    // variabel ini akan dipakai juga untuk optional "validate_referral_now"
+    // disiapkan untuk otomatis validate
     let inviterWalletForValidate: string | null = null;
 
     if (fidRef) {
@@ -142,8 +136,8 @@ export async function POST(req: NextRequest) {
 
         if (inviterWallet) {
           const payload: Record<string, any> = {
-            inviter: inviterWallet,              // TEXT (PK part #1)
-            invitee_fid: String(inviteeFidNum),  // TEXT (PK part #2)
+            inviter: inviterWallet,              // TEXT (PK #1)
+            invitee_fid: String(inviteeFidNum),  // TEXT (PK #2)
             status: "pending",
             invitee_wallet: inviteeWallet ?? null,
             inviter_id: inviterId ?? null,
@@ -155,22 +149,17 @@ export async function POST(req: NextRequest) {
             .upsert(payload, { onConflict: "inviter,invitee_fid" });
           if (refErr) console.error("Error upserting referral:", refErr.message);
         } else {
-          // inviter belum punya wallet -> tidak bisa insert karena PK butuh inviter (TEXT)
           console.warn("[referral] inviter wallet not found yet for fid", inviterFid);
         }
       }
     }
 
     /* ============================================
-       OPTIONAL TRIGGER: validate referral now
-       Gunakan ini SETELAH "free new user claim" benar2 sukses.
-       Cara pakai dari client/miniapp:
-       fetch('/api/user', { method:'POST', body: { fid, validate_referral_now:true } })
-       (pastikan fid_ref sudah terdeteksi sebelumnya)
+       TRIGGER OPSIONAL: validate referral now
+       (dipakai oleh Opsi A setelah free-claim sukses di client)
        ============================================ */
     if (body?.validate_referral_now === true && inviterWalletForValidate) {
       try {
-        // bangun absolute base url agar aman di serverless/edge
         const proto = req.headers.get("x-forwarded-proto") ?? "https";
         const host =
           req.headers.get("x-forwarded-host") ??
@@ -188,7 +177,6 @@ export async function POST(req: NextRequest) {
             inviter_wallet: inviterWalletForValidate,
             invitee_fid: inviteeFidNum,
           }),
-          // jangan cache
           cache: "no-store",
         });
       } catch (err) {
@@ -196,7 +184,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Hapus cookie via response (atur tanggal kedaluwarsa ke masa lalu)
+    // hapus cookie fid_ref
     res.cookies.set("fid_ref", "", { path: "/", expires: new Date(0) });
 
     return res;
