@@ -12,10 +12,11 @@ export function middleware(req: NextRequest) {
   const fidref = url.searchParams.get("fidref");
   let res = NextResponse.next();
   if (fidref && /^\d+$/.test(fidref)) {
+    // SameSite: "none" memastikan cookie dikirim dalam permintaan lintas domain (e.g. iframe Farcaster)
     res.cookies.set("fid_ref", fidref, {
       path: "/",
       httpOnly: true,
-      sameSite: "lax",   // <-- lowercase (fix)
+      sameSite: "none",
       secure: true,
       maxAge: 60 * 60 * 24,
     });
@@ -39,10 +40,11 @@ export function middleware(req: NextRequest) {
     const redirectRes = NextResponse.redirect(to, 307);
 
     if (fidref && /^\d+$/.test(fidref)) {
+      // Gunakan SameSite: "none" juga pada redirect agar cookie ikut pada permintaan berikutnya
       redirectRes.cookies.set("fid_ref", fidref, {
         path: "/",
         httpOnly: true,
-        sameSite: "lax",  // <-- lowercase (fix)
+        sameSite: "none",
         secure: true,
         maxAge: 60 * 60 * 24,
       });

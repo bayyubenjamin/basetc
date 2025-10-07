@@ -97,19 +97,26 @@ export async function POST(req: NextRequest) {
     const res = NextResponse.json({ ok: true, user: upsertedUser });
 
     /* =========================
-       REFERRAL (cookie fallback ke body)
+       REFERRAL (prioritaskan body, abaikan cookie kosong)
        - inviter TEXT (wallet)
        - invitee_fid TEXT
        ========================= */
     const cookieStore = cookies();
-    const fid_ref_cookie = cookieStore.get("fid_ref")?.value;
 
-    const fid_ref_body =
-      typeof body?.fid_ref === "string" && /^\d+$/.test(body.fid_ref)
-        ? body.fid_ref
-        : undefined;
+    // Konversi fid_ref dari body ke string dan pastikan hanya berisi digit.
+    const fid_ref_body_raw = body?.fid_ref;
+    let fid_ref_body: string | undefined = undefined;
+    if (fid_ref_body_raw !== undefined) {
+      const str = String(fid_ref_body_raw).trim();
+      if (/^\d+$/.test(str)) fid_ref_body = str;
+    }
 
-    const fidRef = fid_ref_cookie ?? fid_ref_body;
+    // Ambil fid_ref dari cookie. Abaikan jika kosong atau hanya whitespace.
+    const rawCookie = cookieStore.get("fid_ref")?.value;
+    const fid_ref_cookie = rawCookie && rawCookie.trim().length > 0 ? rawCookie : undefined;
+
+    // Gunakan body terlebih dahulu; jika tidak ada, gunakan cookie.
+    const fidRef = fid_ref_body ?? fid_ref_cookie;
 
     if (fidRef) {
       const inviterFid = Number(fidRef);
@@ -149,8 +156,8 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // HAPUS cookie via response (no-op jika tidak ada)
-    res.cookies.set("fid_ref", "", { path: "/", maxAge: 0 });
+    // Hapus cookie via response (atur tanggal kedaluwarsa ke masa lalu)
+    res.cookies.set("fid_ref", "", { path: "/", expires: new Date(0) });
 
     return res;
   } catch (e: any) {
