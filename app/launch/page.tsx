@@ -1,76 +1,19 @@
 // app/launch/page.tsx
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode, Suspense } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAccount } from "wagmi";
-import { Providers } from "../Providers";
+import { Providers } from "../Providers"; // <-- Provider Wagmi utama
 import { FarcasterProvider, useFarcaster } from "../context/FarcasterProvider";
 import Navigation, { type TabName } from "../components/Navigation";
 import Monitoring from "../components/Monitoring";
 import Rakit from "../components/Rakit";
 import Market from "../components/Market";
 import Profil from "../components/Profil";
-import Event from "../components/Event";
 import FidInput from "../components/FidInput";
-import { isAddress } from "ethers";
-import { useSearchParams } from "next/navigation";
 
 const DEFAULT_TAB: TabName = "monitoring";
 const TAB_KEY = "basetc_active_tab";
-
-// Universal Link Farcaster Anda
-const UNIVERSAL_LINK = "https://farcaster.xyz/miniapps/PkHG0AuDhXrd/basetc-console";
-const FARCASTER_HINTS = ["Warpcast", "Farcaster", "V2Frame"];
-
-/**
- * Komponen Guard Final: Melakukan redirect HANYA jika diperlukan.
- */
-function FarcasterRedirectGuard({ children }: { children: ReactNode }) {
-  const [isReadyToRender, setIsReadyToRender] = useState(false);
-
-  useEffect(() => {
-    // Jalankan logika ini hanya di sisi client
-    if (typeof window === 'undefined') return;
-
-    const ua = navigator.userAgent || "";
-    const isFarcasterClient = FARCASTER_HINTS.some((k) => ua.includes(k));
-    const isWebPreview = new URL(window.location.href).searchParams.get("web") === "1";
-
-    // KASUS 1: Jika sudah di dalam Farcaster atau ini adalah mode preview web,
-    // langsung tampilkan aplikasi.
-    if (isFarcasterClient || isWebPreview) {
-      setIsReadyToRender(true);
-      return;
-    }
-
-    // KASUS 2: Jika di browser luar (Chrome, Safari, dll.)
-    // Buat URL redirect ke Universal Link dengan menyalin semua parameter.
-    const redirectUrl = new URL(UNIVERSAL_LINK);
-    redirectUrl.search = new URL(window.location.href).search;
-    
-    // Lakukan pengalihan.
-    window.location.replace(redirectUrl.toString());
-    
-    // Jangan render aplikasi, biarkan halaman loading tampil selagi redirect.
-
-  }, []);
-
-  // Tampilkan aplikasi jika sudah siap, jika tidak, tampilkan layar loading.
-  if (isReadyToRender) {
-    return children;
-  }
-
-  return (
-    <div className="flex items-center justify-center min-h-screen bg-neutral-950">
-      <p className="text-neutral-400 animate-pulse">Checking environment...</p>
-    </div>
-  );
-}
-
-
-// ===============================================================
-// TIDAK ADA PERUBAHAN PADA KODE APLIKASI ANDA DI BAWAH INI
-// ===============================================================
 
 function MainApp() {
   const [activeTab, setActiveTab] = useState<TabName>(DEFAULT_TAB);
@@ -80,7 +23,7 @@ function MainApp() {
     try {
       const url = new URL(window.location.href);
       const q = (url.searchParams.get("tab") || "").toLowerCase();
-      const validTabs: TabName[] = ["monitoring", "rakit", "market", "profil", "event"];
+      const validTabs: TabName[] = ["monitoring", "rakit", "market", "profil"];
       const fromQuery = validTabs.includes(q as TabName) ? (q as TabName) : null;
       const fromStorage = localStorage.getItem(TAB_KEY) as TabName;
       const initial = fromQuery || (validTabs.includes(fromStorage) ? fromStorage : DEFAULT_TAB);
@@ -102,21 +45,15 @@ function MainApp() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ fid: Number(fidStr), wallet: address }),
-    }).catch((err) => console.error("Wallet mapping upsert failed:", err));
+    }).catch(err => console.error("Wallet mapping upsert failed:", err));
   }, [address]);
 
   const content = useMemo(() => {
     switch (activeTab) {
-      case "rakit":
-        return <Rakit />;
-      case "market":
-        return <Market />;
-      case "profil":
-        return <Profil />;
-      case "event":
-        return <Event />;
-      default:
-        return <Monitoring />;
+      case "rakit": return <Rakit />;
+      case "market": return <Market />;
+      case "profil": return <Profil />;
+      default: return <Monitoring />;
     }
   }, [activeTab]);
 
@@ -147,7 +84,7 @@ function AppInitializer() {
           display_name: user.displayName,
           pfp_url: user.pfpUrl,
         }),
-      }).catch((err) => console.error("Context user auto-upsert failed:", err));
+      }).catch(err => console.error("Context user auto-upsert failed:", err));
     } else {
       try {
         const url = new URL(window.location.href);
@@ -159,51 +96,18 @@ function AppInitializer() {
     if (finalFid) {
       localStorage.setItem("basetc_fid", String(finalFid));
       setResolvedFid(finalFid);
-
-      (async () => {
-        try {
-          const url = new URL(window.location.href);
-          const fidref = url.searchParams.get("fidref");
-          let inviterWallet: string | null = null;
-
-          if (fidref && /^\d+$/.test(fidref)) {
-            const res = await fetch("/api/user", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ mode: "get_wallet_by_fid", fid: Number(fidref) }),
-            });
-            const data = await res.json();
-            if (data?.ok && data.wallet && isAddress(data.wallet)) {
-              inviterWallet = data.wallet;
-            } else {
-              console.warn(`FID Referral found (${fidref}), but wallet resolution failed:`, data?.error);
-            }
-          }
-
-          if (!inviterWallet) {
-            const ref = url.searchParams.get("ref");
-            if (ref && isAddress(ref)) {
-              inviterWallet = ref;
-            } else {
-              const localRef = localStorage.getItem("basetc_ref");
-              if (localRef && isAddress(localRef)) {
-                inviterWallet = localRef;
-              }
-            }
-          }
-
-          if (inviterWallet && inviterWallet.toLowerCase() !== "0x0000000000000000000000000000000000000000") {
-            localStorage.setItem("basetc_ref", inviterWallet);
-            fetch("/api/referral", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ mode: "touch", inviter: inviterWallet, invitee_fid: finalFid }),
-            }).catch((err) => console.error("Referral touch failed:", err));
-          }
-        } catch (error) {
-          console.error("General referral processing error:", error);
+      try {
+        const url = new URL(window.location.href);
+        const ref = url.searchParams.get("ref");
+        if (ref && /^0x[0-9a-fA-F]{40}$/.test(ref)) {
+          localStorage.setItem("basetc_ref", ref);
+          fetch("/api/referral", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ mode: "touch", inviter: ref, invitee_fid: finalFid }),
+          }).catch(err => console.error("Referral touch failed:", err));
         }
-      })();
+      } catch {}
     }
   }, [ready, user]);
 
@@ -218,26 +122,19 @@ function AppInitializer() {
   if (resolvedFid) {
     return <MainApp />;
   }
-
-  return (
-    <FidInput
-      setFid={(fid) => {
-        localStorage.setItem("basetc_fid", String(fid));
-        setResolvedFid(fid);
-      }}
-    />
-  );
+  
+  return <FidInput setFid={(fid) => {
+    localStorage.setItem("basetc_fid", String(fid));
+    setResolvedFid(fid);
+  }} />;
 }
 
+// Komponen utama yang akan di-render untuk /dashboard
 export default function Page() {
   return (
     <Providers>
       <FarcasterProvider>
-        <Suspense fallback={<div className="flex items-center justify-center min-h-screen bg-neutral-950 text-neutral-400">Loading App...</div>}>
-          <FarcasterRedirectGuard>
-            <AppInitializer />
-          </FarcasterRedirectGuard>
-        </Suspense>
+        <AppInitializer />
       </FarcasterProvider>
     </Providers>
   );
