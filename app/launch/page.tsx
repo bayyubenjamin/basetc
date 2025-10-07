@@ -1,7 +1,7 @@
 // app/launch/page.tsx
 "use client";
 
-import { useEffect, useMemo, useState, Suspense } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAccount } from "wagmi";
 import { Providers } from "../Providers";
 import { FarcasterProvider, useFarcaster } from "../context/FarcasterProvider";
@@ -99,7 +99,8 @@ function AppInitializer() {
     if (finalFid) {
       localStorage.setItem("basetc_fid", String(finalFid));
       setResolvedFid(finalFid);
-
+      
+      // Logika untuk mencatat referral, sekarang bisa membaca semua jenis parameter
       (async () => {
         try {
           const url = new URL(window.location.href);
@@ -107,6 +108,7 @@ function AppInitializer() {
           const ref = url.searchParams.get("ref");
           let inviterWallet: string | null = null;
 
+          // Prioritaskan fidref
           if (fidref && /^\d+$/.test(fidref)) {
             const res = await fetch("/api/user", {
               method: "POST",
@@ -118,6 +120,7 @@ function AppInitializer() {
               inviterWallet = data.wallet;
             }
           } 
+          // Fallback ke 'ref' jika fidref tidak ada
           else if (ref && isAddress(ref)) {
             inviterWallet = ref;
           }
