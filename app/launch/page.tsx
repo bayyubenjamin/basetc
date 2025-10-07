@@ -1,22 +1,88 @@
 // app/launch/page.tsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode, Suspense } from "react"; // <-- Tambahkan Suspense & ReactNode
 import { useAccount } from "wagmi";
-import { Providers } from "../Providers"; // <-- Provider Wagmi utama
+import { Providers } from "../Providers";
 import { FarcasterProvider, useFarcaster } from "../context/FarcasterProvider";
 import Navigation, { type TabName } from "../components/Navigation";
 import Monitoring from "../components/Monitoring";
 import Rakit from "../components/Rakit";
 import Market from "../components/Market";
 import Profil from "../components/Profil";
-import Event from "../components/Event"; // <-- Impor komponen baru
+import Event from "../components/Event";
 import FidInput from "../components/FidInput";
-// --- FIX: Import isAddress langsung dari ethers v6 ---
 import { isAddress } from "ethers";
+// <-- Import tambahan
+import { useSearchParams } from "next/navigation"; // <-- Tambahkan useSearchParams
 
 const DEFAULT_TAB: TabName = "monitoring";
 const TAB_KEY = "basetc_active_tab";
+
+// Konstanta yang sama dengan di app/page.tsx
+const UNIVERSAL_LINK = "https://farcaster.xyz/miniapps/PkHG0AuDhXrd/basetc-console";
+const FARCASTER_HINTS = ["Warpcast", "Farcaster", "V2Frame"];
+
+/**
+ * Komponen baru untuk menangani logika pengalihan ke Universal Link
+ * jika diakses dari browser luar dengan parameter referral.
+ */
+function ReferralRedirectGuard({ children }: { children: ReactNode }) {
+  const searchParams = useSearchParams();
+  const [isRedirecting, setIsRedirecting] = useState(false);
+
+  const hasReferral = useMemo(() => {
+    const ref = searchParams.get("ref");
+    const fid = searchParams.get("fid");
+    const fidref = searchParams.get("fidref");
+    return Boolean(ref || fid || fidref);
+  }, [searchParams]);
+
+  useEffect(() => {
+    // Jalankan hanya di browser
+    if (typeof window === 'undefined') return;
+
+    const url = new URL(window.location.href);
+    const isWebPreview = url.searchParams.get("web") === "1"; // Izinkan preview web
+    
+    // Jika ada parameter referral DAN BUKAN mode preview web
+    if (hasReferral && !isWebPreview) {
+      const ua = navigator.userAgent || "";
+      const isFarcaster = FARCASTER_HINTS.some((k) => ua.includes(k));
+
+      if (!isFarcaster) {
+        // BUKAN Farcaster client, BUKAN web preview, dan ADA referral -> Redirect ke Universal Link
+        setIsRedirecting(true);
+        const universalUrl = new URL(UNIVERSAL_LINK);
+        
+        // Salin semua parameter referral
+        const ref = url.searchParams.get("ref");
+        const fid = url.searchParams.get("fid");
+        const fidref = url.searchParams.get("fidref");
+        
+        if (ref) universalUrl.searchParams.set("ref", ref);
+        if (fid) universalUrl.searchParams.set("fid", fid);
+        if (fidref) universalUrl.searchParams.set("fidref", fidref);
+
+        // Paksa pengalihan segera
+        window.location.replace(universalUrl.toString());
+        return;
+      }
+    }
+  }, [hasReferral, isRedirecting, searchParams]);
+
+  if (isRedirecting) {
+    // Tampilkan layar loading saat pengalihan sedang terjadi
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-neutral-950">
+        <p className="text-neutral-400 animate-pulse">Redirecting to Farcaster Mini App...</p>
+      </div>
+    );
+  }
+
+  return children;
+}
+
 
 function MainApp() {
   const [activeTab, setActiveTab] = useState<TabName>(DEFAULT_TAB);
@@ -26,7 +92,7 @@ function MainApp() {
     try {
       const url = new URL(window.location.href);
       const q = (url.searchParams.get("tab") || "").toLowerCase();
-      const validTabs: TabName[] = ["monitoring", "rakit", "market", "profil", "event"]; // <-- Tambahkan 'event'
+      const validTabs: TabName[] = ["monitoring", "rakit", "market", "profil", "event"];
       const fromQuery = validTabs.includes(q as TabName) ? (q as TabName) : null;
       const fromStorage = localStorage.getItem(TAB_KEY) as TabName;
       const initial = fromQuery || (validTabs.includes(fromStorage) ? fromStorage : DEFAULT_TAB);
@@ -60,7 +126,7 @@ function MainApp() {
       case "profil":
         return <Profil />;
       case "event":
-        return <Event />; // <-- Render komponen Event
+        return <Event />;
       default:
         return <Monitoring />;
     }
@@ -191,7 +257,11 @@ export default function Page() {
   return (
     <Providers>
       <FarcasterProvider>
-        <AppInitializer />
+        <Suspense fallback={<div>Loading app...</div>}>
+          <ReferralRedirectGuard>
+            <AppInitializer />
+          </ReferralRedirectGuard>
+        </Suspense>
       </FarcasterProvider>
     </Providers>
   );
