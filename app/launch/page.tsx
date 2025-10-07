@@ -1,7 +1,7 @@
 // app/launch/page.tsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, Suspense } from "react";
 import { useAccount } from "wagmi";
 import { Providers } from "../Providers";
 import { FarcasterProvider, useFarcaster } from "../context/FarcasterProvider";
@@ -10,7 +10,7 @@ import Monitoring from "../components/Monitoring";
 import Rakit from "../components/Rakit";
 import Market from "../components/Market";
 import Profil from "../components/Profil";
-import Event from "../components/Event"; // Pastikan Event diimpor jika ada
+import Event from "../components/Event";
 import FidInput from "../components/FidInput";
 import { isAddress } from "ethers";
 
@@ -55,7 +55,7 @@ function MainApp() {
       case "rakit": return <Rakit />;
       case "market": return <Market />;
       case "profil": return <Profil />;
-      case "event": return <Event />; // Tambahkan case untuk Event
+      case "event": return <Event />;
       default: return <Monitoring />;
     }
   }, [activeTab]);
@@ -100,7 +100,6 @@ function AppInitializer() {
       localStorage.setItem("basetc_fid", String(finalFid));
       setResolvedFid(finalFid);
 
-      // --- LOGIKA REFERRAL YANG DIPERBARUI ---
       (async () => {
         try {
           const url = new URL(window.location.href);
@@ -108,7 +107,6 @@ function AppInitializer() {
           const ref = url.searchParams.get("ref");
           let inviterWallet: string | null = null;
 
-          // Prioritaskan fidref
           if (fidref && /^\d+$/.test(fidref)) {
             const res = await fetch("/api/user", {
               method: "POST",
@@ -120,12 +118,10 @@ function AppInitializer() {
               inviterWallet = data.wallet;
             }
           } 
-          // Fallback ke parameter 'ref' jika fidref tidak ada atau gagal
           else if (ref && isAddress(ref)) {
             inviterWallet = ref;
           }
 
-          // Jika ditemukan wallet pengundang, simpan dan kirim 'touch'
           if (inviterWallet) {
             localStorage.setItem("basetc_ref", inviterWallet);
             fetch("/api/referral", {
@@ -163,7 +159,9 @@ export default function Page() {
   return (
     <Providers>
       <FarcasterProvider>
-        <AppInitializer />
+        <Suspense fallback={<div className="flex items-center justify-center min-h-screen bg-neutral-950 text-neutral-400">Loading App...</div>}>
+          <AppInitializer />
+        </Suspense>
       </FarcasterProvider>
     </Providers>
   );
