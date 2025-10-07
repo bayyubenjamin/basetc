@@ -3,14 +3,16 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useAccount } from "wagmi";
-import { Providers } from "../Providers"; // <-- Provider Wagmi utama
+import { Providers } from "../Providers";
 import { FarcasterProvider, useFarcaster } from "../context/FarcasterProvider";
 import Navigation, { type TabName } from "../components/Navigation";
 import Monitoring from "../components/Monitoring";
 import Rakit from "../components/Rakit";
 import Market from "../components/Market";
 import Profil from "../components/Profil";
+import Event from "../components/Event"; // Pastikan Event diimpor jika ada
 import FidInput from "../components/FidInput";
+import { isAddress } from "ethers";
 
 const DEFAULT_TAB: TabName = "monitoring";
 const TAB_KEY = "basetc_active_tab";
@@ -23,7 +25,7 @@ function MainApp() {
     try {
       const url = new URL(window.location.href);
       const q = (url.searchParams.get("tab") || "").toLowerCase();
-      const validTabs: TabName[] = ["monitoring", "rakit", "market", "profil"];
+      const validTabs: TabName[] = ["monitoring", "rakit", "market", "profil", "event"];
       const fromQuery = validTabs.includes(q as TabName) ? (q as TabName) : null;
       const fromStorage = localStorage.getItem(TAB_KEY) as TabName;
       const initial = fromQuery || (validTabs.includes(fromStorage) ? fromStorage : DEFAULT_TAB);
@@ -53,6 +55,7 @@ function MainApp() {
       case "rakit": return <Rakit />;
       case "market": return <Market />;
       case "profil": return <Profil />;
+      case "event": return <Event />; // Tambahkan case untuk Event
       default: return <Monitoring />;
     }
   }, [activeTab]);
@@ -96,18 +99,45 @@ function AppInitializer() {
     if (finalFid) {
       localStorage.setItem("basetc_fid", String(finalFid));
       setResolvedFid(finalFid);
-      try {
-        const url = new URL(window.location.href);
-        const ref = url.searchParams.get("ref");
-        if (ref && /^0x[0-9a-fA-F]{40}$/.test(ref)) {
-          localStorage.setItem("basetc_ref", ref);
-          fetch("/api/referral", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ mode: "touch", inviter: ref, invitee_fid: finalFid }),
-          }).catch(err => console.error("Referral touch failed:", err));
+
+      // --- LOGIKA REFERRAL YANG DIPERBARUI ---
+      (async () => {
+        try {
+          const url = new URL(window.location.href);
+          const fidref = url.searchParams.get("fidref");
+          const ref = url.searchParams.get("ref");
+          let inviterWallet: string | null = null;
+
+          // Prioritaskan fidref
+          if (fidref && /^\d+$/.test(fidref)) {
+            const res = await fetch("/api/user", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ mode: "get_wallet_by_fid", fid: Number(fidref) }),
+            });
+            const data = await res.json();
+            if (data?.ok && data.wallet && isAddress(data.wallet)) {
+              inviterWallet = data.wallet;
+            }
+          } 
+          // Fallback ke parameter 'ref' jika fidref tidak ada atau gagal
+          else if (ref && isAddress(ref)) {
+            inviterWallet = ref;
+          }
+
+          // Jika ditemukan wallet pengundang, simpan dan kirim 'touch'
+          if (inviterWallet) {
+            localStorage.setItem("basetc_ref", inviterWallet);
+            fetch("/api/referral", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ mode: "touch", inviter: inviterWallet, invitee_fid: finalFid }),
+            }).catch(err => console.error("Referral touch failed:", err));
+          }
+        } catch (error) {
+          console.error("Referral processing error:", error);
         }
-      } catch {}
+      })();
     }
   }, [ready, user]);
 
@@ -129,7 +159,6 @@ function AppInitializer() {
   }} />;
 }
 
-// Komponen utama yang akan di-render untuk /dashboard
 export default function Page() {
   return (
     <Providers>
