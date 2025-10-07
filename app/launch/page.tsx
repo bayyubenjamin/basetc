@@ -1,29 +1,17 @@
 // app/launch/page.tsx
-"use client";
 
-import { useEffect, useMemo, useState, type ReactNode, Suspense } from "react";
-import { useAccount } from "wagmi";
-import { Providers } from "../Providers";
-import { FarcasterProvider, useFarcaster } from "../context/FarcasterProvider";
-import Navigation, { type TabName } from "../components/Navigation";
-import Monitoring from "../components/Monitoring";
-import Rakit from "../components/Rakit";
-import Market from "../components/Market";
-import Profil from "../components/Profil";
-import Event from "../components/Event";
-import FidInput from "../components/FidInput";
-import { isAddress } from "ethers";
-import { useSearchParams } from "next/navigation";
+// ... (impor dan kode lain di atas biarkan sama)
 
 const DEFAULT_TAB: TabName = "monitoring";
 const TAB_KEY = "basetc_active_tab";
 
+// Universal Link ANDA
+const UNIVERSAL_LINK = "https://farcaster.xyz/miniapps/PkHG0AuDhXrd/basetc-console";
 const FARCASTER_HINTS = ["Warpcast", "Farcaster", "V2Frame"];
 
 /**
  * INI BAGIAN YANG DIPERBAIKI (FINAL)
- * Mengalihkan ke root domain (/) sambil mempertahankan parameter,
- * dan menambahkan fallback jika app tidak terinstal.
+ * Menggunakan Universal Link dan menambahkan URL target sebagai parameter.
  */
 function ReferralRedirectGuard({ children }: { children: ReactNode }) {
   const searchParams = useSearchParams();
@@ -48,28 +36,23 @@ function ReferralRedirectGuard({ children }: { children: ReactNode }) {
 
       if (!isFarcasterClient) {
         setIsRedirecting(true);
-        
-        // 1. Buat URL baru yang menunjuk ke domain root (halaman utama).
-        const rootUrl = new URL(currentUrl.origin);
-        
-        // 2. Salin semua parameter (?fidref=... dll) ke URL root.
-        rootUrl.search = currentUrl.search;
-        
-        // 3. Encode URL root yang sudah berisi parameter.
-        const encodedMiniAppUrl = encodeURIComponent(rootUrl.toString());
-        
-        // 4. Buat deep link ke Warpcast.
-        const deepLinkUrl = `warpcast://open-miniapp?url=${encodedMiniAppUrl}`;
-        
-        // 5. Coba alihkan.
-        window.location.replace(deepLinkUrl);
 
-        // 6. Siapkan fallback jika pengguna tidak punya aplikasi Warpcast.
-        setTimeout(() => {
-            // Jika setelah 1 detik pengguna masih di halaman ini, berarti deep link gagal.
-            // Alihkan ke halaman download Warpcast.
-            window.location.replace("https://warpcast.com/~/download");
-        }, 1000);
+        // ---- LOGIKA PENGALIHAN YANG BENAR ----
+        
+        // 1. Siapkan URL Universal Link dari Farcaster.
+        const redirectUrl = new URL(UNIVERSAL_LINK);
+
+        // 2. Siapkan URL mini-app Anda yang asli, pastikan path-nya /launch
+        //    dan semua parameter referral ikut serta.
+        const targetMiniAppUrl = new URL(currentUrl.origin);
+        targetMiniAppUrl.pathname = '/launch';
+        targetMiniAppUrl.search = currentUrl.search; // Ini menyalin SEMUA parameter (?fidref=... dll)
+
+        // 3. Tambahkan URL mini-app Anda sebagai search parameter 'url' ke Universal Link.
+        redirectUrl.searchParams.set('url', targetMiniAppUrl.toString());
+        
+        // 4. Lakukan pengalihan.
+        window.location.replace(redirectUrl.toString());
       }
     }
   }, [hasReferral, isRedirecting, searchParams]);
@@ -86,8 +69,8 @@ function ReferralRedirectGuard({ children }: { children: ReactNode }) {
 }
 
 
-// Sisa dari file ini (MainApp, AppInitializer, dll.) tetap sama seperti sebelumnya
-// Tidak perlu diubah.
+// ... Sisa dari file (MainApp, AppInitializer, export default, dll.)
+// TIDAK PERLU DIUBAH. Biarkan seperti sebelumnya.
 function MainApp() {
   const [activeTab, setActiveTab] = useState<TabName>(DEFAULT_TAB);
   const { address } = useAccount();
