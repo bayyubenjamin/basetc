@@ -21,9 +21,9 @@ const TAB_KEY = "basetc_active_tab";
 const FARCASTER_HINTS = ["Warpcast", "Farcaster", "V2Frame"];
 
 /**
- * INI BAGIAN YANG DIPERBAIKI
- * Komponen ini sekarang akan mengalihkan menggunakan deep link 'warpcast://'
- * untuk memastikan parameter referral tetap utuh.
+ * INI BAGIAN YANG DIPERBAIKI (FINAL)
+ * Mengalihkan ke root domain (/) sambil mempertahankan parameter,
+ * dan menambahkan fallback jika app tidak terinstal.
  */
 function ReferralRedirectGuard({ children }: { children: ReactNode }) {
   const searchParams = useSearchParams();
@@ -49,15 +49,27 @@ function ReferralRedirectGuard({ children }: { children: ReactNode }) {
       if (!isFarcasterClient) {
         setIsRedirecting(true);
         
-        // Pastikan path-nya selalu /launch
-        currentUrl.pathname = '/launch';
-
-        // Buat deep link yang benar
-        const encodedMiniAppUrl = encodeURIComponent(currentUrl.toString());
+        // 1. Buat URL baru yang menunjuk ke domain root (halaman utama).
+        const rootUrl = new URL(currentUrl.origin);
+        
+        // 2. Salin semua parameter (?fidref=... dll) ke URL root.
+        rootUrl.search = currentUrl.search;
+        
+        // 3. Encode URL root yang sudah berisi parameter.
+        const encodedMiniAppUrl = encodeURIComponent(rootUrl.toString());
+        
+        // 4. Buat deep link ke Warpcast.
         const deepLinkUrl = `warpcast://open-miniapp?url=${encodedMiniAppUrl}`;
         
-        // Alihkan ke aplikasi Warpcast
+        // 5. Coba alihkan.
         window.location.replace(deepLinkUrl);
+
+        // 6. Siapkan fallback jika pengguna tidak punya aplikasi Warpcast.
+        setTimeout(() => {
+            // Jika setelah 1 detik pengguna masih di halaman ini, berarti deep link gagal.
+            // Alihkan ke halaman download Warpcast.
+            window.location.replace("https://warpcast.com/~/download");
+        }, 1000);
       }
     }
   }, [hasReferral, isRedirecting, searchParams]);
@@ -74,6 +86,8 @@ function ReferralRedirectGuard({ children }: { children: ReactNode }) {
 }
 
 
+// Sisa dari file ini (MainApp, AppInitializer, dll.) tetap sama seperti sebelumnya
+// Tidak perlu diubah.
 function MainApp() {
   const [activeTab, setActiveTab] = useState<TabName>(DEFAULT_TAB);
   const { address } = useAccount();
@@ -162,25 +176,19 @@ function AppInitializer() {
       localStorage.setItem("basetc_fid", String(finalFid));
       setResolvedFid(finalFid);
 
-      // --- LOGIKA REFERRAL BARU (Mengatasi URL Stripping) ---
       (async () => {
         try {
           const url = new URL(window.location.href);
-
-          // 1. Cek parameter baru: fidref (FID PENGUNDANG)
           const fidref = url.searchParams.get("fidref");
           let inviterWallet: string | null = null;
 
           if (fidref && /^\d+$/.test(fidref)) {
-            // A. Ambil alamat wallet Inviter dari backend menggunakan FID mereka
             const res = await fetch("/api/user", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ mode: "get_wallet_by_fid", fid: Number(fidref) }),
             });
             const data = await res.json();
-
-            // Verifikasi respons dari API resolver baru
             if (data?.ok && data.wallet && isAddress(data.wallet)) {
               inviterWallet = data.wallet;
             } else {
@@ -188,13 +196,11 @@ function AppInitializer() {
             }
           }
 
-          // 2. Jika fidref gagal/tidak ada, coba cek parameter lama ('ref') atau dari local storage
           if (!inviterWallet) {
             const ref = url.searchParams.get("ref");
             if (ref && isAddress(ref)) {
               inviterWallet = ref;
             } else {
-              // Final fallback check to localStorage
               const localRef = localStorage.getItem("basetc_ref");
               if (localRef && isAddress(localRef)) {
                 inviterWallet = localRef;
@@ -202,11 +208,8 @@ function AppInitializer() {
             }
           }
 
-          // 3. Jika Inviter Wallet ditemukan, catat touch
           if (inviterWallet && inviterWallet.toLowerCase() !== "0x0000000000000000000000000000000000000000") {
-            // Simpan alamat Inviter yang valid ke localStorage untuk langkah klaim berikutnya
             localStorage.setItem("basetc_ref", inviterWallet);
-            // Catat touch ke Supabase (status pending)
             fetch("/api/referral", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
