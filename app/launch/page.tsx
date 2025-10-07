@@ -18,13 +18,12 @@ import { useSearchParams } from "next/navigation";
 const DEFAULT_TAB: TabName = "monitoring";
 const TAB_KEY = "basetc_active_tab";
 
-// Konstanta yang sama dengan di app/page.tsx
-const UNIVERSAL_LINK = "https://farcaster.xyz/miniapps/PkHG0AuDhXrd/basetc-console";
 const FARCASTER_HINTS = ["Warpcast", "Farcaster", "V2Frame"];
 
 /**
- * Komponen baru untuk menangani logika pengalihan ke Universal Link
- * jika diakses dari browser luar dengan parameter referral.
+ * INI BAGIAN YANG DIPERBAIKI
+ * Komponen ini sekarang akan mengalihkan menggunakan deep link 'warpcast://'
+ * untuk memastikan parameter referral tetap utuh.
  */
 function ReferralRedirectGuard({ children }: { children: ReactNode }) {
   const searchParams = useSearchParams();
@@ -38,43 +37,35 @@ function ReferralRedirectGuard({ children }: { children: ReactNode }) {
   }, [searchParams]);
 
   useEffect(() => {
-    // Jalankan hanya di browser
-    if (typeof window === 'undefined') return;
+    if (typeof window === 'undefined' || isRedirecting) return;
 
-    const url = new URL(window.location.href);
-    const isWebPreview = url.searchParams.get("web") === "1"; // Izinkan preview web
+    const currentUrl = new URL(window.location.href);
+    const isWebPreview = currentUrl.searchParams.get("web") === "1";
     
-    // Jika ada parameter referral DAN BUKAN mode preview web
     if (hasReferral && !isWebPreview) {
       const ua = navigator.userAgent || "";
-      const isFarcaster = FARCASTER_HINTS.some((k) => ua.includes(k));
+      const isFarcasterClient = FARCASTER_HINTS.some((k) => ua.includes(k));
 
-      if (!isFarcaster) {
-        // BUKAN Farcaster client, BUKAN web preview, dan ADA referral -> Redirect ke Universal Link
+      if (!isFarcasterClient) {
         setIsRedirecting(true);
-        const universalUrl = new URL(UNIVERSAL_LINK);
         
-        // Salin semua parameter referral
-        const ref = url.searchParams.get("ref");
-        const fid = url.searchParams.get("fid");
-        const fidref = url.searchParams.get("fidref");
-        
-        if (ref) universalUrl.searchParams.set("ref", ref);
-        if (fid) universalUrl.searchParams.set("fid", fid);
-        if (fidref) universalUrl.searchParams.set("fidref", fidref);
+        // Pastikan path-nya selalu /launch
+        currentUrl.pathname = '/launch';
 
-        // Paksa pengalihan segera
-        window.location.replace(universalUrl.toString());
-        return;
+        // Buat deep link yang benar
+        const encodedMiniAppUrl = encodeURIComponent(currentUrl.toString());
+        const deepLinkUrl = `warpcast://open-miniapp?url=${encodedMiniAppUrl}`;
+        
+        // Alihkan ke aplikasi Warpcast
+        window.location.replace(deepLinkUrl);
       }
     }
   }, [hasReferral, isRedirecting, searchParams]);
 
   if (isRedirecting) {
-    // Tampilkan layar loading saat pengalihan sedang terjadi
     return (
       <div className="flex items-center justify-center min-h-screen bg-neutral-950">
-        <p className="text-neutral-400 animate-pulse">Redirecting to Farcaster Mini App...</p>
+        <p className="text-neutral-400 animate-pulse">Opening in Farcaster...</p>
       </div>
     );
   }
@@ -251,12 +242,11 @@ function AppInitializer() {
   );
 }
 
-// Komponen utama yang akan di-render untuk /dashboard
 export default function Page() {
   return (
     <Providers>
       <FarcasterProvider>
-        <Suspense fallback={<div>Loading app...</div>}>
+        <Suspense fallback={<div className="flex items-center justify-center min-h-screen bg-neutral-950 text-neutral-400">Loading App...</div>}>
           <ReferralRedirectGuard>
             <AppInitializer />
           </ReferralRedirectGuard>
