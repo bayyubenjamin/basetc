@@ -6,132 +6,81 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
+// Universal Link Farcaster Anda
 const UNIVERSAL_LINK = "https://farcaster.xyz/miniapps/PkHG0AuDhXrd/basetc-console";
 const FARCASTER_HINTS = ["Warpcast", "Farcaster", "V2Frame"];
 
+// Komponen Loading Sederhana
 function LoadingScreen() {
   return (
-    <main
-      style={{
-        minHeight: "100dvh",
-        background: "#0b0b0b",
-        color: "#fff",
-        display: "grid",
-        placeItems: "center",
-        fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, sans-serif",
-        padding: "24px",
-      }}
-    >
-      <p style={{ opacity: 0.8 }}>Redirecting to Farcaster App...</p>
+    <main style={{ minHeight: "100dvh", background: "#0b0b0b", color: "#fff", display: "grid", placeItems: "center" }}>
+      <p style={{ opacity: 0.8 }}>Loading BaseTC Console...</p>
     </main>
   );
 }
 
-function Landing() {
+// Komponen Landing Page (jika dibuka di browser desktop tanpa referral)
+function LandingPage() {
   return (
-    <main
-      style={{
-        minHeight: "100dvh",
-        background: "#0b0b0b",
-        color: "#fff",
-        display: "grid",
-        placeItems: "center",
-        fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, sans-serif",
-        padding: "24px",
-      }}
-    >
-      <div style={{ maxWidth: 640, width: "100%", textAlign: "center" }}>
-        <img
-          src="/img/logo.png"
-          alt="BaseTC"
-          width={96}
-          height={96}
-          style={{ display: "block", margin: "0 auto 16px" }}
-        />
+    <main style={{ minHeight: "100dvh", background: "#0b0b0b", color: "#fff", display: "grid", placeItems: "center", padding: "24px", textAlign: "center" }}>
+      <div>
+        <img src="/img/logo.png" alt="BaseTC" width={96} height={96} style={{ margin: "0 auto 16px" }} />
         <h1 style={{ fontSize: 28, marginBottom: 8 }}>BaseTC Console</h1>
-        <p style={{ opacity: 0.8, marginBottom: 20 }}>
-          Farcaster Mini App untuk mining console di Base. Buka lewat Farcaster untuk pengalaman penuh.
-        </p>
-        <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
-          <a
-            href={`warpcast://open-miniapp?url=${encodeURIComponent("https://basetc.xyz/launch")}`}
-            style={{
-              padding: "12px 16px",
-              borderRadius: 12,
-              background: "#6EE7FF",
-              color: "#000",
-              textDecoration: "none",
-              fontWeight: 600,
-            }}
-          >
-            Open in Farcaster
-          </a>
-          <a
-            href="/launch?web=1"
-            style={{
-              padding: "12px 16px",
-              borderRadius: 12,
-              border: "1px solid #333",
-              color: "#fff",
-              textDecoration: "none",
-              fontWeight: 600,
-            }}
-          >
-            Open Web Preview
-          </a>
-        </div>
-        <p style={{ opacity: 0.6, marginTop: 12, fontSize: 12 }}>
-          Tip: bagikan referral seperti <code>https://basetc.xyz?fidref=...</code> — akan otomatis terbuka di Farcaster.
-        </p>
+        <p style={{ opacity: 0.8, marginBottom: 20 }}>This is a Farcaster Mini App. Please open it within a Farcaster client like Warpcast.</p>
+        <a href={UNIVERSAL_LINK} style={{ padding: "12px 16px", borderRadius: 12, background: "#6EE7FF", color: "#000", textDecoration: "none", fontWeight: 600 }}>
+          Open in Farcaster
+        </a>
       </div>
     </main>
   );
 }
 
-
-function RootContent() {
+function RootHandler() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
   const hasReferral = useMemo(() => {
-    const ref = searchParams.get("ref");
-    const fid = searchParams.get("fid");
-    const fidref = searchParams.get("fidref");
-    return Boolean(ref || fid || fidref);
+    return searchParams.has("ref") || searchParams.has("fid") || searchParams.has("fidref");
   }, [searchParams]);
 
   useEffect(() => {
-    // Jalankan hanya jika ada parameter referral
-    if (!hasReferral) return;
-
     const ua = navigator.userAgent || "";
     const isFarcasterClient = FARCASTER_HINTS.some((k) => ua.includes(k));
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(ua);
 
+    // KASUS 1: Dibuka di dalam Klien Farcaster
+    // Langsung arahkan ke /launch dengan semua parameter yang ada.
     if (isFarcasterClient) {
-      // Jika sudah di dalam Farcaster, langsung navigasi ke /launch
-      router.replace(`/launch?${searchParams.toString()}`);
+      const params = searchParams.toString();
+      router.replace(`/launch${params ? `?${params}` : ""}`);
       return;
     }
 
-    // Jika di browser, alihkan ke Universal Link dengan membawa parameter
-    const redirectUrl = new URL(UNIVERSAL_LINK);
-    redirectUrl.search = searchParams.toString();
-    window.location.replace(redirectUrl.toString());
+    // KASUS 2: Dibuka di browser mobile (Chrome, Safari) dengan link referral
+    // Lakukan redirect ke Universal Link untuk membuka aplikasi native.
+    if (isMobile && hasReferral) {
+      const redirectUrl = new URL(UNIVERSAL_LINK);
+      redirectUrl.search = searchParams.toString();
+      window.location.replace(redirectUrl.toString());
+      return;
+    }
+    
+    // KASUS 3: Dibuka di browser desktop atau mobile tanpa referral
+    // Biarkan di halaman ini (akan menampilkan LandingPage).
+    // Jika Anda ingin semua pengguna mobile dipaksa redirect, hapus '&& hasReferral' di atas.
 
   }, [router, searchParams, hasReferral]);
-
-  if (hasReferral) {
-    return <LoadingScreen />;
-  }
-
-  // Jika tidak ada referral, tampilkan halaman landing biasa
-  return <Landing />;
+  
+  // Selama proses pengecekan atau redirect, tampilkan loading.
+  // Jika tidak ada kondisi yang terpenuhi (misal: desktop), LandingPage akan tampil setelahnya.
+  return <LandingPage />;
 }
 
 export default function Home() {
+  // Gunakan Suspense untuk memastikan useSearchParams bekerja dengan baik
   return (
     <Suspense fallback={<LoadingScreen />}>
-      <RootContent />
+      <RootHandler />
     </Suspense>
   );
 }

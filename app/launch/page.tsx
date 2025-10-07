@@ -1,7 +1,7 @@
 // app/launch/page.tsx
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode, Suspense } from "react";
+import { useEffect, useMemo, useState, Suspense } from "react";
 import { useAccount } from "wagmi";
 import { Providers } from "../Providers";
 import { FarcasterProvider, useFarcaster } from "../context/FarcasterProvider";
@@ -13,59 +13,12 @@ import Profil from "../components/Profil";
 import Event from "../components/Event";
 import FidInput from "../components/FidInput";
 import { isAddress } from "ethers";
-import { useSearchParams } from "next/navigation";
 
 const DEFAULT_TAB: TabName = "monitoring";
 const TAB_KEY = "basetc_active_tab";
 
-// Universal Link Farcaster Anda
-const UNIVERSAL_LINK = "https://farcaster.xyz/miniapps/PkHG0AuDhXrd/basetc-console";
-const FARCASTER_HINTS = ["Warpcast", "Farcaster", "V2Frame"];
-
-/**
- * Komponen Guard dengan Logika yang Disederhanakan dan Diperbaiki
- */
-function ReferralRedirectGuard({ children }: { children: ReactNode }) {
-  const [shouldRender, setShouldRender] = useState(false);
-
-  useEffect(() => {
-    // Cek hanya di sisi client
-    if (typeof window === 'undefined') return;
-
-    const ua = navigator.userAgent || "";
-    const isFarcasterClient = FARCASTER_HINTS.some((k) => ua.includes(k));
-    const isWebPreview = new URL(window.location.href).searchParams.get("web") === "1";
-
-    // KONDISI UTAMA: HANYA redirect jika di luar Farcaster dan bukan mode web preview.
-    if (!isFarcasterClient && !isWebPreview) {
-      const redirectUrl = new URL(UNIVERSAL_LINK);
-      redirectUrl.search = new URL(window.location.href).search; // Salin semua parameter
-      window.location.replace(redirectUrl.toString());
-      // Jangan render apapun, biarkan halaman loading default tampil selagi redirect
-      return;
-    }
-
-    // Jika kita berada di dalam Farcaster atau mode web preview, izinkan aplikasi untuk render.
-    setShouldRender(true);
-
-  }, []);
-
-  if (!shouldRender) {
-    // Tampilkan layar loading HANYA saat pengecekan awal atau saat sedang redirect.
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-neutral-950">
-        <p className="text-neutral-400 animate-pulse">Initializing...</p>
-      </div>
-    );
-  }
-
-  return children;
-}
-
-
 // ===============================================================
-// TIDAK ADA PERUBAHAN DARI SINI KE BAWAH
-// Semua fungsi aplikasi Anda tetap aman.
+// KODE INTI APLIKASI ANDA (TIDAK ADA PERUBAHAN)
 // ===============================================================
 
 function MainApp() {
@@ -229,11 +182,8 @@ export default function Page() {
   return (
     <Providers>
       <FarcasterProvider>
-        <Suspense fallback={<div className="flex items-center justify-center min-h-screen bg-neutral-950 text-neutral-400">Loading App...</div>}>
-          <ReferralRedirectGuard>
-            <AppInitializer />
-          </ReferralRedirectGuard>
-        </Suspense>
+        {/* Hapus Suspense dan Guard dari sini, karena sudah ditangani di /app/page.tsx */}
+        <AppInitializer />
       </FarcasterProvider>
     </Providers>
   );
