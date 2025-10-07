@@ -1,12 +1,11 @@
 // app/page.tsx
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
-// Universal Link ini HANYA untuk fallback, kita akan utamakan deep link
 const UNIVERSAL_LINK = "https://farcaster.xyz/miniapps/PkHG0AuDhXrd/basetc-console";
 const FARCASTER_HINTS = ["Warpcast", "Farcaster", "V2Frame"];
 
@@ -54,7 +53,6 @@ function Landing() {
           Farcaster Mini App untuk mining console di Base. Buka lewat Farcaster untuk pengalaman penuh.
         </p>
         <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
-          {/* Tombol ini sekarang menggunakan deep link warpcast:// */}
           <a
             href={`warpcast://open-miniapp?url=${encodeURIComponent("https://basetc.xyz/launch")}`}
             style={{
@@ -90,6 +88,7 @@ function Landing() {
   );
 }
 
+
 function RootContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -102,42 +101,30 @@ function RootContent() {
   }, [searchParams]);
 
   useEffect(() => {
+    // Jalankan hanya jika ada parameter referral
     if (!hasReferral) return;
 
     const ua = navigator.userAgent || "";
     const isFarcasterClient = FARCASTER_HINTS.some((k) => ua.includes(k));
 
     if (isFarcasterClient) {
-      // Jika sudah di dalam Farcaster, cukup navigasi internal ke /launch dengan parameter
+      // Jika sudah di dalam Farcaster, langsung navigasi ke /launch
       router.replace(`/launch?${searchParams.toString()}`);
       return;
     }
 
-    // --- INI BAGIAN PENTINGNYA ---
-    // Jika di luar Farcaster (misal: Chrome, Safari), alihkan menggunakan deep link warpcast://
-    
-    // 1. Ambil URL lengkap saat ini (yang berisi parameter referral)
-    const currentUrl = new URL(window.location.href);
-    
-    // 2. Pastikan path-nya adalah /launch
-    currentUrl.pathname = '/launch';
-
-    // 3. Encode URL tersebut untuk dimasukkan ke dalam deep link
-    const encodedMiniAppUrl = encodeURIComponent(currentUrl.toString());
-
-    // 4. Buat deep link ke Warpcast
-    const deepLinkUrl = `warpcast://open-miniapp?url=${encodedMiniAppUrl}`;
-
-    // 5. Alihkan pengguna
-    window.location.replace(deepLinkUrl);
+    // Jika di browser, alihkan ke Universal Link dengan membawa parameter
+    const redirectUrl = new URL(UNIVERSAL_LINK);
+    redirectUrl.search = searchParams.toString();
+    window.location.replace(redirectUrl.toString());
 
   }, [router, searchParams, hasReferral]);
 
   if (hasReferral) {
-    // Tampilkan layar loading saat proses redirect sedang dipersiapkan
     return <LoadingScreen />;
   }
 
+  // Jika tidak ada referral, tampilkan halaman landing biasa
   return <Landing />;
 }
 

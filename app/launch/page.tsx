@@ -23,49 +23,38 @@ const UNIVERSAL_LINK = "https://farcaster.xyz/miniapps/PkHG0AuDhXrd/basetc-conso
 const FARCASTER_HINTS = ["Warpcast", "Farcaster", "V2Frame"];
 
 /**
- * Komponen Guard Final:
- * - Mendeteksi jika dibuka di luar Farcaster.
- * - Mengalihkan ke Universal Link sambil MENYALIN semua parameter query.
+ * Komponen Guard dengan Logika yang Disederhanakan dan Diperbaiki
  */
 function ReferralRedirectGuard({ children }: { children: ReactNode }) {
-  const searchParams = useSearchParams();
-  const [isRedirecting, setIsRedirecting] = useState(true); // Mulai dengan state redirecting
+  const [shouldRender, setShouldRender] = useState(false);
 
   useEffect(() => {
     // Cek hanya di sisi client
     if (typeof window === 'undefined') return;
 
-    const currentUrl = new URL(window.location.href);
-    const isWebPreview = currentUrl.searchParams.get("web") === "1";
     const ua = navigator.userAgent || "";
     const isFarcasterClient = FARCASTER_HINTS.some((k) => ua.includes(k));
+    const isWebPreview = new URL(window.location.href).searchParams.get("web") === "1";
 
-    // Kapan kita HARUS redirect?
-    // JIKA: (ada parameter referral ATAU ini halaman /launch) DAN kita TIDAK di dalam Farcaster DAN ini BUKAN mode web preview.
-    if ((currentUrl.searchParams.toString().length > 0 || currentUrl.pathname.includes('/launch')) && !isFarcasterClient && !isWebPreview) {
-        
-        // Buat URL Universal Link
-        const redirectUrl = new URL(UNIVERSAL_LINK);
-        
-        // Salin SEMUA parameter dari URL saat ini (?fidref=... dll) ke Universal Link.
-        redirectUrl.search = currentUrl.searchParams.toString();
-        
-        // Lakukan pengalihan
-        window.location.replace(redirectUrl.toString());
-        
-        // State isRedirecting sudah true, jadi loading screen akan tampil.
-        return;
+    // KONDISI UTAMA: HANYA redirect jika di luar Farcaster dan bukan mode web preview.
+    if (!isFarcasterClient && !isWebPreview) {
+      const redirectUrl = new URL(UNIVERSAL_LINK);
+      redirectUrl.search = new URL(window.location.href).search; // Salin semua parameter
+      window.location.replace(redirectUrl.toString());
+      // Jangan render apapun, biarkan halaman loading default tampil selagi redirect
+      return;
     }
 
-    // Jika tidak perlu redirect, langsung tampilkan aplikasi.
-    setIsRedirecting(false);
+    // Jika kita berada di dalam Farcaster atau mode web preview, izinkan aplikasi untuk render.
+    setShouldRender(true);
 
-  }, [searchParams]);
+  }, []);
 
-  if (isRedirecting) {
+  if (!shouldRender) {
+    // Tampilkan layar loading HANYA saat pengecekan awal atau saat sedang redirect.
     return (
       <div className="flex items-center justify-center min-h-screen bg-neutral-950">
-        <p className="text-neutral-400 animate-pulse">Opening in Farcaster...</p>
+        <p className="text-neutral-400 animate-pulse">Initializing...</p>
       </div>
     );
   }
