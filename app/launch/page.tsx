@@ -21,11 +21,13 @@ const FID_KEY = "basetc_fid";
 
 // ---- helper: cari fidref dari URL, referrer, lalu sessionStorage
 function getFidRefFallback(): string | undefined {
+  // 1) URL saat ini
   try {
     const url = new URL(window.location.href);
     const f1 = url.searchParams.get("fidref");
     if (f1 && /^\d+$/.test(f1)) return f1;
   } catch {}
+  // 2) document.referrer (iframe Farcaster)
   try {
     if (document.referrer) {
       const ru = new URL(document.referrer);
@@ -33,6 +35,7 @@ function getFidRefFallback(): string | undefined {
       if (f2 && /^\d+$/.test(f2)) return f2;
     }
   } catch {}
+  // 3) sessionStorage (persist per session)
   const f3 = sessionStorage.getItem(FID_REF_KEY);
   if (f3 && /^\d+$/.test(f3)) return f3;
   return undefined;
@@ -42,6 +45,7 @@ function MainApp() {
   const [activeTab, setActiveTab] = useState<TabName>(DEFAULT_TAB);
   const { address } = useAccount();
 
+  // restore tab awal
   useEffect(() => {
     try {
       const url = new URL(window.location.href);
@@ -61,11 +65,12 @@ function MainApp() {
     window.scrollTo({ top: 0, behavior: "instant" });
   }, [activeTab]);
 
-  // Kirim wallet user beserta fid_ref saat wallet terdeteksi
+  // wallet muncul belakangan → ikutkan fid_ref juga
   useEffect(() => {
     const fidStr = localStorage.getItem(FID_KEY);
     if (!address || !fidStr) return;
-    const fid_ref = getFidRefFallback();
+
+    const fid_ref = getFidRefFallback(); // selalu coba resolve terkini
     fetch("/api/user", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -101,13 +106,16 @@ function AppInitializer() {
     if (f) sessionStorage.setItem(FID_REF_KEY, f);
   }, []);
 
-  // tambahan: ambil fidref dari context embed jika diluncurkan dari cast
+  // 🔧 FINAL FIX: ambil fidref dari context embed (cast) dengan casting aman agar lolos TypeScript
   useEffect(() => {
     async function resolveFidRefFromContext() {
       try {
         const { sdk } = await import("@farcaster/miniapp-sdk");
-        const ctx = await sdk.context;
-        const embedUrl = ctx?.location?.embed;
+        // Cast ke any karena tipe MiniAppContext bisa berbeda versi dan belum expose 'location'
+        const ctx: any = await (sdk as any).context;
+        const embedUrl: string | undefined =
+          ctx?.location?.embed ?? ctx?.location?.url ?? ctx?.embed ?? undefined;
+
         if (embedUrl) {
           const u = new URL(embedUrl);
           const fr = u.searchParams.get("fidref") ?? u.searchParams.get("ref");
@@ -116,7 +124,7 @@ function AppInitializer() {
           }
         }
       } catch {
-        // context tidak tersedia di luar Farcaster
+        // context mungkin tidak tersedia di luar Farcaster — abaikan
       }
     }
     resolveFidRefFromContext();
@@ -126,10 +134,12 @@ function AppInitializer() {
     if (!ready) return;
 
     let finalFid: number | null = null;
-    const fid_ref = getFidRefFallback();
+    const fid_ref = getFidRefFallback(); // pakai helper (URL/referrer/session)
 
     if (user?.fid) {
       finalFid = user.fid;
+
+      // auto-upsert profil + sertakan fid_ref (agar referral tercatat walau cookie 3rd-party mati)
       fetch("/api/user", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -142,6 +152,7 @@ function AppInitializer() {
         }),
       }).catch((err) => console.error("Context user auto-upsert failed:", err));
     } else {
+      // fallback cari fid dari query atau localStorage
       try {
         const url = new URL(window.location.href);
         const qfid = url.searchParams.get("fid") || localStorage.getItem(FID_KEY);
@@ -152,6 +163,8 @@ function AppInitializer() {
     if (finalFid) {
       localStorage.setItem(FID_KEY, String(finalFid));
       setResolvedFid(finalFid);
+
+      // back-compat: ?ref=0xwallet → simpan supaya fitur lama tetap hidup
       try {
         const url = new URL(window.location.href);
         const ref = url.searchParams.get("ref");
