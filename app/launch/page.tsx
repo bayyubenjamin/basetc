@@ -40,7 +40,7 @@ function MainApp() {
     window.scrollTo({ top: 0, behavior: "instant" });
   }, [activeTab]);
 
-  // NOTE: kalau wallet muncul belakangan, ikutkan fid_ref fallback juga
+  // Jika wallet muncul belakangan, ikutkan fid_ref fallback juga
   useEffect(() => {
     const fidStr = localStorage.getItem("basetc_fid");
     if (!address || !fidStr) return;
@@ -75,15 +75,25 @@ function AppInitializer() {
   const { user, ready } = useFarcaster();
   const [resolvedFid, setResolvedFid] = useState<number | null>(null);
 
-  // Simpan fidref dari URL (fallback untuk iframe/cookie terblokir)
+  // Simpan fidref dari URL ATAU dari document.referrer (untuk iframe Farcaster)
   useEffect(() => {
     try {
       const url = new URL(window.location.href);
-      const fidref = url.searchParams.get("fidref");
+      let fidref = url.searchParams.get("fidref");
+
+      // fallback: parse dari referrer (mis. https://farcaster.xyz/miniapps/...?...fidref=868767)
+      if (!fidref && document.referrer) {
+        try {
+          const refUrl = new URL(document.referrer);
+          const fromRef = refUrl.searchParams.get("fidref");
+          if (fromRef && /^\d+$/.test(fromRef)) fidref = fromRef;
+        } catch { /* ignore parse error */ }
+      }
+
       if (fidref && /^\d+$/.test(fidref)) {
         sessionStorage.setItem("basetc_fid_ref", fidref);
       }
-    } catch {}
+    } catch { /* no-op */ }
   }, []);
 
   useEffect(() => {
@@ -107,6 +117,7 @@ function AppInitializer() {
         }),
       }).catch(err => console.error("Context user auto-upsert failed:", err));
     } else {
+      // Fallback ke query param 'fid' atau localStorage
       try {
         const url = new URL(window.location.href);
         const qfid = url.searchParams.get("fid") || localStorage.getItem("basetc_fid");
