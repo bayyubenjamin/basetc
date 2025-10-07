@@ -1,4 +1,4 @@
-// app/page.jsx
+// app/page.tsx
 "use client";
 
 import { Suspense, useEffect, useMemo, useState } from "react";
@@ -10,45 +10,26 @@ export const dynamic = "force-dynamic";
 const UNIVERSAL_LINK = "https://farcaster.xyz/miniapps/PkHG0AuDhXrd/basetc-console";
 const FARCASTER_HINTS = ["Warpcast", "Farcaster", "V2Frame"];
 
-function RedirectIfReferral() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const [didHandle, setDidHandle] = useState(false);
-
-  const hasReferral = useMemo(() => {
-    const ref = searchParams.get("ref");
-    const fid = searchParams.get("fid");
-    return Boolean(ref || fid);
-  }, [searchParams]);
-
-  useEffect(() => {
-    if (didHandle || !hasReferral) return;
-
-    const ua = navigator.userAgent || "";
-    const isFarcaster = FARCASTER_HINTS.some((k) => ua.includes(k));
-
-    const ref = searchParams.get("ref");
-    const fid = searchParams.get("fid");
-
-    if (isFarcaster) {
-      // Dalam Farcaster → lempar ke /launch + param agar tracking referral tetap jalan
-      router.replace("/launch" + window.location.search);
-      setDidHandle(true);
-      return;
-    }
-
-    // Di browser → lempar ke Universal Link + referral (buka Farcaster)
-    const url = new URL(UNIVERSAL_LINK);
-    if (ref) url.searchParams.set("ref", ref);
-    if (fid) url.searchParams.set("fid", fid);
-    window.location.replace(url.toString());
-    setDidHandle(true);
-  }, [router, searchParams, hasReferral, didHandle]);
-
-  return null;
+function LoadingScreen() {
+  return (
+    <main
+      style={{
+        minHeight: "100dvh",
+        background: "#0b0b0b",
+        color: "#fff",
+        display: "grid",
+        placeItems: "center",
+        fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, sans-serif",
+        padding: "24px",
+      }}
+    >
+      <p style={{ opacity: 0.8 }}>Redirecting to Farcaster Mini App...</p>
+    </main>
+  );
 }
 
 function Landing() {
+  // ... (Original Landing logic remains the same)
   return (
     <main
       style={{
@@ -113,15 +94,53 @@ function Landing() {
   );
 }
 
+
 function RootContent() {
-  return (
-    <>
-      {/* Redirect HANYA jika ada param referral */}
-      <RedirectIfReferral />
-      {/* Tanpa referral → tampil landing, TIDAK direct */}
-      <Landing />
-    </>
-  );
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  const hasReferral = useMemo(() => {
+    const ref = searchParams.get("ref");
+    const fid = searchParams.get("fid");
+    // Also check for 'fidref' if used in share link
+    const fidref = searchParams.get("fidref");
+    return Boolean(ref || fid || fidref);
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (!hasReferral) return;
+
+    const ua = navigator.userAgent || "";
+    const isFarcaster = FARCASTER_HINTS.some((k) => ua.includes(k));
+
+    const ref = searchParams.get("ref");
+    const fid = searchParams.get("fid");
+    const fidref = searchParams.get("fidref");
+    
+    const redirectParams = window.location.search;
+
+    if (isFarcaster) {
+      // Dalam Farcaster → lempar ke /launch + param agar tracking referral tetap jalan
+      router.replace("/launch" + redirectParams);
+      return;
+    }
+
+    // Di browser → lempar ke Universal Link + referral (buka Farcaster)
+    const url = new URL(UNIVERSAL_LINK);
+    if (ref) url.searchParams.set("ref", ref);
+    if (fid) url.searchParams.set("fid", fid);
+    if (fidref) url.searchParams.set("fidref", fidref);
+    
+    // window.location.replace forces the browser to navigate immediately.
+    window.location.replace(url.toString());
+  }, [router, searchParams, hasReferral]);
+
+  if (hasReferral) {
+    // Tampilkan layar loading saat redirect sedang diproses (mencegah flicker Landing)
+    return <LoadingScreen />;
+  }
+
+  return <Landing />;
 }
 
 export default function Home() {
