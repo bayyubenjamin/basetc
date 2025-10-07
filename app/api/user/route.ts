@@ -1,26 +1,9 @@
 // app/api/user/route.ts
-//
-// This updated route adds a new `mode` to the POST handler so that
-// clients can retrieve a user's wallet address given their Farcaster
-// ID (FID). When `mode: "get_wallet_by_fid"` is supplied in the
-// request body along with a numeric `fid`, the route will query
-// Supabase and return `{ ok: true, wallet: <string|null> }`. If the
-// mode is not provided, the route behaves as before, upserting the
-// user record based on the provided fields.
-
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "../../lib/supabase/server";
 
-// Ensure this route is always executed on the server so that
-// environment variables are current on each invocation.
 export const dynamic = "force-dynamic";
 
-/**
- * GET handler to fetch a user by wallet or FID.  Clients can call
- * `/api/user?wallet=0x...` or `/api/user?fid=1234` and receive the
- * matching row from the `users` table. If neither parameter is
- * provided, the handler returns a 400 error.
- */
 export async function GET(req: NextRequest) {
   try {
     const sb = getSupabaseAdmin();
@@ -49,22 +32,12 @@ export async function GET(req: NextRequest) {
   }
 }
 
-/**
- * POST handler. By default, this handler upserts a user row using
- * fields supplied in the body. Only `fid` is required for the
- * upsert. Other fields (`wallet`, `username`, `display_name`,
- * `pfp_url`) are optional.  When the body contains
- * `{ mode: "get_wallet_by_fid", fid: <number> }`, the handler
- * performs a lookup on the `users` table and returns the wallet
- * associated with that FID instead of performing an upsert.
- */
 export async function POST(req: NextRequest) {
   try {
     const sb = getSupabaseAdmin();
     const body = await req.json().catch(() => ({}));
     const mode: string | undefined = body?.mode;
 
-    // Mode to fetch a wallet by FID without upserting a user.
     if (mode === "get_wallet_by_fid") {
       const fid = Number(body?.fid);
       if (!fid || Number.isNaN(fid)) {
@@ -77,7 +50,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, wallet: data?.wallet ?? null });
     }
 
-    // Upsert behaviour: create or update a user row. FID is required.
     const { fid, wallet, username, display_name, pfp_url } = body;
     if (!fid || isNaN(Number(fid))) {
       return NextResponse.json({ error: "fid is required and must be a number" }, { status: 400 });

@@ -1,7 +1,7 @@
 // app/launch/page.tsx
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode, Suspense } from "react"; // <-- Tambahkan Suspense & ReactNode
+import { useEffect, useMemo, useState, type ReactNode, Suspense } from "react";
 import { useAccount } from "wagmi";
 import { Providers } from "../Providers";
 import { FarcasterProvider, useFarcaster } from "../context/FarcasterProvider";
@@ -13,8 +13,7 @@ import Profil from "../components/Profil";
 import Event from "../components/Event";
 import FidInput from "../components/FidInput";
 import { isAddress } from "ethers";
-// <-- Import tambahan
-import { useSearchParams } from "next/navigation"; // <-- Tambahkan useSearchParams
+import { useSearchParams } from "next/navigation";
 
 const DEFAULT_TAB: TabName = "monitoring";
 const TAB_KEY = "basetc_active_tab";
