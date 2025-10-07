@@ -8,7 +8,7 @@ export default function Head() {
       action: {
         type: "launch_miniapp",         // atau "launch_frame"
         name: "BaseTC Console",
-        url: "https://basetc.xyz/launch",
+        // Intentionally omit 'url' so Farcaster uses the full current page URL (with query params)
         splashImageUrl: "/s.png",        // PNG/JPG 200x200, URL pendek (≤32 char)
         splashBackgroundColor: "#FFFFFF"
       }
@@ -18,7 +18,7 @@ export default function Head() {
   return (
     <>
       <meta name="fc:miniapp" content={JSON.stringify(miniapp)} />
-      {/* (opsional) kompat lama:
+      {/* (opsional) untuk kompatibilitas dengan frame lama:
       <meta name="fc:frame" content={JSON.stringify(miniapp)} /> */}
       <title>BaseTC</title>
       <meta name="viewport" content="width=device-width, initial-scale=1" />

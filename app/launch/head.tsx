@@ -8,7 +8,7 @@ export default function Head() {
       action: {
         type: "launch_miniapp",
         name: "BaseTC Console",
-        url: "https://basetc.xyz/launch",
+        // Intentionally omit 'url' so Farcaster uses the full page URL (with query params)
         splashImageUrl: "/s.png",
         splashBackgroundColor: "#FFFFFF"
       }
@@ -18,6 +18,7 @@ export default function Head() {
   return (
     <>
       <meta name="fc:miniapp" content={JSON.stringify(miniapp)} />
+      {/* (opsional) <meta name="fc:frame" content={JSON.stringify(miniapp)} /> */}
       <title>BaseTC — Launch</title>
       <meta name="viewport" content="width=device-width, initial-scale=1" />
     </>
