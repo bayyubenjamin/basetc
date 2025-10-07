@@ -1,20 +1,30 @@
 // app/page.tsx
 "use client";
 
-import { Suspense, useEffect } from "react";
+import { Suspense, useEffect, useState, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
+// Universal Link MiniApp Anda
 const UNIVERSAL_LINK = "https://farcaster.xyz/miniapps/PkHG0AuDhXrd/basetc-console";
 const FARCASTER_HINTS = ["Warpcast", "Farcaster", "V2Frame"];
 
 // Komponen Halaman Landing (Welcome Page)
 function LandingPage() {
+  const searchParams = useSearchParams();
+  
+  // Buat tautan "Open" yang dinamis, yang akan membawa serta semua parameter referral
+  const openLink = useMemo(() => {
+    const redirectUrl = new URL(UNIVERSAL_LINK);
+    redirectUrl.search = searchParams.toString();
+    return redirectUrl.toString();
+  }, [searchParams]);
+
   return (
     <main
       style={{
-        minHeight: "100vh",
+        minHeight: "100dvh",
         background: "#0b0b0b",
         color: "#fff",
         display: "grid",
@@ -34,10 +44,10 @@ function LandingPage() {
         />
         <h1 style={{ fontSize: 28, marginBottom: 8 }}>Welcome to BaseTC Console</h1>
         <p style={{ opacity: 0.8, marginBottom: 20 }}>
-          This is a Farcaster Mini App. Open it within a Farcaster client for the full experience.
+          This is a Farcaster Mini App. Click below to open it in your Farcaster client.
         </p>
         <a
-          href={UNIVERSAL_LINK}
+          href={openLink} // Gunakan tautan dinamis di sini
           style={{
             padding: "12px 16px",
             borderRadius: 12,
@@ -54,51 +64,44 @@ function LandingPage() {
   );
 }
 
-// Komponen Pengalih yang Cerdas
-function Handler() {
+// Komponen utama yang akan menentukan apa yang harus ditampilkan
+function RootHandler() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const [isFarcasterClient, setIsFarcasterClient] = useState(false);
+  const [isCheckComplete, setIsCheckComplete] = useState(false);
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-
     const ua = navigator.userAgent || "";
-    const isFarcasterClient = FARCASTER_HINTS.some((k) => ua.includes(k));
-    const queryString = window.location.search;
-    const hasParams = queryString.length > 1;
+    const isFarcaster = FARCASTER_HINTS.some((k) => ua.includes(k));
+    setIsFarcasterClient(isFarcaster);
+    setIsCheckComplete(true);
 
-    // KASUS 1: Dibuka di dalam Farcaster.
-    // Langsung arahkan ke /launch sambil membawa semua parameter.
-    if (isFarcasterClient) {
-      router.replace(`/launch${queryString}`);
-      return;
+    if (isFarcaster) {
+      const queryString = searchParams.toString();
+      router.replace(`/launch${queryString ? `?${queryString}` : ""}`);
     }
-
-    // KASUS 2: Dibuka di browser biasa (bukan Farcaster) DAN memiliki parameter (ref, fidref, dll).
-    // Ini adalah tautan referral yang perlu dialihkan.
-    if (hasParams) {
-      const redirectUrl = new URL(UNIVERSAL_LINK);
-      redirectUrl.search = queryString; // Salin semua parameter
-      window.location.replace(redirectUrl.toString());
-      return;
-    }
-
-    // KASUS 3: Dibuka di browser biasa TANPA parameter.
-    // Tidak perlu melakukan apa-apa, biarkan LandingPage ditampilkan.
-
   }, [router, searchParams]);
 
-  // Tentukan apa yang harus ditampilkan berdasarkan kondisi awal
-  if (typeof window !== 'undefined' && window.location.search.length > 1) {
-    // Jika ada parameter, tampilkan loading selagi redirect
-    return (
-        <main style={{ minHeight: "100vh", display: "grid", placeItems: "center", background: "#0b0b0b", color: "white" }}>
-            <p>Redirecting to Farcaster...</p>
-        </main>
-    );
+  if (!isCheckComplete) {
+      // Selama pengecekan awal, tampilkan loading
+      return (
+          <main style={{ minHeight: "100vh", display: "grid", placeItems: "center", background: "#0b0b0b", color: "white" }}>
+              <p>Loading...</p>
+          </main>
+      );
   }
 
-  // Jika tidak ada parameter, tampilkan halaman landing
+  // Jika sudah di dalam Farcaster, tampilkan loading selagi redirect internal ke /launch
+  if (isFarcasterClient) {
+      return (
+          <main style={{ minHeight: "100vh", display: "grid", placeItems: "center", background: "#0b0b0b", color: "white" }}>
+              <p>Opening Mini App...</p>
+          </main>
+      );
+  }
+
+  // Jika di browser biasa, tampilkan halaman landing
   return <LandingPage />;
 }
 
@@ -109,7 +112,7 @@ export default function Home() {
             <p>Loading...</p>
         </main>
     }>
-      <Handler />
+      <RootHandler />
     </Suspense>
   );
 }
