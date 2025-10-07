@@ -1,11 +1,11 @@
 // app/api/user/route.ts
 import { NextRequest, NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import { getSupabaseAdmin } from "../../lib/supabase/server";
-import { cookies } from 'next/headers'; // Import cookies dari next/headers
 
 export const dynamic = "force-dynamic";
 
-// Fungsi GET tetap sama, tidak ada perubahan
+// ============ GET ============
 export async function GET(req: NextRequest) {
   try {
     const sb = getSupabaseAdmin();
@@ -21,102 +21,124 @@ export async function GET(req: NextRequest) {
     if (wallet) {
       query = query.eq("wallet", wallet.toLowerCase());
     } else if (fid) {
-      query = query.eq("fid", Number(fid));
+      const n = Number(fid);
+      if (!n || Number.isNaN(n)) {
+        return NextResponse.json({ error: "invalid fid" }, { status: 400 });
+      }
+      query = query.eq("fid", n);
     }
 
     const { data, error } = await query.maybeSingle();
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ user: data ?? null });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "server error" }, { status: 500 });
   }
 }
 
-// Fungsi POST dimodifikasi untuk menangani referral
+// ============ POST ============
+// Body:
+// { fid: number, wallet?: string, username?: string, display_name?: string, pfp_url?: string }
+// atau { mode: "get_wallet_by_fid", fid: number }
 export async function POST(req: NextRequest) {
+  const sb = getSupabaseAdmin();
+
   try {
-    const sb = getSupabaseAdmin();
     const body = await req.json().catch(() => ({}));
     const mode: string | undefined = body?.mode;
 
+    // helper: ambil wallet by fid
     if (mode === "get_wallet_by_fid") {
       const fid = Number(body?.fid);
       if (!fid || Number.isNaN(fid)) {
         return NextResponse.json({ error: "fid is required and must be a number" }, { status: 400 });
       }
-      const { data, error } = await sb.from("users").select("wallet").eq("fid", fid).maybeSingle();
-      if (error) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
-      }
+      const { data, error } = await sb
+        .from("users")
+        .select("wallet")
+        .eq("fid", fid)
+        .maybeSingle();
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
       return NextResponse.json({ ok: true, wallet: data?.wallet ?? null });
     }
 
+    // Upsert user (fid wajib)
     const { fid, wallet, username, display_name, pfp_url } = body;
-    if (!fid || isNaN(Number(fid))) {
+    const inviteeFidNum = Number(fid);
+    if (!inviteeFidNum || Number.isNaN(inviteeFidNum)) {
       return NextResponse.json({ error: "fid is required and must be a number" }, { status: 400 });
     }
-    const userData: { [key: string]: any } = { fid: Number(fid) };
+
+    const userData: Record<string, any> = { fid: inviteeFidNum };
     if (wallet !== undefined) userData.wallet = wallet ? String(wallet).toLowerCase() : null;
     if (username !== undefined) userData.username = username;
     if (display_name !== undefined) userData.display_name = display_name;
     if (pfp_url !== undefined) userData.pfp_url = pfp_url;
 
-    // 1. Lakukan upsert ke tabel 'users'
-    const { data: upsertedUser, error: upsertError } = await sb
+    const { data: upsertedUser, error: upErr } = await sb
       .from("users")
       .upsert(userData, { onConflict: "fid" })
       .select()
       .single();
-    if (upsertError) {
-      throw new Error(`Failed to upsert user: ${upsertError.message}`);
-    }
+    if (upErr) throw new Error(`Failed to upsert user: ${upErr.message}`);
 
-    // --- LOGIKA REFERRAL BARU ---
-    const cookieStore = cookies();
-    const fid_ref = cookieStore.get('fid_ref')?.value;
-    const inviteeFid = Number(fid);
+    // ambil id & wallet invitee (hasil upsert)
+    const inviteeId: string | null = upsertedUser?.id ?? null;
+    const inviteeWallet: string | null =
+      (upsertedUser?.wallet ? String(upsertedUser.wallet).toLowerCase() : null) ??
+      (userData.wallet ? String(userData.wallet).toLowerCase() : null) ??
+      null;
 
-    // Cek jika ada fid_ref di cookie dan invitee tidak me-refer dirinya sendiri
-    if (fid_ref && /^\d+$/.test(fid_ref) && Number(fid_ref) !== inviteeFid) {
-        const inviterFid = Number(fid_ref);
+    // siapkan response (supaya bisa hapus cookie via header)
+    const res = NextResponse.json({ ok: true, user: upsertedUser });
 
-        // 2. Dapatkan wallet milik inviter dari tabel 'users'
-        const { data: inviterData, error: inviterError } = await sb
-            .from("users")
-            .select("wallet")
-            .eq("fid", inviterFid)
-            .maybeSingle();
-        
-        if (inviterError) {
-            console.error('Error fetching inviter wallet:', inviterError.message);
-        }
+    // === REFERRAL: (inviter TEXT wallet, invitee_fid TEXT) ===
+    const fidRefRaw = cookies().get("fid_ref")?.value; // FID inviter di cookie
+    if (fidRefRaw && /^\d+$/.test(fidRefRaw)) {
+      const inviterFid = Number(fidRefRaw);
 
-        const inviterWallet = inviterData?.wallet;
+      if (inviterFid !== inviteeFidNum) {
+        // cari inviter by FID → wallet & id
+        const { data: inviterUser, error: inviterErr } = await sb
+          .from("users")
+          .select("id, wallet")
+          .eq("fid", inviterFid)
+          .maybeSingle();
+        if (inviterErr) console.error("Error fetching inviter:", inviterErr.message);
 
-        // 3. Jika wallet inviter ditemukan, catat referral di tabel 'referrals'
+        const inviterWallet: string | null = inviterUser?.wallet
+          ? String(inviterUser.wallet).toLowerCase()
+          : null;
+        const inviterId: string | null = inviterUser?.id ?? null;
+
         if (inviterWallet) {
-            const { error: referralError } = await sb
-                .from('referrals')
-                .upsert({
-                    inviter: inviterWallet,
-                    invitee_fid: inviteeFid,
-                    status: 'pending' // Status awal, akan diubah menjadi 'valid' oleh /api/referral
-                }, { onConflict: 'inviter,invitee_fid' });
-            
-            if (referralError) {
-                console.error('Error inserting referral:', referralError.message);
-            }
-        }
-        
-        // 4. Hapus cookie setelah diproses agar tidak digunakan lagi
-        cookieStore.delete('fid_ref');
-    }
-    // --- AKHIR LOGIKA REFERRAL ---
+          // onConflict sesuai PK (inviter, invitee_fid)
+          const payload: Record<string, any> = {
+            inviter: inviterWallet,                 // TEXT (PK part #1)
+            invitee_fid: String(inviteeFidNum),    // TEXT (PK part #2)
+            status: "pending",
+            invitee_wallet: inviteeWallet,         // nullable
+            inviter_id: inviterId,                 // nullable
+            invitee_id: inviteeId,                 // nullable
+          };
 
-    return NextResponse.json({ ok: true, user: upsertedUser });
+          const { error: refErr } = await sb
+            .from("referrals")
+            .upsert(payload, { onConflict: "inviter,invitee_fid" });
+          if (refErr) console.error("Error upserting referral:", refErr.message);
+        } else {
+          // inviter belum punya wallet -> tidak bisa insert karena PK butuh inviter (TEXT)
+          console.warn("[referral] inviter wallet not found yet for fid", inviterFid);
+        }
+      }
+
+      // HAPUS cookie via response (pasti kirim Set-Cookie delete)
+      res.cookies.set("fid_ref", "", { path: "/", maxAge: 0 });
+    }
+
+    return res;
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "server error" }, { status: 500 });
   }
 }
+
