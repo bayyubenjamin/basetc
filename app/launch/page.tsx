@@ -76,8 +76,10 @@ function AppInitializer() {
     if (!ready) return;
 
     let finalFid: number | null = null;
+    // Prioritaskan FID dari konteks Farcaster
     if (user?.fid) {
       finalFid = user.fid;
+      // Kirim data profil lengkap ke API
       fetch("/api/user", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -89,6 +91,7 @@ function AppInitializer() {
         }),
       }).catch(err => console.error("Context user auto-upsert failed:", err));
     } else {
+      // Fallback ke localStorage atau query param 'fid' jika ada
       try {
         const url = new URL(window.location.href);
         const qfid = url.searchParams.get("fid") || localStorage.getItem("basetc_fid");
@@ -99,41 +102,15 @@ function AppInitializer() {
     if (finalFid) {
       localStorage.setItem("basetc_fid", String(finalFid));
       setResolvedFid(finalFid);
-
-      (async () => {
-        try {
-          const url = new URL(window.location.href);
-          const fidref = url.searchParams.get("fidref");
-          const ref = url.searchParams.get("ref");
-          let inviterWallet: string | null = null;
-
-          if (fidref && /^\d+$/.test(fidref)) {
-            const res = await fetch("/api/user", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ mode: "get_wallet_by_fid", fid: Number(fidref) }),
-            });
-            const data = await res.json();
-            if (data?.ok && data.wallet && isAddress(data.wallet)) {
-              inviterWallet = data.wallet;
-            }
-          } 
-          else if (ref && isAddress(ref)) {
-            inviterWallet = ref;
-          }
-
-          if (inviterWallet) {
-            localStorage.setItem("basetc_ref", inviterWallet);
-            fetch("/api/referral", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ mode: "touch", inviter: inviterWallet, invitee_fid: finalFid }),
-            }).catch(err => console.error("Referral touch failed:", err));
-          }
-        } catch (error) {
-          console.error("Referral processing error:", error);
+      
+      // Simpan `ref` dari wallet address jika ada (untuk backward compatibility)
+      try {
+        const url = new URL(window.location.href);
+        const ref = url.searchParams.get("ref");
+        if (ref && isAddress(ref)) {
+            localStorage.setItem("basetc_ref", ref);
         }
-      })();
+      } catch {}
     }
   }, [ready, user]);
 

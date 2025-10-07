@@ -1,9 +1,11 @@
 // app/api/user/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "../../lib/supabase/server";
+import { cookies } from 'next/headers'; // Import cookies dari next/headers
 
 export const dynamic = "force-dynamic";
 
+// Fungsi GET tetap sama, tidak ada perubahan
 export async function GET(req: NextRequest) {
   try {
     const sb = getSupabaseAdmin();
@@ -32,6 +34,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
+// Fungsi POST dimodifikasi untuk menangani referral
 export async function POST(req: NextRequest) {
   try {
     const sb = getSupabaseAdmin();
@@ -60,15 +63,59 @@ export async function POST(req: NextRequest) {
     if (display_name !== undefined) userData.display_name = display_name;
     if (pfp_url !== undefined) userData.pfp_url = pfp_url;
 
-    const { data, error } = await sb
+    // 1. Lakukan upsert ke tabel 'users'
+    const { data: upsertedUser, error: upsertError } = await sb
       .from("users")
       .upsert(userData, { onConflict: "fid" })
       .select()
       .single();
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+    if (upsertError) {
+      throw new Error(`Failed to upsert user: ${upsertError.message}`);
     }
-    return NextResponse.json({ ok: true, user: data });
+
+    // --- LOGIKA REFERRAL BARU ---
+    const cookieStore = cookies();
+    const fid_ref = cookieStore.get('fid_ref')?.value;
+    const inviteeFid = Number(fid);
+
+    // Cek jika ada fid_ref di cookie dan invitee tidak me-refer dirinya sendiri
+    if (fid_ref && /^\d+$/.test(fid_ref) && Number(fid_ref) !== inviteeFid) {
+        const inviterFid = Number(fid_ref);
+
+        // 2. Dapatkan wallet milik inviter dari tabel 'users'
+        const { data: inviterData, error: inviterError } = await sb
+            .from("users")
+            .select("wallet")
+            .eq("fid", inviterFid)
+            .maybeSingle();
+        
+        if (inviterError) {
+            console.error('Error fetching inviter wallet:', inviterError.message);
+        }
+
+        const inviterWallet = inviterData?.wallet;
+
+        // 3. Jika wallet inviter ditemukan, catat referral di tabel 'referrals'
+        if (inviterWallet) {
+            const { error: referralError } = await sb
+                .from('referrals')
+                .upsert({
+                    inviter: inviterWallet,
+                    invitee_fid: inviteeFid,
+                    status: 'pending' // Status awal, akan diubah menjadi 'valid' oleh /api/referral
+                }, { onConflict: 'inviter,invitee_fid' });
+            
+            if (referralError) {
+                console.error('Error inserting referral:', referralError.message);
+            }
+        }
+        
+        // 4. Hapus cookie setelah diproses agar tidak digunakan lagi
+        cookieStore.delete('fid_ref');
+    }
+    // --- AKHIR LOGIKA REFERRAL ---
+
+    return NextResponse.json({ ok: true, user: upsertedUser });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "server error" }, { status: 500 });
   }
