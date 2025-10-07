@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
 /* =========================
    POST
    Body:
-   { fid: number, wallet?: string, username?: string, display_name?: string, pfp_url?: string, fid_ref?: string }
+   { fid: number, wallet?: string, username?: string, display_name?: string, pfp_url?: string, fid_ref?: string, validate_referral_now?: boolean }
    atau { mode: "get_wallet_by_fid", fid: number }
    ========================= */
 export async function POST(req: NextRequest) {
@@ -118,6 +118,9 @@ export async function POST(req: NextRequest) {
     // Gunakan body terlebih dahulu; jika tidak ada, gunakan cookie.
     const fidRef = fid_ref_body ?? fid_ref_cookie;
 
+    // variabel ini akan dipakai juga untuk optional "validate_referral_now"
+    let inviterWalletForValidate: string | null = null;
+
     if (fidRef) {
       const inviterFid = Number(fidRef);
 
@@ -134,6 +137,8 @@ export async function POST(req: NextRequest) {
           ? String(inviterUser.wallet).toLowerCase()
           : null;
         const inviterId: string | null = inviterUser?.id ?? null;
+
+        inviterWalletForValidate = inviterWallet ?? null;
 
         if (inviterWallet) {
           const payload: Record<string, any> = {
@@ -153,6 +158,41 @@ export async function POST(req: NextRequest) {
           // inviter belum punya wallet -> tidak bisa insert karena PK butuh inviter (TEXT)
           console.warn("[referral] inviter wallet not found yet for fid", inviterFid);
         }
+      }
+    }
+
+    /* ============================================
+       OPTIONAL TRIGGER: validate referral now
+       Gunakan ini SETELAH "free new user claim" benar2 sukses.
+       Cara pakai dari client/miniapp:
+       fetch('/api/user', { method:'POST', body: { fid, validate_referral_now:true } })
+       (pastikan fid_ref sudah terdeteksi sebelumnya)
+       ============================================ */
+    if (body?.validate_referral_now === true && inviterWalletForValidate) {
+      try {
+        // bangun absolute base url agar aman di serverless/edge
+        const proto = req.headers.get("x-forwarded-proto") ?? "https";
+        const host =
+          req.headers.get("x-forwarded-host") ??
+          req.headers.get("host") ??
+          process.env.NEXT_PUBLIC_BASE_HOST ??
+          "";
+        const baseUrlEnv = process.env.NEXT_PUBLIC_BASE_URL ?? "";
+        const baseUrl = host ? `${proto}://${host}` : baseUrlEnv;
+        const endpoint = baseUrl ? `${baseUrl}/api/referral/validate` : "/api/referral/validate";
+
+        await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            inviter_wallet: inviterWalletForValidate,
+            invitee_fid: inviteeFidNum,
+          }),
+          // jangan cache
+          cache: "no-store",
+        });
+      } catch (err) {
+        console.error("Referral validation call failed:", err);
       }
     }
 
