@@ -36,7 +36,7 @@ const Event: FC = () => {
       {/* Sub navigation (tabs) */}
       <div className="fin-card fin-card-trans fin-card-pad" style={{ margin: "16px" }}>
         <div className="flex items-center justify-center gap-2">
-          {(["staking", "spin", "leaderboard"] as EventTab[]).map((tab) => (
+          {(["spin", "staking", "leaderboard"] as EventTab[]).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
