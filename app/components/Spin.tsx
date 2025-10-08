@@ -1,7 +1,7 @@
 // app/components/Spin.tsx
 "use client";
 
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { FC } from "react";
 import {
   useAccount,
@@ -10,7 +10,7 @@ import {
   usePublicClient,
 } from "wagmi";
 import { base } from "viem/chains";
-import { formatEther, decodeAbiParameters, parseEventLogs, type Hex } from "viem";
+import { formatEther, parseEventLogs, type Hex } from "viem";
 import {
   spinVaultAddress,
   spinVaultABI,
@@ -19,21 +19,16 @@ import {
 } from "../lib/web3Config";
 import { useFarcaster } from "../context/FarcasterProvider";
 
-// Komponen baru untuk animasi angka berputar acak
+// Komponen untuk animasi angka berputar acak
 const SpinningNumbers: FC = () => {
   const [displayValue, setDisplayValue] = useState("0.000000");
 
   useEffect(() => {
-    // Fungsi untuk menghasilkan angka acak antara 0.0001 dan 5, lalu memformatnya
     const updateNumber = () => {
-      const randomValue = 0.0001 + Math.random() * (5 - 0.0001);
+      const randomValue = Math.random() * 5;
       setDisplayValue(randomValue.toFixed(6));
     };
-
-    // Ganti angka setiap 50 milidetik untuk efek putaran yang cepat
     const intervalId = setInterval(updateNumber, 50);
-
-    // Hentikan interval saat komponen tidak lagi ditampilkan
     return () => clearInterval(intervalId);
   }, []);
 
@@ -48,11 +43,11 @@ const Spin: FC = () => {
 
   // State UI
   const [status, setStatus] = useState("");
-  const [loading, setLoading] = useState(false); // Untuk menonaktifkan tombol selama proses
-  const [isSpinning, setIsSpinning] = useState(false); // State khusus untuk mengontrol animasi putaran
-  const [finalResult, setFinalResult] = useState<string | null>(null); // State untuk hasil akhir dari on-chain
+  const [loading, setLoading] = useState(false);
+  const [isSpinning, setIsSpinning] = useState(false);
+  const [finalResult, setFinalResult] = useState<string | null>(null);
 
-  // ---------- Reads On-chain (DIPERTAHANKAN) ----------
+  // ---------- Reads On-chain ----------
   const { data: epoch } = useReadContract({ address: spinVaultAddress, abi: spinVaultABI as any, functionName: "epochNow" });
   const { data: claimed, refetch: refetchClaimed } = useReadContract({ address: spinVaultAddress, abi: spinVaultABI as any, functionName: "claimed", args: epoch !== undefined && address ? [epoch as bigint, address as `0x${string}`] : undefined, query: { enabled: Boolean(address && epoch !== undefined) }});
   const { data: tickets, refetch: refetchTickets } = useReadContract({ address: spinVaultAddress, abi: spinVaultABI as any, functionName: "availableTickets", args: address ? [address as `0x${string}`] : undefined, query: { enabled: Boolean(address) }});
@@ -71,7 +66,7 @@ const Spin: FC = () => {
   const canClaim = useMemo(() => !loading && isConnected && address && (claimed === false || ticketNum > 0), [loading, isConnected, address, claimed, ticketNum]);
   const poolBalanceStr = useMemo(() => (vaultBalance !== undefined ? Number(formatEther(vaultBalance as bigint)).toFixed(4) : "—"), [vaultBalance]);
 
-  // ---------- Action (DIPERBARUI) ----------
+  // ---------- Action ----------
   const handleSpin = async () => {
     if (!canClaim || !address || !fcUser?.fid) {
       setStatus("Cannot spin now. Check connection or tickets.");
@@ -79,7 +74,7 @@ const Spin: FC = () => {
     }
 
     setLoading(true);
-    setIsSpinning(true); // <-- 1. Mulai animasi putaran angka
+    setIsSpinning(true);
     setFinalResult(null);
     setStatus("Preparing your spin...");
 
@@ -98,8 +93,7 @@ const Spin: FC = () => {
       const sigData = await sigRes.json();
       if (!sigRes.ok || !sigData?.signature) throw new Error(sigData?.error || "Failed to get signature.");
 
-      setStatus("Waiting for your confirmation..."); // <-- Pesan saat wallet muncul
-      // 2. Jendela transaksi dari wallet akan muncul di sini. Animasi terus berjalan.
+      setStatus("Waiting for your confirmation...");
       const txHash = await writeContractAsync({
         address: spinVaultAddress, abi: spinVaultABI as any, functionName: "claimWithSig",
         args: [address, currentNonce, deadline, sigData.signature], account: address, chain: base,
@@ -108,27 +102,28 @@ const Spin: FC = () => {
       setStatus("Processing transaction on-chain…");
       const receipt = await publicClient!.waitForTransactionReceipt({ hash: txHash });
       
-      // 3. Ambil hasil asli dari event setelah konfirmasi
       let wonStr: string | null = null;
       try {
         const events = (parseEventLogs({ abi: spinVaultABI as any, logs: receipt.logs as any, eventName: "ClaimedSpin" }) || []) as any[];
         const amt: bigint | undefined = events?.[0]?.args?.amount;
-        if (typeof amt === "bigint") wonStr = Number(formatEther(amt)).toFixed(6);
+        if (typeof amt === "bigint") {
+            wonStr = formatEther(amt); // Gunakan formatEther untuk presisi penuh
+        }
       } catch (e) {
         console.error("Error parsing spin event:", e);
-        // Fallback jika parsing gagal
-        wonStr = "a prize";
+        wonStr = "a prize"; // Fallback
       }
-
-      setIsSpinning(false); // <-- 4. Hentikan animasi putaran
-      setFinalResult(wonStr); // <-- 5. Set hasil final untuk ditampilkan
+      
+      // Hentikan animasi dan tampilkan hasil final
+      setIsSpinning(false);
+      setFinalResult(wonStr);
       setStatus(`Spin successful!`);
       
       await Promise.all([refetchClaimed(), refetchNonces(), refetchTickets(), refetchVaultBalance()]);
 
     } catch (e: any) {
       setStatus(`Error: ${e?.shortMessage || e?.message || "Unknown error"}`);
-      setIsSpinning(false); // Hentikan animasi jika ada error
+      setIsSpinning(false);
     } finally {
       setLoading(false);
     }
@@ -154,7 +149,6 @@ const Spin: FC = () => {
         </div>
       )}
 
-      {/* --- Area Tampilan Spin (DIPERBARUI) --- */}
       <div className="py-2 min-h-[120px] flex flex-col justify-center items-center">
         {isSpinning ? (
           <div className="text-4xl font-bold text-yellow-400">
