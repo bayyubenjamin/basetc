@@ -1,7 +1,7 @@
 // app/components/Market.tsx
 "use client";
 
-import { useEffect, useMemo, useState, type FC } from "react";
+import { useEffect, useMemo, useState, type FC, useCallback } from "react";
 import Image from "next/image";
 import {
   useAccount,
@@ -17,10 +17,10 @@ import {
   rigNftABI,
 } from "../lib/web3Config";
 import { formatEther, formatUnits, type Address } from "viem";
-import { getFidRefFallback } from "../lib/utils"; // <-- Impor fungsi helper
+import { getFidRefFallback } from "../lib/utils";
 
 /* =============================
-   Invite math (original rules)
+   Invite math (original rules) - DIPERTAHANKAN
    ============================= */
 function maxClaimsFrom(totalInvites: number): number {
   if (totalInvites <= 0) return 0;
@@ -36,7 +36,7 @@ function invitesNeededForNext(totalInvites: number, claimed: number): number {
 }
 
 /* =============================
-   Minimal ERC20 ABI (approval path)
+   Minimal ERC20 ABI (approval path) - DIPERTAHANKAN
    ============================= */
 const erc20ABI = [
   { type: "function", name: "symbol", stateMutability: "view", inputs: [], outputs: [{ type: "string" }] },
@@ -64,7 +64,7 @@ const erc20ABI = [
 ] as const;
 
 /* =============================
-   UI meta for each tier
+   UI meta for each tier - DIPERTAHANKAN
    ============================= */
 type TierID = "basic" | "pro" | "legend";
 interface NFTTier {
@@ -81,7 +81,7 @@ const NFT_DATA: NFTTier[] = [
 ];
 
 /* =============================
-   Lightweight Popup & Loading Overlay
+   Lightweight Popup & Loading Overlay - DIPERTAHANKAN
    ============================= */
 const CenterPopup: FC<{
   open: boolean;
@@ -133,24 +133,56 @@ const LoadingOverlay: FC<{ show: boolean; label?: string }> = ({ show, label }) 
    ============================= */
 const Market: FC = () => {
   const { address } = useAccount();
-
-  // Status text (also shown in popup on finish)
   const [message, setMessage] = useState<string>("");
-
-  // Global loading flag
   const [loading, setLoading] = useState(false);
-
-  // Popup control (OK shows only on success/fail)
   const [popupOpen, setPopupOpen] = useState(false);
-
   const publicClient = usePublicClient();
+  const { writeContractAsync } = useWriteContract();
 
-  /* ---------- Rig IDs ---------- */
+  // --- START PERUBAHAN ---
+  // State untuk menyimpan data referral dari API
+  const [inviteStats, setInviteStats] = useState({
+    totalInvites: 0,
+    claimedRewards: 0,
+    loading: true,
+  });
+
+  // Fungsi untuk memuat data referral dari API
+  const fetchInviteStats = useCallback(async () => {
+    if (!address) {
+      setInviteStats({ totalInvites: 0, claimedRewards: 0, loading: false });
+      return;
+    }
+    setInviteStats((prev) => ({ ...prev, loading: true }));
+    try {
+      const res = await fetch(`/api/referral?inviter=${address}`);
+      const data = await res.json();
+      if (data.ok) {
+        setInviteStats({
+          totalInvites: data.validInvites ?? 0,
+          claimedRewards: data.claimedRewards ?? 0,
+          loading: false,
+        });
+      } else {
+        throw new Error(data.error || "Failed to fetch invite stats");
+      }
+    } catch (err) {
+      console.error("fetchInviteStats error:", err);
+      setInviteStats({ totalInvites: 0, claimedRewards: 0, loading: false });
+    }
+  }, [address]);
+
+  // Muat data saat komponen pertama kali dirender atau saat alamat akun berubah
+  useEffect(() => {
+    fetchInviteStats();
+  }, [fetchInviteStats]);
+  
+  // --- AKHIR PERUBAHAN ---
+
+  /* ---------- Rig IDs & Kontrak (DIPERTAHANKAN) ---------- */
   const { data: BASIC } = useReadContract({ address: rigNftAddress, abi: rigNftABI as any, functionName: "BASIC" });
   const { data: PRO } = useReadContract({ address: rigNftAddress, abi: rigNftABI as any, functionName: "PRO" });
   const { data: LEGEND } = useReadContract({ address: rigNftAddress, abi: rigNftABI as any, functionName: "LEGEND" });
-
-  /* ---------- Wallet Legend balance (for per-wallet cap check) ---------- */
   const legendBal = useReadContract({
     address: rigNftAddress,
     abi: rigNftABI as any,
@@ -159,39 +191,20 @@ const Market: FC = () => {
     query: { enabled: Boolean(address && LEGEND !== undefined) },
   });
   const ownedLegend = (legendBal.data as bigint | undefined) ?? 0n;
-
-  /* ---------- Payment mode & token ---------- */
-  const { data: modeVal } = useReadContract({ address: rigSaleAddress, abi: rigSaleABI as any, functionName: "currentMode" }); // 0=ETH, 1=ERC20
+  const { data: modeVal } = useReadContract({ address: rigSaleAddress, abi: rigSaleABI as any, functionName: "currentMode" });
   const { data: tokenAddr } = useReadContract({ address: rigSaleAddress, abi: rigSaleABI as any, functionName: "paymentToken" });
   const mode = Number(modeVal ?? 0);
-
-  // Read raw (unknown) then normalize to correct types
-  const { data: tokenDecimalsRaw } = useReadContract({
-    address: tokenAddr as Address,
-    abi: erc20ABI as any,
-    functionName: "decimals",
-    query: { enabled: Boolean(tokenAddr && mode === 1) },
-  });
-  const { data: tokenSymbolRaw } = useReadContract({
-    address: tokenAddr as Address,
-    abi: erc20ABI as any,
-    functionName: "symbol",
-    query: { enabled: Boolean(tokenAddr && mode === 1) },
-  });
+  const { data: tokenDecimalsRaw } = useReadContract({ address: tokenAddr as Address, abi: erc20ABI as any, functionName: "decimals", query: { enabled: Boolean(tokenAddr && mode === 1) } });
+  const { data: tokenSymbolRaw } = useReadContract({ address: tokenAddr as Address, abi: erc20ABI as any, functionName: "symbol", query: { enabled: Boolean(tokenAddr && mode === 1) } });
   const tokenDecimals: number = (tokenDecimalsRaw as number | undefined) ?? 18;
   const tokenSymbol: string = (tokenSymbolRaw as string | undefined) ?? "TOKEN";
-
-  /* ---------- Active Prices ---------- */
   const { data: priceBasic } = useReadContract({ address: rigSaleAddress, abi: rigSaleABI as any, functionName: "priceOf", args: [BASIC], query: { enabled: Boolean(BASIC) } });
   const { data: pricePro } = useReadContract({ address: rigSaleAddress, abi: rigSaleABI as any, functionName: "priceOf", args: [PRO], query: { enabled: Boolean(PRO) } });
   const { data: priceLegend } = useReadContract({ address: rigSaleAddress, abi: rigSaleABI as any, functionName: "priceOf", args: [LEGEND], query: { enabled: Boolean(LEGEND) } });
   const priceOf = (id?: unknown) => (id === BASIC ? priceBasic : id === PRO ? pricePro : id === LEGEND ? priceLegend : undefined);
-
-  /* ---------- Free mint status ---------- */
   const { data: freeOpen } = useReadContract({ address: rigSaleAddress, abi: rigSaleABI as any, functionName: "freeMintOpen" });
   const { data: freeId } = useReadContract({ address: rigSaleAddress, abi: rigSaleABI as any, functionName: "freeMintId" });
-
-  // fid + inviter (legacy ref wallet for older flow)
+  
   const [fid, setFid] = useState<bigint | null>(null);
   const [inviter, setInviter] = useState<Address>("0x0000000000000000000000000000000000000000");
   useEffect(() => {
@@ -208,10 +221,7 @@ const Market: FC = () => {
     args: fid !== null ? [fid] : undefined,
     query: { enabled: Boolean(fid !== null) },
   });
-
   const isBasicFreeForMe = Boolean(freeOpen && BASIC !== undefined && freeId === BASIC && !freeUsed);
-
-  /* ---------- ERC20 allowance (only if needed) ---------- */
   const { data: allowance = 0n } = useReadContract({
     address: tokenAddr as Address,
     abi: erc20ABI as any,
@@ -220,28 +230,13 @@ const Market: FC = () => {
     query: { enabled: Boolean(address && tokenAddr && mode === 1) },
   });
 
-  /* ---------- Writer ---------- */
-  const { writeContractAsync } = useWriteContract();
-
-  /* ============= UX helpers ============= */
-  function beginProcessing(label: string) {
-    setMessage(label);
-    setLoading(true);     // show overlay
-    setPopupOpen(false);  // hide popup during processing
-  }
-  function finishSuccess(label: string) {
-    setMessage(label);
-    setLoading(false);    // hide overlay
-    setPopupOpen(true);   // show OK popup
-  }
-  function finishError(label: string) {
-    setMessage(label);
-    setLoading(false);
-    setPopupOpen(true);
-  }
+  /* ============= UX helpers - DIPERTAHANKAN ============= */
+  function beginProcessing(label: string) { setMessage(label); setLoading(true); setPopupOpen(false); }
+  function finishSuccess(label: string) { setMessage(label); setLoading(false); setPopupOpen(true); }
+  function finishError(label: string) { setMessage(label); setLoading(false); setPopupOpen(true); }
 
   /* =============================
-     Actions — CLAIM FREE BASIC RIG (BY INVITEE)
+     Actions — DIPERTAHANKAN & DIPERBAIKI
      ============================== */
   const handleClaimBasicFree = async () => {
     beginProcessing("1/3: Requesting server signature…");
@@ -271,9 +266,8 @@ const Market: FC = () => {
       setMessage("3/3: Waiting for confirmation…");
       await publicClient?.waitForTransactionReceipt({ hash: txHash });
 
-      // --- PERBAIKAN DI SINI ---
       setMessage("Finalizing: Validating referral…");
-      const fid_ref = getFidRefFallback(); // <-- Ambil fid_ref
+      const fid_ref = getFidRefFallback();
 
       await fetch("/api/user", {
         method: "POST",
@@ -281,66 +275,42 @@ const Market: FC = () => {
         body: JSON.stringify({
           fid: Number(fid),
           validate_referral_now: true,
-          fid_ref: fid_ref, // <-- Tambahkan fid_ref ke body request
+          fid_ref: fid_ref,
         }),
       });
-      // --- AKHIR PERBAIKAN ---
 
       finishSuccess("Claim successful! Referral counted.");
       refetchFreeUsed?.();
+      fetchInviteStats(); // <-- Muat ulang data invite setelah berhasil
     } catch (e: any) {
       finishError(e?.shortMessage || e?.message || "Transaction failed");
     }
   };
 
-  /* ---------- Buy with ETH / ERC20 ---------- */
   const handleBuy = async (id: bigint) => {
     try {
       if (!address) return finishError("Please connect your wallet.");
       const price = priceOf(id) as bigint | undefined;
       if (!price || price === 0n) return finishError("Item is not for sale.");
 
-      // Legend cap check (3 per wallet)
       if (id === (LEGEND as bigint | undefined) && ownedLegend >= 3n) {
         return finishError("Per-wallet limit is 3 Legend rigs.");
       }
 
       if (mode === 0) {
         beginProcessing("Sending transaction (ETH) …");
-        const txHash = await writeContractAsync({
-          address: rigSaleAddress,
-          abi: rigSaleABI as any,
-          functionName: "buyWithETH",
-          args: [id, 1n],
-          value: price,
-          account: address,
-          chain: base,
-        });
+        const txHash = await writeContractAsync({ address: rigSaleAddress, abi: rigSaleABI as any, functionName: "buyWithETH", args: [id, 1n], value: price, account: address, chain: base });
         setMessage("Waiting for confirmation…");
         await publicClient?.waitForTransactionReceipt({ hash: txHash });
       } else if (mode === 1 && tokenAddr) {
         if ((allowance as bigint) < price) {
           beginProcessing("Approving spending limit…");
-          const approveHash = await writeContractAsync({
-            address: tokenAddr as Address,
-            abi: erc20ABI,
-            functionName: "approve",
-            args: [rigSaleAddress, price],
-            account: address,
-            chain: base,
-          });
+          const approveHash = await writeContractAsync({ address: tokenAddr as Address, abi: erc20ABI, functionName: "approve", args: [rigSaleAddress, price], account: address, chain: base });
           setMessage("Waiting for approval confirmation…");
           await publicClient?.waitForTransactionReceipt({ hash: approveHash });
         }
         beginProcessing("Sending transaction (ERC20) …");
-        const buyHash = await writeContractAsync({
-          address: rigSaleAddress,
-          abi: rigSaleABI as any,
-          functionName: "buyWithERC20",
-          args: [id, 1n],
-          account: address,
-          chain: base,
-        });
+        const buyHash = await writeContractAsync({ address: rigSaleAddress, abi: rigSaleABI as any, functionName: "buyWithERC20", args: [id, 1n], account: address, chain: base });
         setMessage("Waiting for confirmation…");
         await publicClient?.waitForTransactionReceipt({ hash: buyHash });
       } else {
@@ -353,7 +323,6 @@ const Market: FC = () => {
     }
   };
 
-  /* ---------- Tier helpers ---------- */
   const tierId = (t: TierID) => (t === "basic" ? (BASIC as bigint) : t === "pro" ? (PRO as bigint) : (LEGEND as bigint));
   const onClickCta = (t: TierID) => {
     const id = tierId(t);
@@ -363,26 +332,9 @@ const Market: FC = () => {
   const ctaText = (t: TierID) => (t === "basic" && isBasicFreeForMe ? "Claim Free Rig" : "Buy");
 
   /* =============================
-     Invite rewards (original flow)
+     Invite rewards - DIPERBARUI
      ============================== */
-  const { data: totalInvitesData } = useReadContract({
-    address: rigSaleAddress,
-    abi: rigSaleABI as any,
-    functionName: "inviteCountOf",
-    args: address ? [address as Address] : undefined,
-    query: { enabled: Boolean(address) },
-  });
-  const totalInvites = totalInvitesData ? Number(totalInvitesData) : 0;
-
-  const [claimedRewards, setClaimedRewards] = useState(0);
-  useEffect(() => {
-    if (!address) return;
-    fetch(`/api/referral?inviter=${address}`)
-      .then((r) => r.json())
-      .then((d) => setClaimedRewards(d?.claimedRewards ?? 0))
-      .catch(() => {});
-  }, [address]);
-
+  const { totalInvites, claimedRewards } = inviteStats;
   const maxClaims = useMemo(() => maxClaimsFrom(totalInvites), [totalInvites]);
   const availableClaims = Math.max(0, maxClaims - claimedRewards);
   const needMoreInv = invitesNeededForNext(totalInvites, claimedRewards);
@@ -390,7 +342,6 @@ const Market: FC = () => {
   const [inviteMsg, setInviteMsg] = useState<string>("");
   const [busyInvite, setBusyInvite] = useState(false);
 
-  // Claim NFT from invite quota (original flow, preserved)
   async function handleClaimInviteReward() {
     try {
       if (!address) throw new Error("Please connect your wallet.");
@@ -401,26 +352,22 @@ const Market: FC = () => {
         return setInviteMsg(`Need ${needMoreInv} more valid invite(s) for the next claim.`);
       }
       setBusyInvite(true);
-
-      // Also show global processing overlay
       beginProcessing("Relayer is processing your reward claim…");
 
       const res = await fetch("/api/referral", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          mode: "claim",
-          inviter: address,
-          receiver: address,
-          invitee_fid: String(fid),
-        }),
+        body: JSON.stringify({ mode: "claim", inviter: address, receiver: address, invitee_fid: String(fid) }),
       });
       const json = await res.json();
       if (!json?.ok) throw new Error(json?.error || "Claim failed. Check server logs.");
 
-      setClaimedRewards(claimedRewards + 1);
       setInviteMsg(`Reward claimed! Relayer tx: ${json.txHash?.slice?.(0, 8) ?? ""}…`);
       finishSuccess("Invite reward claimed successfully.");
+      
+      // --- PERBAIKAN: Muat ulang data setelah berhasil klaim ---
+      await fetchInviteStats();
+
     } catch (e: any) {
       const err = e?.shortMessage || e?.message || "Claim failed.";
       setInviteMsg(err);
@@ -431,17 +378,15 @@ const Market: FC = () => {
   }
 
   /* =============================
-     UI
+     UI - DIPERBARUI
    ============================== */
   return (
     <div className="fin-wrap fin-content-pad-bottom px-4 pt-4 space-y-5">
-      {/* Page title */}
       <header className="space-y-1">
         <h1 className="text-xl font-semibold">Market</h1>
         <p className="text-sm text-neutral-400">Mint rigs and invite to earn</p>
       </header>
 
-      {/* Invite card */}
       <section className="fin-card p-4">
         <div className="flex items-center justify-between gap-3">
           <div>
@@ -450,8 +395,8 @@ const Market: FC = () => {
           </div>
           <button
             onClick={handleClaimInviteReward}
-            disabled={busyInvite || availableClaims <= 0 || !address}
-            className={`fin-btn fin-btn-claim text-xs ${busyInvite || availableClaims <= 0 || !address ? "opacity-50 cursor-not-allowed" : ""}`}
+            disabled={busyInvite || availableClaims <= 0 || !address || inviteStats.loading}
+            className={`fin-btn fin-btn-claim text-xs ${busyInvite || availableClaims <= 0 || !address || inviteStats.loading ? "opacity-50 cursor-not-allowed" : ""}`}
           >
             {busyInvite ? (
               <span className="inline-flex items-center gap-2">
@@ -464,9 +409,15 @@ const Market: FC = () => {
           </button>
         </div>
         <div className="mt-2 text-xs text-neutral-400">
-          Invites: <b>{totalInvites}</b> • Claimed: <b>{claimedRewards}</b> • Max now: <b>{maxClaims}</b>
+          {inviteStats.loading ? (
+            "Loading invites..."
+          ) : (
+            <>
+              Invites: <b>{totalInvites}</b> • Claimed: <b>{claimedRewards}</b> • Max now: <b>{maxClaims}</b>
+            </>
+          )}
         </div>
-        {availableClaims <= 0 && (
+        {availableClaims <= 0 && !inviteStats.loading && (
           <div className="text-xs text-neutral-400">
             Need <b>{needMoreInv}</b> more valid invite(s) for the next claim.
           </div>
@@ -474,7 +425,7 @@ const Market: FC = () => {
         {!!inviteMsg && <div className="mt-2 text-xs text-blue-400">{inviteMsg}</div>}
       </section>
 
-      {/* Listings */}
+      {/* Sisa dari UI tidak perlu diubah */}
       <section className="space-y-4">
         {NFT_DATA.map((tier) => {
           const id = tierId(tier.id);
@@ -523,14 +474,9 @@ const Market: FC = () => {
         })}
       </section>
 
-      {/* Inline message (kept) */}
       {!!message && <p className="text-center text-xs text-neutral-400 whitespace-pre-line">{message}</p>}
       <div className="fin-bottom-space" />
-
-      {/* Global loading overlay mirrors current status */}
       <LoadingOverlay show={loading} label={message || "Processing…"} />
-
-      {/* Popup with OK only on success/fail */}
       <CenterPopup
         open={popupOpen}
         message={message}
