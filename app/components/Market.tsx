@@ -75,8 +75,8 @@ interface NFTTier {
 }
 const NFT_DATA: NFTTier[] = [
   { id: "basic", name: "Basic Rig", image: "/img/vga_basic.png", hashrateHint: "~1.5 H/s", description: "Claim a free starter rig to begin mining." },
-  { id: "pro", name: "Pro Rig", image: "/img/vga_pro.gif", hashrateHint: "~5.0 H/s", description: "Upgrade to significantly increase hashrate." },
-  { id: "legend", name: "Legend Rig", image: "/img/vga_legend.gif", hashrateHint: "~25.0 H/s", description: "Top-tier rig for maximum performance." },
+  { id: "pro", name: "Pro Rig", image: "/img/vga_pro.png", hashrateHint: "~5.0 H/s", description: "Upgrade to significantly increase hashrate." },
+  { id: "legend", name: "Legend Rig", image: "/img/vga_legend.png", hashrateHint: "~25.0 H/s", description: "Top-tier rig for maximum performance." },
 ];
 
 /* =============================

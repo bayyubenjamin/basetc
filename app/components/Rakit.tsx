@@ -33,8 +33,8 @@ const fmt2 = (n: number) =>
 
 const TierImg: Record<"basic"|"pro"|"legend", string> = {
   basic: "/img/vga_basic.png",
-  pro: "/img/vga_pro.gif",
-  legend: "/img/vga_legend.gif",
+  pro: "/img/vga_pro.png",
+  legend: "/img/vga_legend.png",
 };
 
 /* Small slot preview component (keeps fin-* theme) */

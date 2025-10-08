@@ -22,7 +22,7 @@ const ClaimPopup: FC<ClaimPopupProps> = ({ onClose, onClaim }) => {
             <div className="flex justify-center">
                 <Image src="/img/vga_basic.png" alt="Basic Rig" width={96} height={96} />
             </div>
-            <h2 className="text-xl font-bold mt-4">Welcome, Miner!</h2>
+            <h2 className="text-xl font-bold mt-4">BaseTC Console!</h2>
             <p className="text-sm text-neutral-300 mt-2 mb-6">
               Claim your free Basic Rig to start mining on the BaseTC Console.
             </p>
