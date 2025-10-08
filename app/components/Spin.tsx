@@ -9,7 +9,7 @@ import {
   useWriteContract,
   usePublicClient,
 } from "wagmi";
-import { baseSepolia } from "viem/chains";
+import { base } from "viem/chains";
 import {
   formatEther,
   decodeAbiParameters,

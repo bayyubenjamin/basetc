@@ -2,16 +2,16 @@
 import { NextResponse } from "next/server";
 import { createPublicClient, createWalletClient, http } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { baseSepolia } from "viem/chains";
+import { base } from "viem/chains";
 import { gameCoreAddress, gameCoreABI } from "../../lib/web3Config";
 
-export const runtime = "nodejs"; // viem wallet client butuh Node.js
+export const runtime = "nodejs";
 
-const RPC_URL = process.env.RPC_URL || "https://sepolia.base.org";
+const RPC_URL = process.env.RPC_URL || "https://mainnet.base.org"; // Ganti RPC
 const RELAYER_PK = process.env.RELAYER_PRIVATE_KEY as `0x${string}`;
 
 const publicClient = createPublicClient({
-  chain: baseSepolia,
+  chain: base, // Ganti ke `base`
   transport: http(RPC_URL),
 });
 
@@ -20,7 +20,7 @@ function getWalletClient() {
   const account = privateKeyToAccount(RELAYER_PK);
   return createWalletClient({
     account,
-    chain: baseSepolia,
+    chain: base, // Ganti ke `base`
     transport: http(RPC_URL),
   });
 }

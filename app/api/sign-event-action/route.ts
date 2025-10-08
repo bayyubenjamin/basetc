@@ -7,7 +7,7 @@ import { parseEther } from "viem";
 
 export const runtime = "nodejs";
 
-const CHAIN_ID = Number(process.env.NEXT_PUBLIC_CHAIN_ID || 84532);
+const CHAIN_ID = Number(process.env.NEXT_PUBLIC_CHAIN_ID || 8453);
 const SUPABASE_URL =
   process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;

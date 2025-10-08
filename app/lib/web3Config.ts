@@ -1,6 +1,6 @@
 // app/lib/web3Config.ts
 import { http, createConfig } from "wagmi";
-import { baseSepolia } from "wagmi/chains";
+import { base } from "wagmi/chains"; 
 import farcaster from "@farcaster/miniapp-wagmi-connector";
 
 // ABIs
@@ -17,23 +17,25 @@ import leaderboardAuthVaultABI from "./abi/leaderboardAuthVault.json"; // <-- AB
 
 // Alamat kontrak
 export const ADDR = {
-  BASETC:        "0x6F1d3aEB43beE9337dbeA4574dACC22AE0a0B7FB",
-  RIGNFT:        "0x18cb04711f100fC3d108825476c294eaed6EA173",
-  GAMECORE:      "0x87Eac0Fbf5e656457bF52ec29c607BB955a58836",
-  REWARDS_VAULT: "0x94301D1ad0228b60C9D2C320E99d43A5A45150aC",
-  RIGSALE:       "0x2e9820e879513a13F1cdb96eaCbc68482A84Bf86",
+  BASETC:        "0xb06c23DadcB592efC843ad8eD6B294098A5813EE",
+  RIGNFT:        "0xC3526e50924768aA2B4c1A8F16626E4fceb5EFed",
+  GAMECORE:      "0xA87687f4252e32767528bfd65489852bD061b8F8",
+  REWARDS_VAULT: "0x8f75cB6135F106C45f2B7B8841ecA92dD25e47B5",
+  RIGSALE:       "0x6704C82dbE849707fdE78123A000f019054F387D",
   TREASURY:      "0x8eC2Ca3fdea29C1658c7ecF8b8dCE7EC09Fa7E55",
   USDC:          "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
-  REFERRAL:      "0x8f75cB6135F106C45f2B7B8841ecA92dD25e47B5",
-  // Alamat Event
+  REFERRAL:      "0x7aEc439c8cFd1eF09F3C57B19CC4ACF5Ad103Df2",
+
+  // for event
   LEADERBOARD:   "0xb962EB2C83982D78878d02fF4226718338877b91",
-  SPIN_VAULT:    "0x1965b46FB4F114631994C0Be8D604566bc99A23f",
+  SPIN_VAULT:    "0x0732aBbB38E6f1bB307F9DE42d094f65b1a416d1",
   STAKING_VAULT: "0x4bD10FB51609D064DE96BBa8411b4e5452014752",
 } as const;
 
+// Konfigurasi Chain untuk Base Mainnet
 export const CHAIN = {
-  id: 84532,
-  rpcUrl: "https://sepolia.base.org",
+  id: 8453, // Chain ID Base Mainnet
+  rpcUrl: "https://mainnet.base.org", // RPC URL Base Mainnet
 } as const;
 
 export const {
@@ -57,10 +59,10 @@ export {
 };
 
 export const config = createConfig({
-  chains: [baseSepolia],
+  chains: [base], // Ganti ke `base`
   connectors: [farcaster()],
   transports: {
-    [baseSepolia.id]: http(),
+    [base.id]: http(), // Ganti ke `base.id`
   },
 });
 

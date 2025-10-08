@@ -5,7 +5,7 @@ import { NextResponse } from 'next/server';
 import { privateKeyToAccount } from 'viem/accounts';
 import { gameCoreAddress } from '../../lib/web3Config';
 
-const CHAIN_ID = Number(process.env.NEXT_PUBLIC_CHAIN_ID || 84532); // Base Sepolia
+const CHAIN_ID = Number(process.env.NEXT_PUBLIC_CHAIN_ID || 8453);
 const NAME = 'BaseTC';
 const VERSION = '1';
 

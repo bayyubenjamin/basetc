@@ -4,7 +4,7 @@
 import { useState, useMemo } from "react";
 import type { FC } from "react";
 import { useAccount, useReadContract, useWriteContract, usePublicClient } from "wagmi";
-import { baseSepolia } from "viem/chains";
+import { base } from "viem/chains";
 import { formatEther, parseEther, type Address } from "viem";
 import { stakingVaultAddress, stakingVaultABI, baseTcAddress, baseTcABI } from "../lib/web3Config";
 

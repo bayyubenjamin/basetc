@@ -8,16 +8,16 @@
 // additional configuration options.
 
 import { http, createConfig } from "wagmi";
-import { baseSepolia } from "wagmi/chains";
+import { base } from "wagmi/chains"; // Ganti ke `base`
 import farcaster from "@farcaster/miniapp-wagmi-connector";
 
 // Create the wagmi configuration with the Base Sepolia chain and the
 // Farcaster connector. Additional connectors (e.g. MetaMask) can be
 // added here if you plan to support other wallets in the future.
 export const config = createConfig({
-  chains: [baseSepolia],
+  chains: [base], // Ganti ke `base`
   connectors: [farcaster()],
   transports: {
-    [baseSepolia.id]: http(),
+    [base.id]: http(), // Ganti ke `base.id`
   },
 });

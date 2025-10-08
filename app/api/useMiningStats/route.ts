@@ -8,8 +8,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 // --- ENV & client setup ---
-const RPC_URL = process.env.RPC_URL || "https://sepolia.base.org";
-const CHAIN_ID = Number(process.env.CHAIN_ID || 84532);
+const RPC_URL = process.env.RPC_URL || "https://mainnet.base.org"; // Ganti RPC
+const CHAIN_ID = Number(process.env.CHAIN_ID || 8453); // Ganti Chain ID
 const GAMECORE =
   (process.env.NEXT_PUBLIC_CONTRACT_GAMECORE ||
     process.env.CONTRACT_GAMECORE) as `0x${string}`;
