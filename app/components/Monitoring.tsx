@@ -543,7 +543,7 @@ const Monitoring: FC = () => {
         functionName: "startMiningWithSig",
         args: [address, nonce, deadline, signature],
         account: address as `0x${string}`,
-        chain: baseSepolia,
+        chain: base,
         chainId: BASE_CHAIN_ID,
       });
 
@@ -582,7 +582,7 @@ const Monitoring: FC = () => {
         functionName: "claimWithSig",
         args: [address, freshNonce, deadline, signature],
         account: address as `0x${string}`,
-        chain: baseSepolia,
+        chain: base,
         chainId: BASE_CHAIN_ID,
       });
 

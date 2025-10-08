@@ -264,7 +264,7 @@ const Market: FC = () => {
         functionName: "claimFreeByFidSig",
         args: [fid, address, sig.inviter, BigInt(sig.deadline), sig.v, sig.r, sig.s],
         account: address,
-        chain: baseSepolia,
+        chain: base,
       });
 
       setMessage("3/3: Waiting for confirmation…");
@@ -308,7 +308,7 @@ const Market: FC = () => {
           args: [id, 1n],
           value: price,
           account: address,
-          chain: baseSepolia,
+          chain: base,
         });
         setMessage("Waiting for confirmation…");
         await publicClient?.waitForTransactionReceipt({ hash: txHash });
@@ -321,7 +321,7 @@ const Market: FC = () => {
             functionName: "approve",
             args: [rigSaleAddress, price],
             account: address,
-            chain: baseSepolia,
+            chain: base,
           });
           setMessage("Waiting for approval confirmation…");
           await publicClient?.waitForTransactionReceipt({ hash: approveHash });
@@ -333,7 +333,7 @@ const Market: FC = () => {
           functionName: "buyWithERC20",
           args: [id, 1n],
           account: address,
-          chain: baseSepolia,
+          chain: base,
         });
         setMessage("Waiting for confirmation…");
         await publicClient?.waitForTransactionReceipt({ hash: buyHash });

@@ -81,7 +81,7 @@ const Staking: FC = () => {
                 functionName: "approve",
                 args: [stakingVaultAddress, stakeAmount],
                 account: address,
-                chain: baseSepolia,
+                chain: base,
             });
             await publicClient?.waitForTransactionReceipt({ hash: approveHash });
             await refetchAllowance();
@@ -129,7 +129,7 @@ const Staking: FC = () => {
             functionName,
             args,
             account: address,
-            chain: baseSepolia,
+            chain: base,
         });
 
         await publicClient?.waitForTransactionReceipt({ hash: txHash });

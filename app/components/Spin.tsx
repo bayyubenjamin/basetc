@@ -160,7 +160,7 @@ const Spin: FC = () => {
         functionName: "claimWithSig",
         args: [address, currentNonce, deadline, sigData.signature],
         account: address,
-        chain: baseSepolia,
+        chain: base,
       });
 
       setStatus("4/4: Waiting for confirmation…");

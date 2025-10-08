@@ -236,7 +236,7 @@ export default function Rakit() {
       functionName: "approve",
       args: [gameCoreAddress as `0x${string}`, amount],
       account: user,
-      chain: baseSepolia,
+      chain: base,
     });
     setStatus(`Waiting for approval confirmation…`);
     await publicClient!.waitForTransactionReceipt({ hash: tx });

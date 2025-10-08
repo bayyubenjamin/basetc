@@ -16,7 +16,7 @@ import { VAULT_ADDRESS, vaultABI } from "../lib/vault";
 // === pilih chain TX ===
 // - pakai base untuk mainnet
 // - pakai baseSepolia untuk testnet
-const TX_CHAIN = baseSepolia;
+const TX_CHAIN = base;
 
 type LeaderboardEntry = {
   rank: number;
