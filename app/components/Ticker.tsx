@@ -43,7 +43,7 @@ function Content() {
       <Dot />
       <span className="font-medium text-zinc-200">Treasury</span>
       <span className="ml-2 rounded px-2 py-0.5 text-sm font-semibold text-white bg-amber-600/80">
-        4.8% (Satoshi&nbsp;Wallet)
+        4.8% = 1M (Satoshi&nbsp;Wallet)
       </span>
       <Dot />
     </div>
