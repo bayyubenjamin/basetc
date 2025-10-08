@@ -1,7 +1,7 @@
 // app/components/Spin.tsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import type { FC } from "react";
 import {
   useAccount,
@@ -10,19 +10,50 @@ import {
   usePublicClient,
 } from "wagmi";
 import { base } from "viem/chains";
-import {
-  formatEther,
-  decodeAbiParameters,
-  parseEventLogs,
-} from "viem";
-import type { Hex } from "viem";
+import { formatEther, decodeAbiParameters, parseEventLogs, type Hex } from "viem";
 import {
   spinVaultAddress,
   spinVaultABI,
   baseTcAddress,
   baseTcABI,
+  rigNftAddress, // Impor baru
+  rigNftABI,      // Impor baru
 } from "../lib/web3Config";
 import { useFarcaster } from "../context/FarcasterProvider";
+
+// Helper untuk menghasilkan angka acak dalam rentang
+const getRandomInRange = (min: number, max: number) => {
+  return Math.random() * (max - min) + min;
+};
+
+// Komponen untuk animasi angka berputar
+const Ticker: FC<{ finalValue: number }> = ({ finalValue }) => {
+  const [displayValue, setDisplayValue] = useState(0);
+
+  useEffect(() => {
+    let animationFrameId: number;
+    const duration = 1500; // Durasi animasi dalam milidetik
+    const startTime = performance.now();
+
+    const animate = (currentTime: number) => {
+      const elapsedTime = currentTime - startTime;
+      if (elapsedTime < duration) {
+        // Hasilkan angka acak selama animasi
+        setDisplayValue(Math.random() * (finalValue * 1.5));
+        animationFrameId = requestAnimationFrame(animate);
+      } else {
+        // Set ke nilai akhir setelah durasi selesai
+        setDisplayValue(finalValue);
+      }
+    };
+
+    animationFrameId = requestAnimationFrame(animate);
+
+    return () => cancelAnimationFrame(animationFrameId);
+  }, [finalValue]);
+
+  return <>{displayValue.toFixed(6)}</>;
+};
 
 const Spin: FC = () => {
   const { address, isConnected } = useAccount();
@@ -30,53 +61,49 @@ const Spin: FC = () => {
   const publicClient = usePublicClient();
   const { writeContractAsync } = useWriteContract();
 
-  // UI state
+  // State UI
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(false);
-  const [spinResult, setSpinResult] = useState<string | null>(null);
+  const [isSpinning, setIsSpinning] = useState(false); // State baru untuk animasi
+  const [predictedResult, setPredictedResult] = useState<number | null>(null); // State baru untuk prediksi
+  const [finalResult, setFinalResult] = useState<string | null>(null); // Hasil akhir dari on-chain
 
-  // ---------- Reads ----------
-  const { data: epoch } = useReadContract({
-    address: spinVaultAddress,
-    abi: spinVaultABI as any,
-    functionName: "epochNow",
-  });
+  // ---------- Reads On-chain ----------
+  const { data: epoch } = useReadContract({ address: spinVaultAddress, abi: spinVaultABI as any, functionName: "epochNow" });
+  const { data: claimed, refetch: refetchClaimed } = useReadContract({ address: spinVaultAddress, abi: spinVaultABI as any, functionName: "claimed", args: epoch !== undefined && address ? [epoch as bigint, address as `0x${string}`] : undefined, query: { enabled: Boolean(address && epoch !== undefined) }});
+  const { data: tickets, refetch: refetchTickets } = useReadContract({ address: spinVaultAddress, abi: spinVaultABI as any, functionName: "availableTickets", args: address ? [address as `0x${string}`] : undefined, query: { enabled: Boolean(address) }});
+  const { data: nonceValue, refetch: refetchNonces } = useReadContract({ address: spinVaultAddress, abi: spinVaultABI as any, functionName: "nonces", args: address ? [address as `0x${string}`] : undefined, query: { enabled: Boolean(address) }});
+  const { data: vaultBalance, refetch: refetchVaultBalance } = useReadContract({ address: baseTcAddress, abi: baseTcABI as any, functionName: "balanceOf", args: [spinVaultAddress] });
 
-  const { data: claimed, refetch: refetchClaimed } = useReadContract({
-    address: spinVaultAddress,
-    abi: spinVaultABI as any,
-    functionName: "claimed",
-    args:
-      epoch !== undefined && address
-        ? [epoch as bigint, address as `0x${string}`]
-        : undefined,
-    query: { enabled: Boolean(address && epoch !== undefined) },
-  });
+  // Baca saldo NFT untuk prediksi
+  const { data: rigIds } = useReadContract({ address: rigNftAddress, abi: rigNftABI as any, functionName: "BASIC" }); // Asumsi BASIC=1, PRO=2, dst.
+  const { data: basicBal = 0n } = useReadContract({ address: rigNftAddress, abi: rigNftABI as any, functionName: "balanceOf", args: address ? [address, 1n] : undefined, query: { enabled: !!address } });
+  const { data: proBal = 0n } = useReadContract({ address: rigNftAddress, abi: rigNftABI as any, functionName: "balanceOf", args: address ? [address, 2n] : undefined, query: { enabled: !!address } });
+  const { data: legendBal = 0n } = useReadContract({ address: rigNftAddress, abi: rigNftABI as any, functionName: "balanceOf", args: address ? [address, 3n] : undefined, query: { enabled: !!address } });
 
-  const { data: tickets, refetch: refetchTickets } = useReadContract({
-    address: spinVaultAddress,
-    abi: spinVaultABI as any,
-    functionName: "availableTickets",
-    args: address ? [address as `0x${string}`] : undefined,
-    query: { enabled: Boolean(address) },
-  });
+  // Baca rentang hadiah dari contract
+  const { data: basicRange } = useReadContract({ address: spinVaultAddress, abi: spinVaultABI as any, functionName: "basicRange" });
+  const { data: proRange } = useReadContract({ address: spinVaultAddress, abi: spinVaultABI as any, functionName: "proRange" });
+  const { data: legendRange } = useReadContract({ address: spinVaultAddress, abi: spinVaultABI as any, functionName: "legendRange" });
+  
+  // Fungsi untuk memprediksi hadiah di client-side
+  const predictReward = useCallback(() => {
+    let totalPredicted = 0;
+    if (basicBal > 0n && basicRange) {
+        const [min, max] = basicRange as [bigint, bigint];
+        totalPredicted += getRandomInRange(Number(formatEther(min)), Number(formatEther(max))) * Number(basicBal);
+    }
+    if (proBal > 0n && proRange) {
+        const [min, max] = proRange as [bigint, bigint];
+        totalPredicted += getRandomInRange(Number(formatEther(min)), Number(formatEther(max))) * Number(proBal);
+    }
+    if (legendBal > 0n && legendRange) {
+        const [min, max] = legendRange as [bigint, bigint];
+        totalPredicted += getRandomInRange(Number(formatEther(min)), Number(formatEther(max))) * Number(legendBal);
+    }
+    return totalPredicted > 0 ? totalPredicted : 0.000001; // Pastikan tidak 0
+  }, [basicBal, proBal, legendBal, basicRange, proRange, legendRange]);
 
-  const { data: nonceValue, refetch: refetchNonces } = useReadContract({
-    address: spinVaultAddress,
-    abi: spinVaultABI as any,
-    functionName: "nonces",
-    args: address ? [address as `0x${string}`] : undefined,
-    query: { enabled: Boolean(address) },
-  });
-
-  const { data: vaultBalance, refetch: refetchVaultBalance } = useReadContract({
-    address: baseTcAddress,
-    abi: baseTcABI as any,
-    functionName: "balanceOf",
-    args: [spinVaultAddress],
-  });
-
-  // Refreshes
   useEffect(() => {
     const t = setInterval(() => {
       refetchVaultBalance();
@@ -85,134 +112,78 @@ const Spin: FC = () => {
     return () => clearInterval(t);
   }, [refetchVaultBalance, refetchTickets]);
 
-  const ticketNum = useMemo(
-    () => (typeof tickets === "bigint" ? Number(tickets) : 0),
-    [tickets]
-  );
-
-  const canClaim = useMemo(() => {
-    if (!isConnected || !address) return false;
-    if (claimed === false) return true;
-    if (claimed === true && ticketNum > 0) return true;
-    return false;
-  }, [isConnected, address, claimed, ticketNum]);
-
-  const poolBalanceStr = useMemo(() => {
-    try {
-      return vaultBalance !== undefined
-        ? Number(formatEther(vaultBalance as bigint)).toFixed(4)
-        : "—";
-    } catch {
-      return "—";
-    }
-  }, [vaultBalance]);
+  const ticketNum = useMemo(() => (typeof tickets === "bigint" ? Number(tickets) : 0), [tickets]);
+  const canClaim = useMemo(() => !loading && isConnected && address && (claimed === false || ticketNum > 0), [loading, isConnected, address, claimed, ticketNum]);
+  const poolBalanceStr = useMemo(() => (vaultBalance !== undefined ? Number(formatEther(vaultBalance as bigint)).toFixed(4) : "—"), [vaultBalance]);
 
   // ---------- Action ----------
   const handleSpin = async () => {
-    if (!isConnected || !address) {
-      setStatus("Connect your wallet first.");
-      return;
-    }
-    if (!fcUser?.fid) {
-      setStatus("Farcaster FID is missing.");
-      return;
-    }
-    if (!canClaim) {
-      setStatus("No spins left. Invite friends for Bonus Tickets!");
+    if (!canClaim || !address || !fcUser?.fid) {
+      setStatus("Cannot spin now. Check connection or tickets.");
       return;
     }
 
     setLoading(true);
-    setStatus("1/4: Fetching nonce…");
-    setSpinResult(null);
+    setIsSpinning(true);
+    setFinalResult(null);
+    setStatus("Spinning...");
+
+    // Langkah 1: Prediksi & Animasi
+    const prediction = predictReward();
+    setPredictedResult(prediction);
+
+    // Beri jeda untuk animasi
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    
+    setIsSpinning(false);
+    setStatus("Waiting for your confirmation...");
 
     try {
+      // Langkah 2: Proses On-chain
       const nonceHook = (nonceValue as bigint | undefined) ?? 0n;
       const ref = await refetchNonces();
       const currentNonce = (ref?.data as bigint | undefined) ?? nonceHook;
-      if (currentNonce === undefined || currentNonce === null) {
-        throw new Error("Could not fetch a valid nonce. Try again.");
-      }
+      if (currentNonce === undefined) throw new Error("Could not fetch a valid nonce.");
 
       setStatus("2/4: Requesting signature…");
       const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600);
       const sigRes = await fetch("/api/sign-event-action", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          vault: "spin",
-          action: "claim",
-          user: address,
-          fid: fcUser.fid,
-          nonce: currentNonce.toString(),
-          deadline: deadline.toString(),
-        }),
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ vault: "spin", action: "claim", user: address, fid: fcUser.fid, nonce: currentNonce.toString(), deadline: deadline.toString() }),
       });
       const sigData = await sigRes.json();
-      if (!sigRes.ok || !sigData?.signature) {
-        throw new Error(sigData?.error || "Failed to get signature.");
-      }
+      if (!sigRes.ok || !sigData?.signature) throw new Error(sigData?.error || "Failed to get signature.");
 
       setStatus("3/4: Sending transaction…");
       const txHash = await writeContractAsync({
-        address: spinVaultAddress,
-        abi: spinVaultABI as any,
-        functionName: "claimWithSig",
-        args: [address, currentNonce, deadline, sigData.signature],
-        account: address,
-        chain: base,
+        address: spinVaultAddress, abi: spinVaultABI as any, functionName: "claimWithSig",
+        args: [address, currentNonce, deadline, sigData.signature], account: address, chain: base,
       });
 
       setStatus("4/4: Waiting for confirmation…");
-      const receipt = await publicClient!.waitForTransactionReceipt({
-        hash: txHash,
-      });
+      const receipt = await publicClient!.waitForTransactionReceipt({ hash: txHash });
 
+      // Langkah 3: Ambil hasil asli dari event
       let wonStr: string | null = null;
       try {
-        const events = (parseEventLogs({
-          abi: spinVaultABI as any,
-          logs: receipt.logs as any,
-          eventName: "ClaimedSpin",
-        }) || []) as any[];
+        const events = (parseEventLogs({ abi: spinVaultABI as any, logs: receipt.logs as any, eventName: "ClaimedSpin" }) || []) as any[];
         const amt: bigint | undefined = events?.[0]?.args?.amount;
-        if (typeof amt === "bigint") {
-          wonStr = Number(formatEther(amt)).toFixed(6);
-        }
-      } catch {
-        const log = receipt.logs.find(
-          (l) => l.address.toLowerCase() === spinVaultAddress.toLowerCase()
-        );
-        if (log) {
-          try {
-            const [amountOut] = decodeAbiParameters(
-              [{ type: "uint256" }, { type: "uint8" }] as const,
-              log.data as Hex
-            );
-            wonStr = Number(formatEther(amountOut as bigint)).toFixed(6);
-          } catch {}
-        }
-      }
+        if (typeof amt === "bigint") wonStr = Number(formatEther(amt)).toFixed(6);
+      } catch {}
 
-      setSpinResult(wonStr);
-      setStatus("Spin successful!");
-      await Promise.all([
-        refetchClaimed(),
-        refetchNonces(),
-        refetchTickets(),
-        refetchVaultBalance(),
-      ]);
+      setFinalResult(wonStr);
+      setPredictedResult(null); // Hapus prediksi
+      setStatus(`Spin successful! You won ${wonStr ?? '...'} $BaseTC!`);
+      await Promise.all([refetchClaimed(), refetchNonces(), refetchTickets(), refetchVaultBalance()]);
+
     } catch (e: any) {
       setStatus(`Error: ${e?.shortMessage || e?.message || "Unknown error"}`);
+      setPredictedResult(null);
     } finally {
       setLoading(false);
+      setIsSpinning(false);
     }
   };
-
-  // ---------- Animation ----------
-  const SpinAnimation = () => (
-    <div className="mx-auto my-2 h-20 w-20 rounded-full bg-[conic-gradient(at_70%_70%,#3b82f6,#06b6d4,#22d3ee,#3b82f6)] animate-spin shadow-lg" />
-  );
 
   return (
     <div className="space-y-5 rounded-lg bg-neutral-900/50 p-5 border border-neutral-700 text-center">
@@ -221,50 +192,42 @@ const Spin: FC = () => {
         Try your luck to win $BaseTC. Each spin gives you rewards based on your rigs.
       </p>
 
-      {/* Pool balance */}
       <div className="mx-auto max-w-md rounded-lg border border-neutral-700 bg-neutral-800/60 px-4 py-3 text-left">
-        <div className="text-xs uppercase tracking-wide text-neutral-400">
-          Spin Pool (real-time)
-        </div>
+        <div className="text-xs uppercase tracking-wide text-neutral-400">Spin Pool (real-time)</div>
         <div className="mt-1 text-2xl font-semibold">
-          {poolBalanceStr}{" "}
-          <span className="text-base text-neutral-400">$BaseTC</span>
+          {poolBalanceStr} <span className="text-base text-neutral-400">$BaseTC</span>
         </div>
       </div>
 
-      {/* Bonus tickets */}
       {isConnected && (
         <div className="text-sm text-neutral-300">
-          Bonus Tickets:{" "}
-          <span className="font-semibold text-sky-400">{ticketNum}</span>
+          Bonus Tickets: <span className="font-semibold text-sky-400">{ticketNum}</span>
         </div>
       )}
 
-      {/* Spin button */}
-      <div className="py-6">
-        {loading && <SpinAnimation />}
-        <button
-          onClick={handleSpin}
-          disabled={loading || !canClaim}
-          className="px-8 py-4 rounded-full bg-gradient-to-br from-blue-500 to-sky-600 text-white font-bold text-lg shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-105 transition-transform"
-        >
-          {loading
-            ? "Spinning…"
-            : canClaim
-            ? "Spin Now!"
-            : "No spins available"}
-        </button>
+      {/* --- Area Tampilan Spin --- */}
+      <div className="py-2 min-h-[120px] flex flex-col justify-center items-center">
+        {isSpinning && predictedResult ? (
+          <div className="text-4xl font-bold text-yellow-400">
+            <Ticker finalValue={predictedResult} />
+          </div>
+        ) : finalResult ? (
+           <div className="text-2xl font-bold text-yellow-400">You won {finalResult} $BaseTC!</div>
+        ) : predictedResult ? (
+          <div className="text-2xl font-bold text-sky-400">You got ~{predictedResult.toFixed(6)} $BaseTC!</div>
+        ) : (
+          <button
+            onClick={handleSpin}
+            disabled={!canClaim}
+            className="px-8 py-4 rounded-full bg-gradient-to-br from-blue-500 to-sky-600 text-white font-bold text-lg shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-105 transition-transform"
+          >
+            {loading ? "Processing…" : canClaim ? "Spin Now!" : "No spins available"}
+          </button>
+        )}
       </div>
-
-      {spinResult && (
-        <div className="text-2xl font-bold text-yellow-400">
-          You won {spinResult} $BaseTC!
-        </div>
-      )}
 
       {status && <p className="text-xs text-neutral-400 pt-2">{status}</p>}
 
-      {/* Info footer */}
       <div className="mt-6 text-xs text-neutral-400 space-y-1">
         <p>• Spins increase your leaderboard points.</p>
         <p>• 1 friend invited = 1 Bonus Ticket.</p>
@@ -275,4 +238,3 @@ const Spin: FC = () => {
 };
 
 export default Spin;
-
