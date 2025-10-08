@@ -14,7 +14,6 @@ import Event from "../components/Event";
 import FidInput from "../components/FidInput";
 import ClaimPopup from "../components/ClaimPopup"; // <-- Impor komponen baru
 import { isAddress } from "ethers";
-import Ticker from "../components/Ticker"; // <-- DITAMBAH: import Ticker
 
 const DEFAULT_TAB: TabName = "monitoring";
 const TAB_KEY = "basetc_active_tab";
@@ -108,7 +107,6 @@ function MainApp() {
 
   return (
     <div className="flex flex-col min-h-screen">
-      <Ticker /> {/* <-- DITAMBAH: teks berjalan di paling atas MainApp */}
       {showClaimPopup && (
         <ClaimPopup
           onClose={() => setShowClaimPopup(false)}
