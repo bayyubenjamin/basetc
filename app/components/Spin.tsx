@@ -19,22 +19,21 @@ import {
 } from "../lib/web3Config";
 import { useFarcaster } from "../context/FarcasterProvider";
 
-// Komponen untuk animasi angka berputar acak
+// Komponen baru untuk animasi angka berputar acak
 const SpinningNumbers: FC = () => {
   const [displayValue, setDisplayValue] = useState("0.000000");
 
   useEffect(() => {
-    // Fungsi untuk menghasilkan angka acak dan memformatnya
+    // Fungsi untuk menghasilkan angka acak antara 0.0001 dan 5, lalu memformatnya
     const updateNumber = () => {
-      // Menghasilkan angka acak antara 0 dan 5
-      const randomValue = Math.random() * 5;
+      const randomValue = 0.0001 + Math.random() * (5 - 0.0001);
       setDisplayValue(randomValue.toFixed(6));
     };
 
-    // Ganti angka setiap 50 milidetik untuk efek cepat
+    // Ganti angka setiap 50 milidetik untuk efek putaran yang cepat
     const intervalId = setInterval(updateNumber, 50);
 
-    // Hentikan interval saat komponen dilepas
+    // Hentikan interval saat komponen tidak lagi ditampilkan
     return () => clearInterval(intervalId);
   }, []);
 
@@ -50,8 +49,8 @@ const Spin: FC = () => {
   // State UI
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(false); // Untuk menonaktifkan tombol selama proses
-  const [isSpinning, setIsSpinning] = useState(false); // State khusus untuk animasi putaran
-  const [finalResult, setFinalResult] = useState<string | null>(null); // Hasil akhir dari on-chain
+  const [isSpinning, setIsSpinning] = useState(false); // State khusus untuk mengontrol animasi putaran
+  const [finalResult, setFinalResult] = useState<string | null>(null); // State untuk hasil akhir dari on-chain
 
   // ---------- Reads On-chain (DIPERTAHANKAN) ----------
   const { data: epoch } = useReadContract({ address: spinVaultAddress, abi: spinVaultABI as any, functionName: "epochNow" });
@@ -80,7 +79,7 @@ const Spin: FC = () => {
     }
 
     setLoading(true);
-    setIsSpinning(true); // <-- Mulai animasi putaran angka
+    setIsSpinning(true); // <-- 1. Mulai animasi putaran angka
     setFinalResult(null);
     setStatus("Preparing your spin...");
 
@@ -99,33 +98,38 @@ const Spin: FC = () => {
       const sigData = await sigRes.json();
       if (!sigRes.ok || !sigData?.signature) throw new Error(sigData?.error || "Failed to get signature.");
 
-      setStatus("Sending transaction…");
-      // Jendela transaksi akan muncul di sini
+      setStatus("Waiting for your confirmation..."); // <-- Pesan saat wallet muncul
+      // 2. Jendela transaksi dari wallet akan muncul di sini. Animasi terus berjalan.
       const txHash = await writeContractAsync({
         address: spinVaultAddress, abi: spinVaultABI as any, functionName: "claimWithSig",
         args: [address, currentNonce, deadline, sigData.signature], account: address, chain: base,
       });
 
-      setStatus("Waiting for confirmation…");
+      setStatus("Processing transaction on-chain…");
       const receipt = await publicClient!.waitForTransactionReceipt({ hash: txHash });
       
-      // Ambil hasil asli dari event setelah konfirmasi
+      // 3. Ambil hasil asli dari event setelah konfirmasi
       let wonStr: string | null = null;
       try {
         const events = (parseEventLogs({ abi: spinVaultABI as any, logs: receipt.logs as any, eventName: "ClaimedSpin" }) || []) as any[];
         const amt: bigint | undefined = events?.[0]?.args?.amount;
         if (typeof amt === "bigint") wonStr = Number(formatEther(amt)).toFixed(6);
-      } catch {}
+      } catch (e) {
+        console.error("Error parsing spin event:", e);
+        // Fallback jika parsing gagal
+        wonStr = "a prize";
+      }
 
-      setFinalResult(wonStr); // <-- Set hasil final
+      setIsSpinning(false); // <-- 4. Hentikan animasi putaran
+      setFinalResult(wonStr); // <-- 5. Set hasil final untuk ditampilkan
       setStatus(`Spin successful!`);
       
       await Promise.all([refetchClaimed(), refetchNonces(), refetchTickets(), refetchVaultBalance()]);
 
     } catch (e: any) {
       setStatus(`Error: ${e?.shortMessage || e?.message || "Unknown error"}`);
+      setIsSpinning(false); // Hentikan animasi jika ada error
     } finally {
-      setIsSpinning(false); // <-- Hentikan animasi putaran
       setLoading(false);
     }
   };
