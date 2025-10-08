@@ -1,12 +1,16 @@
-
 // app/layout.tsx
 import "./globals.css";
 import type { Metadata } from "next";
 import Header from "./components/Header";
 
-export const metadata: Metadata = { title: "BaseTC Console", description: "Mining NFT on Base" };
+/** ==== metadata versi ringkas (TETAP DIPERTAHANKAN) ==== */
+export const metadataBasic: Metadata = {
+  title: "BaseTC Console",
+  description: "Mining NFT on Base",
+};
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+/** ==== RootLayout varian 1 (dengan Header) — DIPERTAHANKAN ==== */
+export function RootLayoutWithHeader({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className="bg-zinc-950">
       <body className="min-h-dvh text-zinc-200 antialiased">
@@ -19,7 +23,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   );
 }
 
-// Payload Mini App — berlaku global agar card muncul untuk URL apa pun yang dicast
+/** ==== Payload Mini App — global agar card muncul untuk URL apa pun yang dicast ==== */
 const fcPayload = {
   version: "1",
   imageUrl: "https://basetc.xyz/img/feed.png",
@@ -35,6 +39,7 @@ const fcPayload = {
   },
 };
 
+/** ==== metadata versi lengkap (INI YANG DIEKSPOR SEBAGAI `metadata`) ==== */
 export const metadata: Metadata = {
   metadataBase: new URL("https://basetc.xyz"),
   alternates: { canonical: "https://basetc.xyz/" },
@@ -60,7 +65,8 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+/** ==== RootLayout varian 2 (tanpa Header) — DIPERTAHANKAN ==== */
+export function RootLayoutBase({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
       <body className="min-h-screen flex flex-col">{children}</body>
@@ -68,3 +74,19 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   );
 }
 
+/** ==== RootLayout FINAL (DEFAULT EXPORT) ====
+ * Menggabungkan atribut dari kedua varian:
+ * - html: pakai lang="en" + class bg-zinc-950
+ * - body: gabung class "min-h-dvh text-zinc-200 antialiased" + "min-h-screen flex flex-col"
+ * - tetap render <Header /> sebelum {children}
+ */
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="en" className="bg-zinc-950">
+      <body className="min-h-dvh min-h-screen flex flex-col text-zinc-200 antialiased">
+        <Header />
+        {children}
+      </body>
+    </html>
+  );
+}
