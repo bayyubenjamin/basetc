@@ -2,6 +2,22 @@
 // app/layout.tsx
 import "./globals.css";
 import type { Metadata } from "next";
+import Header from "./components/Header";
+
+export const metadata: Metadata = { title: "BaseTC Console", description: "Mining NFT on Base" };
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="en" className="bg-zinc-950">
+      <body className="min-h-dvh text-zinc-200 antialiased">
+        <Header />
+        {/* Spacer opsional kalau kamu punya navbar lain yang sticky */}
+        {/* <div className="h-0" /> */}
+        {children}
+      </body>
+    </html>
+  );
+}
 
 // Payload Mini App — berlaku global agar card muncul untuk URL apa pun yang dicast
 const fcPayload = {
