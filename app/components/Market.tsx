@@ -15,6 +15,8 @@ import {
   rigSaleABI,
   rigNftAddress,
   rigNftABI,
+  gameCoreAddress, // <-- Impor alamat GameCore
+  gameCoreABI,    // <-- Impor ABI GameCore
 } from "../lib/web3Config";
 import { formatEther, formatUnits, type Address } from "viem";
 import { getFidRefFallback } from "../lib/utils";
@@ -139,15 +141,12 @@ const Market: FC = () => {
   const publicClient = usePublicClient();
   const { writeContractAsync } = useWriteContract();
 
-  // --- START PERUBAHAN ---
-  // State untuk menyimpan data referral dari API
   const [inviteStats, setInviteStats] = useState({
     totalInvites: 0,
     claimedRewards: 0,
     loading: true,
   });
 
-  // Fungsi untuk memuat data referral dari API
   const fetchInviteStats = useCallback(async () => {
     if (!address) {
       setInviteStats({ totalInvites: 0, claimedRewards: 0, loading: false });
@@ -172,24 +171,25 @@ const Market: FC = () => {
     }
   }, [address]);
 
-  // Muat data saat komponen pertama kali dirender atau saat alamat akun berubah
   useEffect(() => {
     fetchInviteStats();
   }, [fetchInviteStats]);
-  
-  // --- AKHIR PERUBAHAN ---
 
-  /* ---------- Rig IDs & Kontrak (DIPERTAHANKAN) ---------- */
+  /* ---------- Kontrak Reads (DIPERTAHANKAN) ---------- */
   const { data: BASIC } = useReadContract({ address: rigNftAddress, abi: rigNftABI as any, functionName: "BASIC" });
   const { data: PRO } = useReadContract({ address: rigNftAddress, abi: rigNftABI as any, functionName: "PRO" });
   const { data: LEGEND } = useReadContract({ address: rigNftAddress, abi: rigNftABI as any, functionName: "LEGEND" });
-  const legendBal = useReadContract({
-    address: rigNftAddress,
-    abi: rigNftABI as any,
-    functionName: "balanceOf",
-    args: address && LEGEND !== undefined ? [address, LEGEND] : undefined,
-    query: { enabled: Boolean(address && LEGEND !== undefined) },
+  
+  // --- START PERUBAHAN ---
+  // Baca status isPrelaunch dari GameCore
+  const { data: isPrelaunch } = useReadContract({
+    address: gameCoreAddress,
+    abi: gameCoreABI as any,
+    functionName: "isPrelaunch"
   });
+  // --- AKHIR PERUBAHAN ---
+
+  const legendBal = useReadContract({ address: rigNftAddress, abi: rigNftABI as any, functionName: "balanceOf", args: address && LEGEND !== undefined ? [address, LEGEND] : undefined, query: { enabled: Boolean(address && LEGEND !== undefined) }});
   const ownedLegend = (legendBal.data as bigint | undefined) ?? 0n;
   const { data: modeVal } = useReadContract({ address: rigSaleAddress, abi: rigSaleABI as any, functionName: "currentMode" });
   const { data: tokenAddr } = useReadContract({ address: rigSaleAddress, abi: rigSaleABI as any, functionName: "paymentToken" });
@@ -230,15 +230,22 @@ const Market: FC = () => {
     query: { enabled: Boolean(address && tokenAddr && mode === 1) },
   });
 
-  /* ============= UX helpers - DIPERTAHANKAN ============= */
   function beginProcessing(label: string) { setMessage(label); setLoading(true); setPopupOpen(false); }
   function finishSuccess(label: string) { setMessage(label); setLoading(false); setPopupOpen(true); }
   function finishError(label: string) { setMessage(label); setLoading(false); setPopupOpen(true); }
 
   /* =============================
-     Actions — DIPERTAHANKAN & DIPERBAIKI
+     Actions — DIPERBARUI
      ============================== */
   const handleClaimBasicFree = async () => {
+    // --- START PERUBAHAN ---
+    // Cek status prelaunch terlebih dahulu
+    if (isPrelaunch) {
+      finishError("Your free rig will be available to claim once the first epoch begins.");
+      return;
+    }
+    // --- AKHIR PERUBAHAN ---
+
     beginProcessing("1/3: Requesting server signature…");
     try {
       if (!address) throw new Error("Please connect your wallet.");
@@ -281,7 +288,7 @@ const Market: FC = () => {
 
       finishSuccess("Claim successful! Referral counted.");
       refetchFreeUsed?.();
-      fetchInviteStats(); // <-- Muat ulang data invite setelah berhasil
+      fetchInviteStats();
     } catch (e: any) {
       finishError(e?.shortMessage || e?.message || "Transaction failed");
     }
@@ -331,9 +338,6 @@ const Market: FC = () => {
   };
   const ctaText = (t: TierID) => (t === "basic" && isBasicFreeForMe ? "Claim Free Rig" : "Buy");
 
-  /* =============================
-     Invite rewards - DIPERBARUI
-     ============================== */
   const { totalInvites, claimedRewards } = inviteStats;
   const maxClaims = useMemo(() => maxClaimsFrom(totalInvites), [totalInvites]);
   const availableClaims = Math.max(0, maxClaims - claimedRewards);
@@ -365,7 +369,6 @@ const Market: FC = () => {
       setInviteMsg(`Reward claimed! Relayer tx: ${json.txHash?.slice?.(0, 8) ?? ""}…`);
       finishSuccess("Invite reward claimed successfully.");
       
-      // --- PERBAIKAN: Muat ulang data setelah berhasil klaim ---
       await fetchInviteStats();
 
     } catch (e: any) {
@@ -378,7 +381,7 @@ const Market: FC = () => {
   }
 
   /* =============================
-     UI - DIPERBARUI
+     UI
    ============================== */
   return (
     <div className="fin-wrap fin-content-pad-bottom px-4 pt-4 space-y-5">
@@ -424,8 +427,7 @@ const Market: FC = () => {
         )}
         {!!inviteMsg && <div className="mt-2 text-xs text-blue-400">{inviteMsg}</div>}
       </section>
-
-      {/* Sisa dari UI tidak perlu diubah */}
+      
       <section className="space-y-4">
         {NFT_DATA.map((tier) => {
           const id = tierId(tier.id);
