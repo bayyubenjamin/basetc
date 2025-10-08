@@ -1,14 +1,17 @@
-// app/api/referral/route.ts (MAINNET READY + FINAL DEBUGGING)
+// app/api/referral/route.ts (MAINNET READY, all functions preserved)
 
 import { NextRequest, NextResponse } from "next/server";
 import { ethers } from "ethers";
 import { getSupabaseAdmin } from "../../lib/supabase/server";
 import { privateKeyToAccount } from "viem/accounts";
+import { rigSaleAddress } from "../../lib/web3Config"; // fallback jika env kosong
 import { base } from "viem/chains";
 
 export const dynamic = "force-dynamic";
 
-// ... (semua fungsi helper Anda seperti calculateMaxClaims, dll. tetap di sini)
+/* =========================
+   Invite Tiering
+   ========================= */
 function calculateMaxClaims(validInvites: number): number {
   if (!Number.isFinite(validInvites) || validInvites <= 0) return 0;
   const first = validInvites >= 1 ? 1 : 0;
@@ -25,23 +28,33 @@ function remainingClaims(validInvites: number, usedClaims: number): number {
   return Math.max(0, maxClaims - used);
 }
 
+/* =========================
+   ENV & Const
+   ========================= */
 const MINT_MODE = (process.env.REFERRAL_MINT_MODE || "none").toLowerCase();
-const BACKEND_SIGNER_PK = process.env.BACKEND_SIGNER_PK || process.env.RELAYER_PRIVATE_KEY || "";
-const RIGSALE_ADDRESS = process.env.CONTRACT_RIGSALE as `0x${string}` | undefined;
-const RIGNFT_ADDRESS = process.env.CONTRACT_RIGNFT as `0x${string}` | undefined;
-const RPC_URL = process.env.RPC_URL || "https://mainnet.base.org";
+const BACKEND_SIGNER_PK =
+  process.env.BACKEND_SIGNER_PK || process.env.RELAYER_PRIVATE_KEY || "";
+const RIGSALE_ADDRESS = process.env.CONTRACT_RIGSALE || ""; // ← set alamat MAINNET di env
+const RIGNFT_ADDRESS = process.env.CONTRACT_RIGNFT || "";
+const RPC_URL = process.env.RPC_URL || "https://mainnet.base.org"; // ← mainnet
 const BASIC_ID = 1;
 
 const TABLE_REFERRALS = "referrals";
 const TABLE_CLAIMS = "claims";
 
-const ABI_RIGSALE = ["function mintRewardRig(address to, uint256 id, uint256 amount) external"];
-const ABI_RIGNFT = ["function mintByGame(address to, uint256 id, uint256 amount) external"];
+const ABI_RIGSALE = [
+  "function mintRewardRig(address to, uint256 id, uint256 amount) external",
+];
+const ABI_RIGNFT = [
+  "function mintByGame(address to, uint256 id, uint256 amount) external",
+];
 
+/* =========================
+   Utils
+   ========================= */
 function normalizeAddr(value: string | undefined | null): string {
   return (value || "").toLowerCase().trim();
 }
-
 function assertAddress(value: string, name: string) {
   if (!ethers.isAddress(value)) {
     throw new Error(`Field "${name}" harus berupa address EVM yang valid.`);
@@ -55,29 +68,29 @@ function requireFidText(value: unknown, name: string): string {
   if (!/^\d+$/.test(v)) {
     throw new Error(`Field "${name}" harus berupa angka Farcaster ID yang valid.`);
   }
-  return v;
+  return v; // TEXT di DB
 }
 
 async function countValidInvites(inviter: string) {
-    const { count, error } = await getSupabaseAdmin()
-        .from(TABLE_REFERRALS)
-        .select("*", { count: "exact", head: true })
-        .eq("inviter", inviter)
-        .eq("status", "valid");
-    if (error) throw new Error(`Gagal hitung valid invites: ${error.message}`);
-    return count ?? 0;
+  const { count, error } = await getSupabaseAdmin()
+    .from(TABLE_REFERRALS)
+    .select("*", { count: "exact", head: true })
+    .eq("inviter", inviter)
+    .eq("status", "valid");
+  if (error) throw new Error(`Gagal hitung valid invites: ${error.message}`);
+  return count ?? 0;
 }
 
 async function sumUsedClaims(inviter: string) {
-    const { data, error } = await getSupabaseAdmin()
-        .from(TABLE_CLAIMS)
-        .select("amount")
-        .eq("inviter", inviter)
-        .eq("type", "basic_free");
-    if (error) throw new Error(`Gagal ambil used claims: ${error.message}`);
-    return (data || []).reduce((acc: number, r: any) => acc + (Number(r.amount) || 0), 0);
+  const { data, error } = await getSupabaseAdmin()
+    .from(TABLE_CLAIMS)
+    .select("amount")
+    .eq("inviter", inviter)
+    .eq("type", "basic_free");
+  if (error) throw new Error(`Gagal ambil used claims: ${error.message}`);
+  return (data || []).reduce((acc: number, r: any) => acc + (Number(r.amount) || 0), 0);
 }
-    
+
 async function recordClaim(inviter: string, amount: number, txHash: string) {
   const { error } = await getSupabaseAdmin().from(TABLE_CLAIMS).insert({
     inviter,
@@ -87,7 +100,11 @@ async function recordClaim(inviter: string, amount: number, txHash: string) {
   });
   if (error) throw new Error(`Gagal mencatat klaim: ${error.message}`);
 }
-    
+
+/**
+ * Upsert referral (pending/valid). HANYA dipakai saat inviter address sudah diketahui.
+ * Kolom: inviter (TEXT, PK#1), invitee_fid (TEXT, PK#2), status, invitee_wallet?
+ */
 async function upsertReferralRow(
   inviterWallet: string,
   inviteeFidText: string,
@@ -104,20 +121,20 @@ async function upsertReferralRow(
   if (inviteeWallet) payload.invitee_wallet = normalizeAddr(inviteeWallet);
   if (inviterId) payload.inviter_id = inviterId;
   if (inviteeId) payload.invitee_id = inviteeId;
-    
+
   const { error } = await getSupabaseAdmin()
     .from(TABLE_REFERRALS)
     .upsert(payload, { onConflict: "inviter,invitee_fid" });
   if (error) throw new Error(`Gagal menyimpan referral: ${error.message}`);
 }
-    
+
 function getProviderAndSigner() {
   if (!BACKEND_SIGNER_PK) return { provider: null, signer: null };
   const provider = new ethers.JsonRpcProvider(RPC_URL);
   const signer = new ethers.Wallet(BACKEND_SIGNER_PK, provider);
   return { provider, signer };
 }
-    
+
 async function mintRewardViaRigSale(to: string) {
   const { signer } = getProviderAndSigner();
   if (!signer) throw new Error("Signer backend tidak dikonfigurasi.");
@@ -127,7 +144,7 @@ async function mintRewardViaRigSale(to: string) {
   const receipt = await tx.wait();
   return receipt?.hash ?? tx.hash;
 }
-    
+
 async function mintRewardViaRigNFT(to: string) {
   const { signer } = getProviderAndSigner();
   if (!signer) throw new Error("Signer backend tidak dikonfigurasi.");
@@ -138,6 +155,9 @@ async function mintRewardViaRigNFT(to: string) {
   return receipt?.hash ?? tx.hash;
 }
 
+/* =========================
+   POST
+   ========================= */
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
@@ -145,6 +165,7 @@ export async function POST(req: NextRequest) {
 
     switch (mode) {
       case "touch": {
+        // catat referral pending — BUTUH inviter wallet
         const inviter = normalizeAddr(body.inviter);
         const invitee_fid = requireFidText(body.invitee_fid, "invitee_fid");
         assertAddress(inviter, "inviter");
@@ -153,26 +174,32 @@ export async function POST(req: NextRequest) {
       }
 
       case "mark-valid": {
+        // tandai referral valid
         const invitee_fid = requireFidText(body.invitee_fid, "invitee_fid");
         const inviterRaw = normalizeAddr(body.inviter);
         const invitee_wallet = body.invitee_wallet ? normalizeAddr(body.invitee_wallet) : null;
 
         if (inviterRaw) {
+          // jika inviter dikirim → update/upsert baris (inviter, invitee_fid)
           assertAddress(inviterRaw, "inviter");
           await upsertReferralRow(inviterRaw, invitee_fid, "valid", invitee_wallet);
           return NextResponse.json({ ok: true, message: "Referral marked valid (by inviter)." });
         }
-        
+
+        // jika inviter TIDAK dikirim → JANGAN bikin baris baru dengan inviter kosong.
+        // Update semua baris yang existing utk invitee_fid tsb.
         const sb = getSupabaseAdmin();
-        const { error } = await sb
+        const q = sb
           .from(TABLE_REFERRALS)
           .update({ status: "valid", ...(invitee_wallet ? { invitee_wallet } : {}) })
           .eq("invitee_fid", invitee_fid);
+        const { error } = await q;
         if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
         return NextResponse.json({ ok: true, message: "Referral marked valid (by invitee_fid)." });
       }
 
       case "claim": {
+        // mint reward untuk inviter jika quota cukup
         const inviter = normalizeAddr(body.inviter);
         const receiver = normalizeAddr(body.receiver);
         const invitee_fid = requireFidText(body.invitee_fid, "invitee_fid");
@@ -202,18 +229,14 @@ export async function POST(req: NextRequest) {
         }
 
         await recordClaim(inviter, 1, txHash);
+        // (opsional) kamu bisa sekaligus menandai referral tertentu jadi valid di sini bila mau.
         return NextResponse.json({ ok: true, txHash, invitee_fid });
       }
 
       case "free-sign": {
-        if (!BACKEND_SIGNER_PK) {
-            console.error("API referral error: RELAYER_PRIVATE_KEY is not set in environment variables.");
-            return NextResponse.json({ error: "Backend signer PK missing." }, { status: 500 });
-        }
-        if (!RIGSALE_ADDRESS) {
-            console.error("API referral error: CONTRACT_RIGSALE is not set in environment variables.");
-            return NextResponse.json({ error: "RigSale contract address is not configured." }, { status: 500 });
-        }
+        // generate EIP-712 signature untuk free claim (30 menit)
+        const pk = process.env.BACKEND_SIGNER_PK || process.env.RELAYER_PRIVATE_KEY;
+        if (!pk) return NextResponse.json({ error: "Backend signer PK missing." }, { status: 500 });
 
         const fidStr = requireFidText(body.fid, "fid");
         const to = normalizeAddr(body.to);
@@ -224,13 +247,15 @@ export async function POST(req: NextRequest) {
 
         const fid = BigInt(fidStr);
         const deadline = BigInt(Math.floor(Date.now() / 1000) + 30 * 60);
-        const account = privateKeyToAccount(BACKEND_SIGNER_PK as `0x${string}`);
+        const account = privateKeyToAccount(pk as `0x${string}`);
 
+        // ==== EIP-712 DOMAIN (MAINNET) ====
         const domain = {
           name: "RigSaleFlexible",
           version: "1",
-          chainId: base.id,
-          verifyingContract: RIGSALE_ADDRESS,
+          chainId: base.id, // 8453
+          // Prefer env (CONTRACT_RIGSALE) untuk alamat MAINNET; fallback ke konstanta.
+          verifyingContract: (RIGSALE_ADDRESS || rigSaleAddress) as `0x${string}`,
         };
 
         const types = {
@@ -248,12 +273,6 @@ export async function POST(req: NextRequest) {
           inviter: inviterAddr as `0x${string}`,
           deadline,
         };
-        
-        console.log("Signing EIP-712 data for free claim:", {
-            signerAddress: account.address,
-            domain,
-            message: { ...message, fid: message.fid.toString(), deadline: message.deadline.toString() }
-        });
 
         const signature = await account.signTypedData({
           domain,
@@ -267,7 +286,10 @@ export async function POST(req: NextRequest) {
         const s = ("0x" + signature.slice(66, 130)) as `0x${string}`;
 
         return NextResponse.json({
-          ok: true, v, r, s,
+          ok: true,
+          v,
+          r,
+          s,
           inviter: inviterAddr,
           deadline: deadline.toString(),
         });
@@ -278,56 +300,50 @@ export async function POST(req: NextRequest) {
     }
   } catch (e: any) {
     console.error("API referral error:", e);
-    const detailedError = e?.shortMessage || e?.message || "Server error";
-    return NextResponse.json({ error: detailedError }, { status: 500 });
+    const msg = String(e?.message || "Server error");
+    if (msg.includes("TRANSACTION REVERTED")) {
+      return NextResponse.json({ error: msg }, { status: 400 });
+    }
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
 
+/* =========================
+   GET: statistik inviter
+   ========================= */
 export async function GET(req: NextRequest) {
-    try {
-        const { searchParams } = new URL(req.url);
-        const inviter = normalizeAddr(searchParams.get("inviter"));
-        const detail = searchParams.get("detail") === "1";
-    
-        let inviterAddress: string;
-        if (ethers.isAddress(inviter)) {
-            inviterAddress = inviter;
-        } else if (/^\d+$/.test(inviter)) {
-            const { data, error } = await getSupabaseAdmin().from("users").select("wallet").eq("fid", inviter).single();
-            if (error || !data?.wallet) throw new Error(`Could not find wallet for FID ${inviter}`);
-            inviterAddress = data.wallet.toLowerCase();
-        } else {
-            return NextResponse.json({ ok: false, error: "Invalid inviter identifier (must be address or FID)." }, { status: 400 });
-        }
-    
-        const [validInvites, usedClaims] = await Promise.all([
-            countValidInvites(inviterAddress),
-            sumUsedClaims(inviterAddress),
-        ]);
-    
-        const remainingQuota = remainingClaims(validInvites, usedClaims);
-        const response: any = {
-            ok: true,
-            mintMode: MINT_MODE,
-            validInvites,
-            claimedRewards: usedClaims,
-            remainingQuota,
-        };
-    
-        if (detail) {
-            const { data, error } = await getSupabaseAdmin()
-                .from(TABLE_REFERRALS)
-                .select("invitee_fid, invitee_wallet, status")
-                .eq("inviter", inviterAddress);
-            if (error) {
-                return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
-            }
-            response.list = data;
-        }
-    
-        return NextResponse.json(response);
-    } catch(e: any) {
-        console.error("GET /api/referral error:", e);
-        return NextResponse.json({ ok: false, error: e?.message || "Server error" }, { status: 500 });
+  const { searchParams } = new URL(req.url);
+  const inviter = normalizeAddr(searchParams.get("inviter"));
+  const detail = searchParams.get("detail") === "1";
+
+  if (!ethers.isAddress(inviter)) {
+    return NextResponse.json({ ok: false, error: "Invalid inviter address." }, { status: 400 });
+  }
+
+  const [validInvites, usedClaims] = await Promise.all([
+    countValidInvites(inviter),
+    sumUsedClaims(inviter),
+  ]);
+
+  const remainingQuota = remainingClaims(validInvites, usedClaims);
+  const response: any = {
+    ok: true,
+    mintMode: MINT_MODE,
+    validInvites,
+    claimedRewards: usedClaims,
+    remainingQuota,
+  };
+
+  if (detail) {
+    const { data, error } = await getSupabaseAdmin()
+      .from(TABLE_REFERRALS)
+      .select("invitee_fid, invitee_wallet, status")
+      .eq("inviter", inviter);
+    if (error) {
+      return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
     }
+    response.list = data;
+  }
+
+  return NextResponse.json(response);
 }
