@@ -16,8 +16,8 @@ import {
   spinVaultABI,
   baseTcAddress,
   baseTcABI,
-  rigNftAddress, // Impor baru
-  rigNftABI,      // Impor baru
+  rigNftAddress,
+  rigNftABI,
 } from "../lib/web3Config";
 import { useFarcaster } from "../context/FarcasterProvider";
 
@@ -64,9 +64,9 @@ const Spin: FC = () => {
   // State UI
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(false);
-  const [isSpinning, setIsSpinning] = useState(false); // State baru untuk animasi
-  const [predictedResult, setPredictedResult] = useState<number | null>(null); // State baru untuk prediksi
-  const [finalResult, setFinalResult] = useState<string | null>(null); // Hasil akhir dari on-chain
+  const [isSpinning, setIsSpinning] = useState(false);
+  const [predictedResult, setPredictedResult] = useState<number | null>(null);
+  const [finalResult, setFinalResult] = useState<string | null>(null);
 
   // ---------- Reads On-chain ----------
   const { data: epoch } = useReadContract({ address: spinVaultAddress, abi: spinVaultABI as any, functionName: "epochNow" });
@@ -75,33 +75,31 @@ const Spin: FC = () => {
   const { data: nonceValue, refetch: refetchNonces } = useReadContract({ address: spinVaultAddress, abi: spinVaultABI as any, functionName: "nonces", args: address ? [address as `0x${string}`] : undefined, query: { enabled: Boolean(address) }});
   const { data: vaultBalance, refetch: refetchVaultBalance } = useReadContract({ address: baseTcAddress, abi: baseTcABI as any, functionName: "balanceOf", args: [spinVaultAddress] });
 
-  // Baca saldo NFT untuk prediksi
-  const { data: rigIds } = useReadContract({ address: rigNftAddress, abi: rigNftABI as any, functionName: "BASIC" }); // Asumsi BASIC=1, PRO=2, dst.
-  const { data: basicBal = 0n } = useReadContract({ address: rigNftAddress, abi: rigNftABI as any, functionName: "balanceOf", args: address ? [address, 1n] : undefined, query: { enabled: !!address } });
-  const { data: proBal = 0n } = useReadContract({ address: rigNftAddress, abi: rigNftABI as any, functionName: "balanceOf", args: address ? [address, 2n] : undefined, query: { enabled: !!address } });
-  const { data: legendBal = 0n } = useReadContract({ address: rigNftAddress, abi: rigNftABI as any, functionName: "balanceOf", args: address ? [address, 3n] : undefined, query: { enabled: !!address } });
+  const { data: basicBal } = useReadContract({ address: rigNftAddress, abi: rigNftABI as any, functionName: "balanceOf", args: address ? [address, 1n] : undefined, query: { enabled: !!address } });
+  const { data: proBal } = useReadContract({ address: rigNftAddress, abi: rigNftABI as any, functionName: "balanceOf", args: address ? [address, 2n] : undefined, query: { enabled: !!address } });
+  const { data: legendBal } = useReadContract({ address: rigNftAddress, abi: rigNftABI as any, functionName: "balanceOf", args: address ? [address, 3n] : undefined, query: { enabled: !!address } });
 
-  // Baca rentang hadiah dari contract
   const { data: basicRange } = useReadContract({ address: spinVaultAddress, abi: spinVaultABI as any, functionName: "basicRange" });
   const { data: proRange } = useReadContract({ address: spinVaultAddress, abi: spinVaultABI as any, functionName: "proRange" });
   const { data: legendRange } = useReadContract({ address: spinVaultAddress, abi: spinVaultABI as any, functionName: "legendRange" });
   
-  // Fungsi untuk memprediksi hadiah di client-side
   const predictReward = useCallback(() => {
     let totalPredicted = 0;
-    if (basicBal > 0n && basicRange) {
+    // --- START PERBAIKAN ---
+    if (typeof basicBal === 'bigint' && basicBal > 0n && basicRange) {
         const [min, max] = basicRange as [bigint, bigint];
         totalPredicted += getRandomInRange(Number(formatEther(min)), Number(formatEther(max))) * Number(basicBal);
     }
-    if (proBal > 0n && proRange) {
+    if (typeof proBal === 'bigint' && proBal > 0n && proRange) {
         const [min, max] = proRange as [bigint, bigint];
         totalPredicted += getRandomInRange(Number(formatEther(min)), Number(formatEther(max))) * Number(proBal);
     }
-    if (legendBal > 0n && legendRange) {
+    if (typeof legendBal === 'bigint' && legendBal > 0n && legendRange) {
         const [min, max] = legendRange as [bigint, bigint];
         totalPredicted += getRandomInRange(Number(formatEther(min)), Number(formatEther(max))) * Number(legendBal);
     }
-    return totalPredicted > 0 ? totalPredicted : 0.000001; // Pastikan tidak 0
+    // --- AKHIR PERBAIKAN ---
+    return totalPredicted > 0 ? totalPredicted : 0.000001;
   }, [basicBal, proBal, legendBal, basicRange, proRange, legendRange]);
 
   useEffect(() => {
@@ -116,7 +114,6 @@ const Spin: FC = () => {
   const canClaim = useMemo(() => !loading && isConnected && address && (claimed === false || ticketNum > 0), [loading, isConnected, address, claimed, ticketNum]);
   const poolBalanceStr = useMemo(() => (vaultBalance !== undefined ? Number(formatEther(vaultBalance as bigint)).toFixed(4) : "—"), [vaultBalance]);
 
-  // ---------- Action ----------
   const handleSpin = async () => {
     if (!canClaim || !address || !fcUser?.fid) {
       setStatus("Cannot spin now. Check connection or tickets.");
@@ -128,18 +125,15 @@ const Spin: FC = () => {
     setFinalResult(null);
     setStatus("Spinning...");
 
-    // Langkah 1: Prediksi & Animasi
     const prediction = predictReward();
     setPredictedResult(prediction);
 
-    // Beri jeda untuk animasi
     await new Promise(resolve => setTimeout(resolve, 2000));
     
     setIsSpinning(false);
     setStatus("Waiting for your confirmation...");
 
     try {
-      // Langkah 2: Proses On-chain
       const nonceHook = (nonceValue as bigint | undefined) ?? 0n;
       const ref = await refetchNonces();
       const currentNonce = (ref?.data as bigint | undefined) ?? nonceHook;
@@ -163,7 +157,6 @@ const Spin: FC = () => {
       setStatus("4/4: Waiting for confirmation…");
       const receipt = await publicClient!.waitForTransactionReceipt({ hash: txHash });
 
-      // Langkah 3: Ambil hasil asli dari event
       let wonStr: string | null = null;
       try {
         const events = (parseEventLogs({ abi: spinVaultABI as any, logs: receipt.logs as any, eventName: "ClaimedSpin" }) || []) as any[];
@@ -172,7 +165,7 @@ const Spin: FC = () => {
       } catch {}
 
       setFinalResult(wonStr);
-      setPredictedResult(null); // Hapus prediksi
+      setPredictedResult(null);
       setStatus(`Spin successful! You won ${wonStr ?? '...'} $BaseTC!`);
       await Promise.all([refetchClaimed(), refetchNonces(), refetchTickets(), refetchVaultBalance()]);
 
@@ -205,7 +198,6 @@ const Spin: FC = () => {
         </div>
       )}
 
-      {/* --- Area Tampilan Spin --- */}
       <div className="py-2 min-h-[120px] flex flex-col justify-center items-center">
         {isSpinning && predictedResult ? (
           <div className="text-4xl font-bold text-yellow-400">
