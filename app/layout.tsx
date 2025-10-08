@@ -1,65 +1,56 @@
-"use client";
+// app/layout.tsx
+import "./globals.css";
+import type { Metadata } from "next";
+import Ticker from "./components/Ticker";
 
-import Link from "next/link";
-import Image from "next/image";
-import type { FC } from "react";
-
-const Dot = () => <span className="mx-3 text-zinc-500">•</span>;
-
-const TickerContent: FC = () => (
-  <div className="flex shrink-0 items-center gap-0 pr-10">
-    <span className="font-medium text-zinc-200">$BaseTC&nbsp;Max&nbsp;Supply</span>
-    <span className="ml-2 rounded px-2 py-0.5 text-sm font-semibold text-white bg-indigo-600/80">21,000,000</span>
-    <span className="mx-3 text-zinc-500">•</span>
-    <span className="font-medium text-zinc-200">Mining&nbsp;Rewards</span>
-    <span className="ml-2 rounded px-2 py-0.5 text-sm font-semibold text-white bg-sky-600/80">85.2% = 17.9M</span>
-    <span className="mx-3 text-zinc-500">•</span>
-    <span className="font-medium text-zinc-200">Liquidity</span>
-    <span className="ml-2 rounded px-2 py-0.5 text-sm font-semibold text-white bg-teal-600/80">10% = 2.1M</span>
-    <span className="mx-3 text-zinc-500">•</span>
-    <span className="font-medium text-zinc-200">Treasury</span>
-    <span className="ml-2 rounded px-2 py-0.5 text-sm font-semibold text-white bg-amber-600/80">
-      4.8% (Satoshi&nbsp;Wallet)
-    </span>
-    <span className="mx-3 text-zinc-500">•</span>
-  </div>
-);
-
-const Header: FC = () => {
-  return (
-    <header className="sticky top-0 z-50 w-full border-b border-white/10 bg-zinc-950/80 backdrop-blur supports-[backdrop-filter]:bg-zinc-950/60">
-      <div className="mx-auto flex h-12 max-w-6xl items-center justify-between px-3 sm:px-4">
-        <div className="flex items-center gap-2">
-          <Link href="/" className="flex items-center gap-2">
-            <Image src="/img/logo.png" alt="BaseTC" width={20} height={20} className="rounded" />
-            <span className="hidden text-sm font-semibold text-zinc-100 sm:inline">BaseTC Console</span>
-          </Link>
-        </div>
-        <nav className="hidden items-center gap-4 sm:flex">
-          <Link href="/launch" className="text-sm text-zinc-300 hover:text-white">Home</Link>
-          <Link href="/rakit" className="text-sm text-zinc-300 hover:text-white">Rakit</Link>
-          <Link href="/market" className="text-sm text-zinc-300 hover:text-white">Market</Link>
-          <Link href="/profil" className="text-sm text-zinc-300 hover:text-white">Profil</Link>
-        </nav>
-        <div className="flex items-center gap-2">
-          <Link href="/launch" className="rounded-md border border-white/10 px-2 py-1 text-xs text-zinc-200 hover:bg-white/5">
-            Open App
-          </Link>
-        </div>
-      </div>
-      <div className="h-px w-full bg-white/10" />
-      <div className="relative h-9 w-full overflow-hidden">
-        <div className="pointer-events-none absolute inset-y-0 left-0 w-10 bg-gradient-to-r from-zinc-950/80 to-transparent" />
-        <div className="pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-zinc-950/80 to-transparent" />
-        <div className="ticker group will-change-transform">
-          <div className="ticker__track">
-            <TickerContent />
-            <TickerContent />
-          </div>
-        </div>
-      </div>
-    </header>
-  );
+// Payload Mini App (global)
+const fcPayload = {
+  version: "1",
+  imageUrl: "https://basetc.xyz/img/feed.png",
+  button: {
+    title: "Open BaseTC",
+    action: {
+      type: "launch_miniapp",
+      name: "BaseTC Console",
+      url: "https://basetc.xyz/launch",
+      splashImageUrl: "https://basetc.xyz/s.png",
+      splashBackgroundColor: "#FFFFFF",
+    },
+  },
 };
 
-export default Header;
+export const metadata: Metadata = {
+  metadataBase: new URL("https://basetc.xyz"),
+  alternates: { canonical: "https://basetc.xyz/" },
+  title: "BaseTC Console",
+  description: "Farcaster mining console built with Next.js and Tailwind.",
+  openGraph: {
+    type: "website",
+    url: "https://basetc.xyz/",
+    title: "BaseTC Console",
+    description: "Start mining with a free Basic rig onchain.",
+    images: [{ url: "/img/feed.png", width: 1200, height: 630, alt: "BaseTC Console" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "BaseTC Console",
+    description: "Start mining with a free Basic rig onchain.",
+    images: ["/img/feed.png"],
+  },
+  other: {
+    "fc:miniapp": JSON.stringify(fcPayload),
+    "fc:frame": JSON.stringify(fcPayload),
+  },
+};
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="en" className="bg-zinc-950">
+      <body className="min-h-dvh text-zinc-200 antialiased">
+        {/* ticker global muncul di semua halaman */}
+        <Ticker />
+        {children}
+      </body>
+    </html>
+  );
+}
