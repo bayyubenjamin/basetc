@@ -124,6 +124,9 @@ const Monitoring: FC = () => {
   const [liveBaseStart, setLiveBaseStart] = useState<number>(0);
   const [liveStartTs, setLiveStartTs] = useState<number>(0);
   const [lastAction, setLastAction] = useState<ActionType>(null);
+  
+  // Pre-launch countdown state
+  const [prelaunchTimeLeft, setPrelaunchTimeLeft] = useState<string>("");
 
   // 1s ticker
   useEffect(() => {
@@ -318,6 +321,35 @@ const Monitoring: FC = () => {
   const prelaunch = Boolean((isPrelaunch.data as boolean | undefined) ?? false);
   const goLiveOn = Boolean((goLive.data as boolean | undefined) ?? false);
   const active = Boolean((miningActive.data as boolean | undefined) ?? false);
+
+  // Pre-launch countdown logic
+  useEffect(() => {
+    if (prelaunch && goLiveOn && sTime && eLen) {
+      const epoch1StartTime = Number(sTime + eLen);
+      const interval = setInterval(() => {
+        const currentSeconds = Math.floor(Date.now() / 1000);
+        const timeLeft = epoch1StartTime - currentSeconds;
+
+        if (timeLeft <= 0) {
+          setPrelaunchTimeLeft("Live!");
+          clearInterval(interval);
+          // Auto-refresh data when countdown finishes
+          refreshAll("Pre-launch ended. Refreshing state.");
+        } else {
+          const days = Math.floor(timeLeft / (3600 * 24));
+          const hours = Math.floor((timeLeft % (3600 * 24)) / 3600);
+          const minutes = Math.floor((timeLeft % 3600) / 60);
+          const seconds = timeLeft % 60;
+          setPrelaunchTimeLeft(
+            `${days}d ${hours}h ${minutes}m ${seconds}s`
+          );
+        }
+      }, 1000);
+
+      return () => clearInterval(interval);
+    }
+  }, [prelaunch, goLiveOn, sTime, eLen]);
+
 
   const _hrLegacy = useMemo(() => {
     const v = hashrate.data as bigint | undefined;
@@ -701,11 +733,24 @@ const Monitoring: FC = () => {
 
         <div className="fin-progress">
           <div className="fin-progress-head">
-            <span>Epoch progress</span>
-            <span>Next in <b>{leftMMSS}</b></span>
+            <span>
+              {prelaunch && goLiveOn
+                ? "Mining starts in"
+                : "Epoch progress"}
+            </span>
+            <span>
+              {prelaunch && goLiveOn ? (
+                <b>{prelaunchTimeLeft}</b>
+              ) : (
+                <>
+                  Next in <b>{leftMMSS}</b>
+                </>
+              )}
+            </span>
           </div>
           <div className="fin-bar"><i style={{ width: `${epochProgress.pct}%` }} /></div>
         </div>
+
 
         {/* Realtime $BaseTC meter */}
         <div className="fin-actions">
