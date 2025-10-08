@@ -1,22 +1,11 @@
-// app/api/referral/route.ts (REPLACE - hardened, schema-compatible)
-//
-// Fungsionalitas:
-// - touch        : catat referral pending (butuh inviter wallet address & invitee_fid)
-// - mark-valid   : tandai referral valid; jika inviter tidak dikirim, kita update baris existing by invitee_fid (tanpa bikin baris baru kosong)
-// - claim        : mint reward (rigsale/rignft) jika quota cukup, lalu catat ke claims
-// - free-sign    : generate EIP-712 signature untuk free claim (deadline 30 menit)
-//
-// Catatan penting:
-// - SKEMA referrals kamu: PK = (inviter TEXT, invitee_fid TEXT). Jadi kita TIDAK akan membuat baris dengan inviter kosong.
-// - mark-valid tanpa inviter => kita cari baris referral existing berdasarkan invitee_fid, lalu update status (tanpa membuat baris baru).
-// - Semua address di-lowercase. invitee_fid dipaksa String() untuk safety (kolom TEXT).
+// app/api/referral/route.ts (MAINNET READY, all functions preserved)
 
 import { NextRequest, NextResponse } from "next/server";
 import { ethers } from "ethers";
 import { getSupabaseAdmin } from "../../lib/supabase/server";
 import { privateKeyToAccount } from "viem/accounts";
-import { rigSaleAddress } from "../../lib/web3Config"; // dipakai di free-sign
-import { baseSepolia } from "viem/chains";
+import { rigSaleAddress } from "../../lib/web3Config"; // fallback jika env kosong
+import { base } from "viem/chains";
 
 export const dynamic = "force-dynamic";
 
@@ -43,10 +32,11 @@ function remainingClaims(validInvites: number, usedClaims: number): number {
    ENV & Const
    ========================= */
 const MINT_MODE = (process.env.REFERRAL_MINT_MODE || "none").toLowerCase();
-const BACKEND_SIGNER_PK = process.env.BACKEND_SIGNER_PK || process.env.RELAYER_PRIVATE_KEY || "";
-const RIGSALE_ADDRESS = process.env.CONTRACT_RIGSALE || "";
+const BACKEND_SIGNER_PK =
+  process.env.BACKEND_SIGNER_PK || process.env.RELAYER_PRIVATE_KEY || "";
+const RIGSALE_ADDRESS = process.env.CONTRACT_RIGSALE || ""; // ← set alamat MAINNET di env
 const RIGNFT_ADDRESS = process.env.CONTRACT_RIGNFT || "";
-const RPC_URL = process.env.RPC_URL || "https://sepolia.base.org";
+const RPC_URL = process.env.RPC_URL || "https://mainnet.base.org"; // ← mainnet
 const BASIC_ID = 1;
 
 const TABLE_REFERRALS = "referrals";
@@ -258,12 +248,16 @@ export async function POST(req: NextRequest) {
         const fid = BigInt(fidStr);
         const deadline = BigInt(Math.floor(Date.now() / 1000) + 30 * 60);
         const account = privateKeyToAccount(pk as `0x${string}`);
+
+        // ==== EIP-712 DOMAIN (MAINNET) ====
         const domain = {
           name: "RigSaleFlexible",
           version: "1",
-          chainId: baseSepolia.id,
-          verifyingContract: rigSaleAddress as `0x${string}`, // gunakan konstanta dari web3Config
+          chainId: base.id, // 8453
+          // Prefer env (CONTRACT_RIGSALE) untuk alamat MAINNET; fallback ke konstanta.
+          verifyingContract: (RIGSALE_ADDRESS || rigSaleAddress) as `0x${string}`,
         };
+
         const types = {
           FreeClaim: [
             { name: "fid", type: "uint256" },
@@ -272,14 +266,33 @@ export async function POST(req: NextRequest) {
             { name: "deadline", type: "uint256" },
           ],
         } as const;
-        const message = { fid, to: to as `0x${string}`, inviter: inviterAddr as `0x${string}`, deadline };
 
-        const signature = await account.signTypedData({ domain, types, primaryType: "FreeClaim", message });
+        const message = {
+          fid,
+          to: to as `0x${string}`,
+          inviter: inviterAddr as `0x${string}`,
+          deadline,
+        };
+
+        const signature = await account.signTypedData({
+          domain,
+          types,
+          primaryType: "FreeClaim",
+          message,
+        });
+
         const v = parseInt(signature.slice(130, 132), 16);
         const r = signature.slice(0, 66) as `0x${string}`;
         const s = ("0x" + signature.slice(66, 130)) as `0x${string}`;
 
-        return NextResponse.json({ ok: true, v, r, s, inviter: inviterAddr, deadline: deadline.toString() });
+        return NextResponse.json({
+          ok: true,
+          v,
+          r,
+          s,
+          inviter: inviterAddr,
+          deadline: deadline.toString(),
+        });
       }
 
       default:
@@ -334,4 +347,3 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json(response);
 }
-
