@@ -17,6 +17,7 @@ import {
   rigNftABI,
 } from "../lib/web3Config";
 import { formatEther, formatUnits, type Address } from "viem";
+import { getFidRefFallback } from "../lib/utils"; // <-- Impor fungsi helper
 
 /* =============================
    Invite math (original rules)
@@ -270,15 +271,20 @@ const Market: FC = () => {
       setMessage("3/3: Waiting for confirmation…");
       await publicClient?.waitForTransactionReceipt({ hash: txHash });
 
+      // --- PERBAIKAN DI SINI ---
       setMessage("Finalizing: Validating referral…");
+      const fid_ref = getFidRefFallback(); // <-- Ambil fid_ref
+
       await fetch("/api/user", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           fid: Number(fid),
           validate_referral_now: true,
+          fid_ref: fid_ref, // <-- Tambahkan fid_ref ke body request
         }),
       });
+      // --- AKHIR PERBAIKAN ---
 
       finishSuccess("Claim successful! Referral counted.");
       refetchFreeUsed?.();
