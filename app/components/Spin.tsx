@@ -16,43 +16,29 @@ import {
   spinVaultABI,
   baseTcAddress,
   baseTcABI,
-  rigNftAddress,
-  rigNftABI,
 } from "../lib/web3Config";
 import { useFarcaster } from "../context/FarcasterProvider";
 
-// Helper untuk menghasilkan angka acak dalam rentang
-const getRandomInRange = (min: number, max: number) => {
-  return Math.random() * (max - min) + min;
-};
-
-// Komponen untuk animasi angka berputar
-const Ticker: FC<{ finalValue: number }> = ({ finalValue }) => {
-  const [displayValue, setDisplayValue] = useState(0);
+// Komponen untuk animasi angka berputar acak
+const SpinningNumbers: FC = () => {
+  const [displayValue, setDisplayValue] = useState("0.000000");
 
   useEffect(() => {
-    let animationFrameId: number;
-    const duration = 1500; // Durasi animasi dalam milidetik
-    const startTime = performance.now();
-
-    const animate = (currentTime: number) => {
-      const elapsedTime = currentTime - startTime;
-      if (elapsedTime < duration) {
-        // Hasilkan angka acak selama animasi
-        setDisplayValue(Math.random() * (finalValue * 1.5));
-        animationFrameId = requestAnimationFrame(animate);
-      } else {
-        // Set ke nilai akhir setelah durasi selesai
-        setDisplayValue(finalValue);
-      }
+    // Fungsi untuk menghasilkan angka acak dan memformatnya
+    const updateNumber = () => {
+      // Menghasilkan angka acak antara 0 dan 5
+      const randomValue = Math.random() * 5;
+      setDisplayValue(randomValue.toFixed(6));
     };
 
-    animationFrameId = requestAnimationFrame(animate);
+    // Ganti angka setiap 50 milidetik untuk efek cepat
+    const intervalId = setInterval(updateNumber, 50);
 
-    return () => cancelAnimationFrame(animationFrameId);
-  }, [finalValue]);
+    // Hentikan interval saat komponen dilepas
+    return () => clearInterval(intervalId);
+  }, []);
 
-  return <>{displayValue.toFixed(6)}</>;
+  return <>{displayValue}</>;
 };
 
 const Spin: FC = () => {
@@ -63,44 +49,16 @@ const Spin: FC = () => {
 
   // State UI
   const [status, setStatus] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [isSpinning, setIsSpinning] = useState(false);
-  const [predictedResult, setPredictedResult] = useState<number | null>(null);
-  const [finalResult, setFinalResult] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false); // Untuk menonaktifkan tombol selama proses
+  const [isSpinning, setIsSpinning] = useState(false); // State khusus untuk animasi putaran
+  const [finalResult, setFinalResult] = useState<string | null>(null); // Hasil akhir dari on-chain
 
-  // ---------- Reads On-chain ----------
+  // ---------- Reads On-chain (DIPERTAHANKAN) ----------
   const { data: epoch } = useReadContract({ address: spinVaultAddress, abi: spinVaultABI as any, functionName: "epochNow" });
   const { data: claimed, refetch: refetchClaimed } = useReadContract({ address: spinVaultAddress, abi: spinVaultABI as any, functionName: "claimed", args: epoch !== undefined && address ? [epoch as bigint, address as `0x${string}`] : undefined, query: { enabled: Boolean(address && epoch !== undefined) }});
   const { data: tickets, refetch: refetchTickets } = useReadContract({ address: spinVaultAddress, abi: spinVaultABI as any, functionName: "availableTickets", args: address ? [address as `0x${string}`] : undefined, query: { enabled: Boolean(address) }});
   const { data: nonceValue, refetch: refetchNonces } = useReadContract({ address: spinVaultAddress, abi: spinVaultABI as any, functionName: "nonces", args: address ? [address as `0x${string}`] : undefined, query: { enabled: Boolean(address) }});
   const { data: vaultBalance, refetch: refetchVaultBalance } = useReadContract({ address: baseTcAddress, abi: baseTcABI as any, functionName: "balanceOf", args: [spinVaultAddress] });
-
-  const { data: basicBal } = useReadContract({ address: rigNftAddress, abi: rigNftABI as any, functionName: "balanceOf", args: address ? [address, 1n] : undefined, query: { enabled: !!address } });
-  const { data: proBal } = useReadContract({ address: rigNftAddress, abi: rigNftABI as any, functionName: "balanceOf", args: address ? [address, 2n] : undefined, query: { enabled: !!address } });
-  const { data: legendBal } = useReadContract({ address: rigNftAddress, abi: rigNftABI as any, functionName: "balanceOf", args: address ? [address, 3n] : undefined, query: { enabled: !!address } });
-
-  const { data: basicRange } = useReadContract({ address: spinVaultAddress, abi: spinVaultABI as any, functionName: "basicRange" });
-  const { data: proRange } = useReadContract({ address: spinVaultAddress, abi: spinVaultABI as any, functionName: "proRange" });
-  const { data: legendRange } = useReadContract({ address: spinVaultAddress, abi: spinVaultABI as any, functionName: "legendRange" });
-  
-  const predictReward = useCallback(() => {
-    let totalPredicted = 0;
-    // --- START PERBAIKAN ---
-    if (typeof basicBal === 'bigint' && basicBal > 0n && basicRange) {
-        const [min, max] = basicRange as [bigint, bigint];
-        totalPredicted += getRandomInRange(Number(formatEther(min)), Number(formatEther(max))) * Number(basicBal);
-    }
-    if (typeof proBal === 'bigint' && proBal > 0n && proRange) {
-        const [min, max] = proRange as [bigint, bigint];
-        totalPredicted += getRandomInRange(Number(formatEther(min)), Number(formatEther(max))) * Number(proBal);
-    }
-    if (typeof legendBal === 'bigint' && legendBal > 0n && legendRange) {
-        const [min, max] = legendRange as [bigint, bigint];
-        totalPredicted += getRandomInRange(Number(formatEther(min)), Number(formatEther(max))) * Number(legendBal);
-    }
-    // --- AKHIR PERBAIKAN ---
-    return totalPredicted > 0 ? totalPredicted : 0.000001;
-  }, [basicBal, proBal, legendBal, basicRange, proRange, legendRange]);
 
   useEffect(() => {
     const t = setInterval(() => {
@@ -114,6 +72,7 @@ const Spin: FC = () => {
   const canClaim = useMemo(() => !loading && isConnected && address && (claimed === false || ticketNum > 0), [loading, isConnected, address, claimed, ticketNum]);
   const poolBalanceStr = useMemo(() => (vaultBalance !== undefined ? Number(formatEther(vaultBalance as bigint)).toFixed(4) : "—"), [vaultBalance]);
 
+  // ---------- Action (DIPERBARUI) ----------
   const handleSpin = async () => {
     if (!canClaim || !address || !fcUser?.fid) {
       setStatus("Cannot spin now. Check connection or tickets.");
@@ -121,17 +80,9 @@ const Spin: FC = () => {
     }
 
     setLoading(true);
-    setIsSpinning(true);
+    setIsSpinning(true); // <-- Mulai animasi putaran angka
     setFinalResult(null);
-    setStatus("Spinning...");
-
-    const prediction = predictReward();
-    setPredictedResult(prediction);
-
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    setIsSpinning(false);
-    setStatus("Waiting for your confirmation...");
+    setStatus("Preparing your spin...");
 
     try {
       const nonceHook = (nonceValue as bigint | undefined) ?? 0n;
@@ -139,7 +90,7 @@ const Spin: FC = () => {
       const currentNonce = (ref?.data as bigint | undefined) ?? nonceHook;
       if (currentNonce === undefined) throw new Error("Could not fetch a valid nonce.");
 
-      setStatus("2/4: Requesting signature…");
+      setStatus("Requesting signature…");
       const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600);
       const sigRes = await fetch("/api/sign-event-action", {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -148,15 +99,17 @@ const Spin: FC = () => {
       const sigData = await sigRes.json();
       if (!sigRes.ok || !sigData?.signature) throw new Error(sigData?.error || "Failed to get signature.");
 
-      setStatus("3/4: Sending transaction…");
+      setStatus("Sending transaction…");
+      // Jendela transaksi akan muncul di sini
       const txHash = await writeContractAsync({
         address: spinVaultAddress, abi: spinVaultABI as any, functionName: "claimWithSig",
         args: [address, currentNonce, deadline, sigData.signature], account: address, chain: base,
       });
 
-      setStatus("4/4: Waiting for confirmation…");
+      setStatus("Waiting for confirmation…");
       const receipt = await publicClient!.waitForTransactionReceipt({ hash: txHash });
-
+      
+      // Ambil hasil asli dari event setelah konfirmasi
       let wonStr: string | null = null;
       try {
         const events = (parseEventLogs({ abi: spinVaultABI as any, logs: receipt.logs as any, eventName: "ClaimedSpin" }) || []) as any[];
@@ -164,17 +117,16 @@ const Spin: FC = () => {
         if (typeof amt === "bigint") wonStr = Number(formatEther(amt)).toFixed(6);
       } catch {}
 
-      setFinalResult(wonStr);
-      setPredictedResult(null);
-      setStatus(`Spin successful! You won ${wonStr ?? '...'} $BaseTC!`);
+      setFinalResult(wonStr); // <-- Set hasil final
+      setStatus(`Spin successful!`);
+      
       await Promise.all([refetchClaimed(), refetchNonces(), refetchTickets(), refetchVaultBalance()]);
 
     } catch (e: any) {
       setStatus(`Error: ${e?.shortMessage || e?.message || "Unknown error"}`);
-      setPredictedResult(null);
     } finally {
+      setIsSpinning(false); // <-- Hentikan animasi putaran
       setLoading(false);
-      setIsSpinning(false);
     }
   };
 
@@ -198,15 +150,14 @@ const Spin: FC = () => {
         </div>
       )}
 
+      {/* --- Area Tampilan Spin (DIPERBARUI) --- */}
       <div className="py-2 min-h-[120px] flex flex-col justify-center items-center">
-        {isSpinning && predictedResult ? (
+        {isSpinning ? (
           <div className="text-4xl font-bold text-yellow-400">
-            <Ticker finalValue={predictedResult} />
+            <SpinningNumbers />
           </div>
         ) : finalResult ? (
            <div className="text-2xl font-bold text-yellow-400">You won {finalResult} $BaseTC!</div>
-        ) : predictedResult ? (
-          <div className="text-2xl font-bold text-sky-400">You got ~{predictedResult.toFixed(6)} $BaseTC!</div>
         ) : (
           <button
             onClick={handleSpin}
