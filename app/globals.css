@@ -241,3 +241,8 @@ html::after{
 .fin-card-trans:hover {
   background: rgba(25, 30, 45, 0.55);
 }
+
+.ticker{overflow:hidden;width:100%;}
+.ticker__track{display:flex;width:max-content;animation:marquee 22s linear infinite;}
+@media (hover:hover){.ticker:hover .ticker__track{animation-play-state:paused;}}
+@media (prefers-reduced-motion:reduce){.ticker__track{animation:none;transform:translateX(0);}}
