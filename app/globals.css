@@ -264,3 +264,9 @@ html::after{
     transform: translateX(0);
   }
 }
+
+.basetc-ticker{overflow:hidden;width:100%}
+.basetc-track{display:flex;width:max-content;animation:basetc-marquee 22s linear infinite}
+@keyframes basetc-marquee{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
+@media (hover:hover){.basetc-ticker:hover .basetc-track{animation-play-state:paused}}
+@media (prefers-reduced-motion:reduce){.basetc-track{animation:none;transform:translateX(0)}}
