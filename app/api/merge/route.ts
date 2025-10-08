@@ -2,16 +2,16 @@
 import { NextResponse } from "next/server";
 import { createPublicClient, createWalletClient, http } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { base } from "viem/chains";
+import { base } from "viem/chains"; // <--- GANTI INI
 import { gameCoreAddress, gameCoreABI } from "../../lib/web3Config";
 
 export const runtime = "nodejs";
 
-const RPC_URL = process.env.RPC_URL || "https://mainnet.base.org"; // Ganti RPC
+const RPC_URL = process.env.RPC_URL || "https://mainnet.base.org"; // <--- GANTI INI
 const RELAYER_PK = process.env.RELAYER_PRIVATE_KEY as `0x${string}`;
 
 const publicClient = createPublicClient({
-  chain: base, // Ganti ke `base`
+  chain: base, // <--- GANTI INI
   transport: http(RPC_URL),
 });
 
@@ -20,7 +20,7 @@ function getWalletClient() {
   const account = privateKeyToAccount(RELAYER_PK);
   return createWalletClient({
     account,
-    chain: base, // Ganti ke `base`
+    chain: base, // <--- GANTI INI
     transport: http(RPC_URL),
   });
 }
@@ -46,7 +46,7 @@ export async function POST(req: Request) {
         functionName: "mergeBasicToPro",
         args: [user, BigInt(fid)],
         account,
-        chain: baseSepolia,
+        chain: base, // <--- GANTI INI
       });
       return NextResponse.json({ ok: true, tx });
     } else {
@@ -56,7 +56,7 @@ export async function POST(req: Request) {
         functionName: "mergeProToLegend",
         args: [user, BigInt(fid)],
         account,
-        chain: baseSepolia,
+        chain: base, // <--- GANTI INI
       });
       return NextResponse.json({ ok: true, tx });
     }
@@ -67,4 +67,3 @@ export async function POST(req: Request) {
     );
   }
 }
-
