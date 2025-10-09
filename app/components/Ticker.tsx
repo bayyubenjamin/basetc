@@ -16,13 +16,13 @@ export default function Ticker() {
 
   return (
     <>
-        <div className="basetc-ticker fixed top-0 left-0 z-50 h-9 w-full overflow-hidden border-b border-white/10 bg-zinc-950/80 backdrop-blur-md">
+<div className="basetc-ticker fixed top-0 left-0 z-50 flex items-center h-9 w-full overflow-hidden border-b border-white/10 bg-zinc-950/80 backdrop-blur-md">
         {/* left/right fade */}
         <div className="pointer-events-none absolute inset-y-0 left-0 w-10 bg-gradient-to-r from-zinc-950/80 to-transparent" />
         <div className="pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-zinc-950/80 to-transparent" />
 
         {/* running track (pakai class kamu persis) */}
-        <div className="basetc-track flex items-center">
+<div className="basetc-track flex items-center justify-start h-full leading-none text-[15px]">
           <TickerContent />
           <TickerContent />
         </div>
