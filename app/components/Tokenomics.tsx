@@ -36,24 +36,38 @@ export default function TokenomicsLite() {
     ctx.fill();
     ctx.restore();
 
-    // Slices with subtle separator stroke
-    let start = -Math.PI / 2;
-    parts.forEach((p) => {
-      const slice = (p.value / 100) * Math.PI * 2;
-      ctx.beginPath();
-      ctx.moveTo(cx, cy);
-      ctx.arc(cx, cy, radius, start, start + slice);
-      ctx.closePath();
-      ctx.fillStyle = p.color;
-      ctx.fill();
+    // Slices with labels
+let start = -Math.PI / 2;
+parts.forEach((p) => {
+  const slice = (p.value / 100) * Math.PI * 2;
+  const mid = start + slice / 2;
 
-      // hairline divider
-      ctx.lineWidth = 1;
-      ctx.strokeStyle = "rgba(255,255,255,0.06)";
-      ctx.stroke();
+  // Pie segment
+  ctx.beginPath();
+  ctx.moveTo(cx, cy);
+  ctx.arc(cx, cy, radius, start, start + slice);
+  ctx.closePath();
+  ctx.fillStyle = p.color;
+  ctx.fill();
 
-      start += slice;
-    });
+  // Divider stroke (subtle)
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = "rgba(255,255,255,0.05)";
+  ctx.stroke();
+
+  // === Label on slice ===
+  const labelRadius = radius * 0.78; // posisi label agak ke tengah
+  const lx = cx + Math.cos(mid) * labelRadius;
+  const ly = cy + Math.sin(mid) * labelRadius;
+
+  ctx.fillStyle = "#f3f4f6";
+  ctx.font = "500 12px Inter, ui-sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(`${p.value}%`, lx, ly);
+
+  start += slice;
+});
 
     // Donut hole (graphite) untuk kesan mahal
     ctx.beginPath();
