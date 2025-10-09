@@ -87,7 +87,7 @@ function TickerContent() {
       <span className="font-medium text-zinc-200">Mining&nbsp;Rewards</span>
       <span className="ml-2 rounded px-2 py-0.5 text-sm font-semibold text-white bg-sky-600/80">85.2% = 17.9M</span>
       <span className="mx-3 text-zinc-500">•</span>
-      <span className="font-medium text-zinc-200">Liquidity</span>
+      <span className="font-medium text-zinc-200">Eco & LP Reserve</span>
       <span className="ml-2 rounded px-2 py-0.5 text-sm font-semibold text-white bg-teal-600/80">10% = 2.1M</span>
       <span className="mx-3 text-zinc-500">•</span>
       <span className="font-medium text-zinc-200">Treasury</span>
