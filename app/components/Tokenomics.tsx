@@ -36,50 +36,39 @@ export default function TokenomicsLite() {
     ctx.fill();
     ctx.restore();
 
-    // Slices + labels di atas tiap slice (anti-tabrak)
-let start = -Math.PI / 2;
-parts.forEach((p) => {
-  const slice = (p.value / 100) * Math.PI * 2;
-  const mid = start + slice / 2;
 
-  // segmen
-  ctx.beginPath();
-  ctx.moveTo(cx, cy);
-  ctx.arc(cx, cy, radius, start, start + slice);
-  ctx.closePath();
-  ctx.fillStyle = p.color;
-  ctx.fill();
+    // Slices + labels di atas tiap slice
+    let start = -Math.PI / 2;
+    parts.forEach((p) => {
+      const slice = (p.value / 100) * Math.PI * 2;
+      const mid = start + slice / 2;
 
-  // divider tipis
-  ctx.lineWidth = 1;
-  ctx.strokeStyle = "rgba(255,255,255,0.05)";
-  ctx.stroke();
+      // segmen
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.arc(cx, cy, radius, start, start + slice);
+      ctx.closePath();
+      ctx.fillStyle = p.color;
+      ctx.fill();
 
-  // ===== Label on-slice (lebih ke luar untuk slice kecil / area atas)
-  // basis radius label
-  let labelRadius = radius * 0.82;
-  if (p.value < 15) labelRadius = radius * 0.88;
-  if (p.value < 8) labelRadius = radius * 0.94;
+      // divider tipis
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = "rgba(255,255,255,0.05)";
+      ctx.stroke();
 
-  // kalau posisinya dekat titik atas (mid ≈ -90°), dorong lebih jauh
-  const nearTop = Math.abs((mid + Math.PI / 2) % (2 * Math.PI)) < 0.35; // ~20°
-  if (nearTop) labelRadius = Math.max(labelRadius, radius * 0.96);
+      // label persen di atas slice
+      const labelRadius = radius * 0.78;
+      const lx = cx + Math.cos(mid) * labelRadius;
+      const ly = cy + Math.sin(mid) * labelRadius;
 
-  const lx = cx + Math.cos(mid) * labelRadius;
-  const ly = cy + Math.sin(mid) * labelRadius;
+      ctx.fillStyle = "#f3f4f6";
+      ctx.font = "500 12px Inter, ui-sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(`${p.value}%`, lx, ly);
 
-  // teks dengan outline tipis biar tetap kebaca
-  ctx.font = "500 12px Inter, ui-sans-serif";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillStyle = "#f3f4f6";
-  ctx.strokeStyle = "rgba(0,0,0,0.35)";
-  ctx.lineWidth = 2;
-  ctx.strokeText(`${p.value}%`, lx, ly);
-  ctx.fillText(`${p.value}%`, lx, ly);
-
-  start += slice;
-});
+      start += slice;
+    })
 
     // Donut hole (graphite)
     ctx.beginPath();
@@ -100,7 +89,7 @@ ctx.fillText("Token Distribution", cx, cy - 6);
 ctx.font = "500 11px Inter, ui-sans-serif";
 const labels = [
   { text: "Mining", color: "#4F7CFF", offset: 8 },
-  { text: "Liquidity", color: "#1CC7A0", offset: 22 },
+  { text: "Eco & LP", color: "#1CC7A0", offset: 22 },
   { text: "Treasury", color: "#FFB23D", offset: 36 },
 ] as const;
 
