@@ -17,21 +17,26 @@ export default function TokenomicsLite() {
     const cy = height / 2;
     const radius = Math.min(cx, cy) - 8;
 
+    // Premium palette (lebih mewah & konsisten)
     const parts = [
-      { label: "Mining Rewards", value: 85.2, color: "#3b82f6" },
-      { label: "Ecosystem & Liquidity", value: 10.0, color: "#14b8a6" },
-      { label: "Treasury (Satoshi Wallet)", value: 4.8, color: "#f59e0b" },
+      { label: "Mining Rewards", value: 85.2, color: "#4F7CFF" },   // royal cobalt
+      { label: "Ecosystem & Liquidity", value: 10.0, color: "#1CC7A0" }, // emerald
+      { label: "Treasury (Satoshi Wallet)", value: 4.8, color: "#FFB23D" }, // warm amber
     ];
 
     ctx.clearRect(0, 0, width, height);
 
-    // Background ring
+    // Background ring (deep navy) + subtle shadow
+    ctx.save();
     ctx.beginPath();
     ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-    ctx.fillStyle = "#0f1320";
+    ctx.fillStyle = "#0a0f1a";
+    ctx.shadowColor = "rgba(0,0,0,0.35)";
+    ctx.shadowBlur = 16;
     ctx.fill();
+    ctx.restore();
 
-    // Slices
+    // Slices with subtle separator stroke
     let start = -Math.PI / 2;
     parts.forEach((p) => {
       const slice = (p.value / 100) * Math.PI * 2;
@@ -41,29 +46,35 @@ export default function TokenomicsLite() {
       ctx.closePath();
       ctx.fillStyle = p.color;
       ctx.fill();
+
+      // hairline divider
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = "rgba(255,255,255,0.06)";
+      ctx.stroke();
+
       start += slice;
     });
 
-    // Donut hole
+    // Donut hole (graphite) untuk kesan mahal
     ctx.beginPath();
     ctx.arc(cx, cy, radius * 0.58, 0, Math.PI * 2);
-    ctx.fillStyle = "#0b0d12";
+    ctx.fillStyle = "#0c111d";
     ctx.fill();
 
     // Center text
-    ctx.fillStyle = "#e5e7eb";
+    ctx.fillStyle = "#e6ebf5";
     ctx.font = "600 14px Inter, ui-sans-serif";
     ctx.textAlign = "center";
     ctx.fillText("Token Distribution", cx, cy - 6);
-    ctx.fillStyle = "#9aa3b2";
+    ctx.fillStyle = "#9aa6b2";
     ctx.font = "400 12px Inter, ui-sans-serif";
     ctx.fillText("85.2% / 10% / 4.8%", cx, cy + 12);
   }, []);
 
   return (
     <div className="mx-auto w-full max-w-[1120px]">
-      {/* Pie Chart */}
-      <div className="rounded-xl border border-white/10 bg-zinc-950/60 p-3 sm:p-4">
+      {/* Pie Chart (container dengan nuansa premium) */}
+      <div className="rounded-xl border border-white/10 bg-gradient-to-b from-[#0b0f1a]/85 to-[#0b0f1a]/60 p-3 sm:p-4 shadow-[0_6px_24px_rgba(0,0,0,0.25)]">
         <canvas
           ref={canvasRef}
           width={400}
@@ -78,8 +89,7 @@ export default function TokenomicsLite() {
         title="Main Distribution"
         desc={
           <>
-            Fixed supply <b>21,000,000</b> (18 decimals). Rewards reduce by{" "}
-            <b>50%</b> every <b>30 days</b> (halving).
+            Fixed supply <b>21,000,000</b> (18 decimals). Rewards reduce by <b>50%</b> every <b>30 days</b> (halving).
           </>
         }
       >
@@ -106,7 +116,7 @@ export default function TokenomicsLite() {
             />
             <tr className="border-t border-white/10">
               <td className="px-4 py-3 font-semibold">Total Supply</td>
-              <td className="px-4 py-3 font-semibold">21,000,000 $BaseTC</td>
+              <td className="px-4 py-3 font-semibold tabular-nums">21,000,000 $BaseTC</td>
               <td className="px-4 py-3 font-semibold">100%</td>
               <td className="px-4 py-3 text-zinc-400">18 decimals — fixed.</td>
             </tr>
@@ -126,8 +136,11 @@ export default function TokenomicsLite() {
           </tbody>
         </table>
 
-        <div className="mt-3 rounded-lg bg-zinc-900/70 px-4 py-3 text-sm text-zinc-400">
-          <b>Example:</b> If 100,000 $BaseTC remain unmined → 50,000 burned, 30,000 to staking rewards, 10,000 to Spin Pool, 10,000 to Leaderboard.
+        {/* Example (chip style) */}
+        <div className="mt-3 rounded-lg bg-[#0e1424]/70 ring-1 ring-white/10 px-4 py-3 text-sm text-zinc-300">
+          <span className="opacity-90 font-semibold">Example:</span>{" "}
+          If 100,000 $BaseTC remain unmined → <span className="text-red-300">50,000 burned</span>,{" "}
+          <span className="text-emerald-300">30,000 to staking rewards</span>, 10,000 to Spin Pool, 10,000 to Leaderboard.
         </div>
       </Section>
 
@@ -136,8 +149,7 @@ export default function TokenomicsLite() {
         title="NFT Mining Mechanics"
         desc={
           <>
-            Rewards reduce by <b>50%</b> every <b>30 days</b>. Upgrades and repairs require $BaseTC
-            (burn or LP sink).
+            Rewards reduce by <b>50%</b> every <b>30 days</b>. Upgrades and repairs require $BaseTC (burn or LP sink).
           </>
         }
       >
@@ -176,9 +188,8 @@ export default function TokenomicsLite() {
         </table>
 
         <div className="px-4 py-4">
-          <div className="rounded-lg border border-amber-400/30 bg-amber-400/10 px-4 py-3 text-amber-100 text-sm leading-relaxed">
-            <b>Legend Supply is strictly limited to 3,000 NFTs</b> — 1,500 Market Sale + 1,500 via Merge.
-            This cap will <u>never</u> increase.
+          <div className="rounded-lg border border-amber-300/30 bg-gradient-to-br from-amber-400/10 to-amber-300/5 px-4 py-3 text-amber-100 text-sm leading-relaxed">
+            <b>Legend Supply is strictly limited to 3,000 NFTs</b> — 1,500 Market Sale + 1,500 via Merge. This cap will <u>never</u> increase.
           </div>
         </div>
       </Section>
@@ -190,7 +201,7 @@ export default function TokenomicsLite() {
 
 function Section({ title, desc, children }: { title: string; desc?: React.ReactNode; children?: React.ReactNode }) {
   return (
-    <div className="mt-4 rounded-xl border border-white/10 bg-zinc-950/60">
+    <div className="mt-4 rounded-xl border border-white/10 bg-gradient-to-b from-[#0b0f1a]/80 to-[#0b0f1a]/55">
       <div className="border-b border-white/10 px-4 py-3">
         <h2 className="text-base font-semibold text-zinc-100">{title}</h2>
         {desc && <p className="text-sm text-zinc-400">{desc}</p>}
@@ -203,7 +214,7 @@ function Section({ title, desc, children }: { title: string; desc?: React.ReactN
 function TableHead({ cols }: { cols: string[] }) {
   return (
     <thead>
-      <tr className="bg-white/5 text-left text-zinc-200">
+      <tr className="bg-white/[.06] text-left text-zinc-200">
         {cols.map((c, i) => (
           <th key={i} className="px-4 py-3 font-semibold">
             {c}
@@ -216,10 +227,10 @@ function TableHead({ cols }: { cols: string[] }) {
 
 function Row({ cat, amount, share, note }: { cat: string; amount: string; share: string; note: string }) {
   return (
-    <tr className="border-b border-white/10 last:border-b-0">
+    <tr className="border-b border-white/10 last:border-b-0 hover:bg-white/5 transition-colors">
       <td className="px-4 py-3">{cat}</td>
-      <td className="px-4 py-3">{amount}</td>
-      <td className="px-4 py-3 font-semibold text-sky-400">{share}</td>
+      <td className="px-4 py-3 tabular-nums">{amount}</td>
+      <td className="px-4 py-3 font-semibold text-[#7FB2FF]">{share}</td>
       <td className="px-4 py-3 text-zinc-400">{note}</td>
     </tr>
   );
@@ -227,9 +238,9 @@ function Row({ cat, amount, share, note }: { cat: string; amount: string; share:
 
 function Row2({ cat, share, desc }: { cat: string; share: string; desc: string }) {
   return (
-    <tr className="border-b border-white/10 last:border-b-0">
+    <tr className="border-b border-white/10 last:border-b-0 hover:bg-white/5 transition-colors">
       <td className="px-4 py-3">{cat}</td>
-      <td className="px-4 py-3 font-semibold text-amber-400">{share}</td>
+      <td className="px-4 py-3 font-semibold text-[#FACC6B]">{share}</td>
       <td className="px-4 py-3 text-zinc-400">{desc}</td>
     </tr>
   );
@@ -249,9 +260,9 @@ function RowNFT({
   path: string;
 }) {
   return (
-    <tr className="border-b border-white/10 last:border-b-0">
+    <tr className="border-b border-white/10 last:border-b-0 hover:bg-white/5 transition-colors">
       <td className="px-4 py-3">{tier}</td>
-      <td className="px-4 py-3">{slots}</td>
+      <td className="px-4 py-3 tabular-nums">{slots}</td>
       <td className="px-4 py-3 text-zinc-300">{reward}</td>
       <td className="px-4 py-3 text-zinc-300">{roi}</td>
       <td className="px-4 py-3 text-zinc-400">{path}</td>
