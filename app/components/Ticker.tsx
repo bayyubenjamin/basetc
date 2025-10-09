@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import TokenomicsLite from "./TokenomicsLite";
+import TokenomicsLite from "./Tokenomics";
 
 export default function Ticker() {
   const [open, setOpen] = useState(false);
