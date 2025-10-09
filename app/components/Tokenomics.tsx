@@ -65,12 +65,12 @@ export default function TokenomicsLite() {
       {/* top chart */}
       <div className="rounded-xl border border-white/10 bg-zinc-950/60 p-3 sm:p-4">
         <canvas
-          ref={canvasRef}
-          width={400}
-          height={400}
-          className="h-[260px] w-full"
-          aria-label="Token distribution pie chart"
-        />
+  ref={canvasRef}
+  width={400}
+  height={400}
+  className="h-[280px] w-[280px] mx-auto sm:h-[340px] sm:w-[340px]"
+  aria-label="Token distribution pie chart"
+/>
       </div>
 
       {/* main table */}
