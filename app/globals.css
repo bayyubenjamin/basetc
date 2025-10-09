@@ -270,3 +270,12 @@ html::after{
 @keyframes basetc-marquee{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
 @media (hover:hover){.basetc-ticker:hover .basetc-track{animation-play-state:paused}}
 @media (prefers-reduced-motion:reduce){.basetc-track{animation:none;transform:translateX(0)}}
+
+.basetc-track {
+  animation: basetc-marquee 40s linear infinite;
+  will-change: transform;
+}
+@keyframes basetc-marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
