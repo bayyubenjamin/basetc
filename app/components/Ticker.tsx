@@ -36,7 +36,7 @@ function Content() {
         85.2% = 17.9M
       </span>
       <Dot />
-      <span className="font-medium text-zinc-200">Liquidity</span>
+      <span className="font-medium text-zinc-200">Ecosystem & Liquidity Reserve</span>
       <span className="ml-2 rounded px-2 py-0.5 text-sm font-semibold text-white bg-teal-600/80">
         10% = 2.1M
       </span>
