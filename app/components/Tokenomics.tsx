@@ -152,26 +152,6 @@ labels.forEach((l) => {
         </table>
       </Section>
 
-      {/* Leftover Rewards */}
-      <Section title="Leftover Rewards (every 30 days)">
-        <table className="w-full min-w-[680px] border-separate border-spacing-0">
-          <TableHead cols={["Category", "Share", "Description"]} />
-          <tbody className="text-zinc-300">
-            <Row2 cat="Burn" share="50%" desc="Unmined portion is burned to enforce deflation." />
-            <Row2 cat="Staking Vault" share="30%" desc="Extra rewards for active stakers." />
-            <Row2 cat="Spin Pool" share="10%" desc="Daily check-in (Roulette Spin)." />
-            <Row2 cat="Leaderboard" share="10%" desc="Top 1,000 miners at the end of each 30-day period." />
-          </tbody>
-        </table>
-
-        {/* Example */}
-        <div className="mt-3 rounded-lg bg-[#0e1424]/70 ring-1 ring-white/10 px-4 py-3 text-sm text-zinc-300">
-          <span className="opacity-90 font-semibold">Example:</span>{" "}
-          If 100,000 $BaseTC remain unmined → <span className="text-red-300">50,000 burned</span>,{" "}
-          <span className="text-emerald-300">30,000 to staking rewards</span>, 10,000 to Spin Pool, 10,000 to Leaderboard.
-        </div>
-      </Section>
-
       {/* NFT Mechanics */}
       <Section
         title="NFT Mining Mechanics"
@@ -216,9 +196,35 @@ labels.forEach((l) => {
         </table>
 
         <div className="px-4 py-4">
-          <div className="rounded-lg border border-amber-300/30 bg-gradient-to-br from-amber-400/10 to-amber-300/5 px-4 py-3 text-amber-100 text-sm leading-relaxed">
-            <b>Legend Supply is strictly limited to 3,000 NFTs</b> — 1,500 Market Sale + 1,500 via Merge. This cap will <u>never</u> increase.
-          </div>
+  <div className="rounded-lg border border-sky-400/20 bg-gradient-to-br from-[#0d141f] to-[#0a101a] px-4 py-3 text-[13.5px] leading-relaxed text-zinc-200 shadow-[0_0_12px_rgba(0,0,0,0.3)]">
+    <b className="text-sky-300">Legend Supply</b> is strictly limited to{" "}
+    <span className="font-semibold text-white">3,000 NFTs</span> —{" "}
+    <span className="text-sky-400/90">1,500 Market Sale</span> +{" "}
+    <span className="text-sky-400/90">1,500 via Merge</span>.{" "}
+    <span className="text-zinc-400">
+      This cap will <u className="text-sky-300/90">never</u> increase.
+    </span>
+  </div>
+</div>
+      </Section>
+
+      {/* Leftover Rewards */}
+      <Section title="Leftover Rewards (every 30 days)">
+        <table className="w-full min-w-[680px] border-separate border-spacing-0">
+          <TableHead cols={["Category", "Share", "Description"]} />
+          <tbody className="text-zinc-300">
+            <Row2 cat="Burn" share="50%" desc="Unmined portion is burned to enforce deflation." />
+            <Row2 cat="Staking Vault" share="30%" desc="Extra rewards for active stakers." />
+            <Row2 cat="Spin Pool" share="10%" desc="Daily check-in (Roulette Spin)." />
+            <Row2 cat="Leaderboard" share="10%" desc="Top 1,000 miners at the end of each 30-day period." />
+          </tbody>
+        </table>
+
+        {/* Example */}
+        <div className="mt-3 rounded-lg bg-[#0e1424]/70 ring-1 ring-white/10 px-4 py-3 text-sm text-zinc-300">
+          <span className="opacity-90 font-semibold">Example:</span>{" "}
+          If 100,000 $BaseTC remain unmined → <span className="text-red-300">50,000 burned</span>,{" "}
+          <span className="text-emerald-300">30,000 to staking rewards</span>, 10,000 to Spin Pool, 10,000 to Leaderboard.
         </div>
       </Section>
     </div>
