@@ -12,14 +12,14 @@ export default function TokenomicsLite() {
     if (!ctx) return;
 
     const width = el.width;
-    const height = el.height;
+    const height = el.height; // (tersisa kalau nanti perlu)
     const cx = width / 2;
     const cy = height / 2;
     const radius = Math.min(cx, cy) - 8;
 
-    // Premium palette (lebih mewah & konsisten)
+    // Premium palette (mewah & konsisten)
     const parts = [
-      { label: "Mining Rewards", value: 85.2, color: "#4F7CFF" },   // royal cobalt
+      { label: "Mining Rewards", value: 85.2, color: "#4F7CFF" },    // royal cobalt
       { label: "Ecosystem & Liquidity", value: 10.0, color: "#1CC7A0" }, // emerald
       { label: "Treasury (Satoshi Wallet)", value: 4.8, color: "#FFB23D" }, // warm amber
     ];
@@ -36,70 +36,71 @@ export default function TokenomicsLite() {
     ctx.fill();
     ctx.restore();
 
-    // Slices with labels
-let start = -Math.PI / 2;
-parts.forEach((p) => {
-  const slice = (p.value / 100) * Math.PI * 2;
-  const mid = start + slice / 2;
+    // Slices + labels di atas tiap slice
+    let start = -Math.PI / 2;
+    parts.forEach((p) => {
+      const slice = (p.value / 100) * Math.PI * 2;
+      const mid = start + slice / 2;
 
-  // Pie segment
-  ctx.beginPath();
-  ctx.moveTo(cx, cy);
-  ctx.arc(cx, cy, radius, start, start + slice);
-  ctx.closePath();
-  ctx.fillStyle = p.color;
-  ctx.fill();
+      // segmen
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.arc(cx, cy, radius, start, start + slice);
+      ctx.closePath();
+      ctx.fillStyle = p.color;
+      ctx.fill();
 
-  // Divider stroke (subtle)
-  ctx.lineWidth = 1;
-  ctx.strokeStyle = "rgba(255,255,255,0.05)";
-  ctx.stroke();
+      // divider tipis
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = "rgba(255,255,255,0.05)";
+      ctx.stroke();
 
-  // === Label on slice ===
-  const labelRadius = radius * 0.78; // posisi label agak ke tengah
-  const lx = cx + Math.cos(mid) * labelRadius;
-  const ly = cy + Math.sin(mid) * labelRadius;
+      // label persen di atas slice
+      const labelRadius = radius * 0.78;
+      const lx = cx + Math.cos(mid) * labelRadius;
+      const ly = cy + Math.sin(mid) * labelRadius;
 
-  ctx.fillStyle = "#f3f4f6";
-  ctx.font = "500 12px Inter, ui-sans-serif";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText(`${p.value}%`, lx, ly);
+      ctx.fillStyle = "#f3f4f6";
+      ctx.font = "500 12px Inter, ui-sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(`${p.value}%`, lx, ly);
 
-  start += slice;
-});
+      start += slice;
+    });
 
-    // Donut hole (graphite) untuk kesan mahal
-ctx.beginPath();
-ctx.arc(cx, cy, radius * 0.58, 0, Math.PI * 2);
-ctx.fillStyle = "#0c111d";
-ctx.fill();
+    // Donut hole (graphite)
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius * 0.58, 0, Math.PI * 2);
+    ctx.fillStyle = "#0c111d";
+    ctx.fill();
 
-// === Center Text ===
-ctx.textAlign = "center";
-ctx.textBaseline = "middle";
+    // === Center Text ===
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
 
-// Judul utama
-ctx.fillStyle = "#e6ebf5";
-ctx.font = "600 14px Inter, ui-sans-serif";
-ctx.fillText("Token Distribution", cx, cy - 10);
+    // Judul
+    ctx.fillStyle = "#e6ebf5";
+    ctx.font = "600 14px Inter, ui-sans-serif";
+    ctx.fillText("Token Distribution", cx, cy - 10);
 
-// Label per sektor (warna sesuai pie)
-ctx.font = "500 12px Inter, ui-sans-serif";
-const labels = [
-  { text: "Mining", color: "#4F7CFF", offset: -2 },
-  { text: "Liquidity", color: "#1CC7A0", offset: 12 },
-  { text: "Treasury", color: "#FFB23D", offset: 26 },
-];
+    // Nama alokasi (warna mengikuti pie)
+    ctx.font = "500 12px Inter, ui-sans-serif";
+    const labels = [
+      { text: "Mining", color: "#4F7CFF", offset: -2 },
+      { text: "Liquidity", color: "#1CC7A0", offset: 12 },
+      { text: "Treasury", color: "#FFB23D", offset: 26 },
+    ] as const;
 
-labels.forEach((l) => {
-  ctx.fillStyle = l.color;
-  ctx.fillText(l.text, cx, cy + l.offset);
-});
+    labels.forEach((l) => {
+      ctx.fillStyle = l.color;
+      ctx.fillText(l.text, cx, cy + l.offset);
+    });
+  }, []); // ⬅️ PENTING: tutup useEffect di sini
 
   return (
     <div className="mx-auto w-full max-w-[1120px]">
-      {/* Pie Chart (container dengan nuansa premium) */}
+      {/* Pie Chart (container premium) */}
       <div className="rounded-xl border border-white/10 bg-gradient-to-b from-[#0b0f1a]/85 to-[#0b0f1a]/60 p-3 sm:p-4 shadow-[0_6px_24px_rgba(0,0,0,0.25)]">
         <canvas
           ref={canvasRef}
@@ -162,7 +163,7 @@ labels.forEach((l) => {
           </tbody>
         </table>
 
-        {/* Example (chip style) */}
+        {/* Example */}
         <div className="mt-3 rounded-lg bg-[#0e1424]/70 ring-1 ring-white/10 px-4 py-3 text-sm text-zinc-300">
           <span className="opacity-90 font-semibold">Example:</span>{" "}
           If 100,000 $BaseTC remain unmined → <span className="text-red-300">50,000 burned</span>,{" "}
