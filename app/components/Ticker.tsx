@@ -31,11 +31,11 @@ export default function Ticker() {
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex items-center gap-2 rounded-md border border-red-500/50 bg-red-600/80 px-3 py-1 text-xs font-semibold text-white hover:bg-red-500 transition"
+          className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex items-center gap-2 rounded-md border border-red-700 bg-red-600 px-3 py-1 text-xs font-semibold text-white hover:bg-red-700 transition shadow-[0_0_12px_rgba(220,38,38,0.6)]"
           aria-haspopup="dialog"
           aria-expanded={open}
         >
-          Info
+          Read!
         </button>
       </div>
 
