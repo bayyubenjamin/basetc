@@ -35,7 +35,8 @@ export default function Ticker() {
   aria-haspopup="dialog"
   aria-expanded={open}
 >
-          Read!
+          See
+Details
         </button>
       </div>
 
