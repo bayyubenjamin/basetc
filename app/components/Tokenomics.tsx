@@ -70,20 +70,32 @@ parts.forEach((p) => {
 });
 
     // Donut hole (graphite) untuk kesan mahal
-    ctx.beginPath();
-    ctx.arc(cx, cy, radius * 0.58, 0, Math.PI * 2);
-    ctx.fillStyle = "#0c111d";
-    ctx.fill();
+ctx.beginPath();
+ctx.arc(cx, cy, radius * 0.58, 0, Math.PI * 2);
+ctx.fillStyle = "#0c111d";
+ctx.fill();
 
-    // Center text
-    ctx.fillStyle = "#e6ebf5";
-    ctx.font = "600 14px Inter, ui-sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText("Token Distribution", cx, cy - 6);
-    ctx.fillStyle = "#9aa6b2";
-    ctx.font = "400 12px Inter, ui-sans-serif";
-    ctx.fillText("85.2% / 10% / 4.8%", cx, cy + 12);
-  }, []);
+// === Center Text ===
+ctx.textAlign = "center";
+ctx.textBaseline = "middle";
+
+// Judul utama
+ctx.fillStyle = "#e6ebf5";
+ctx.font = "600 14px Inter, ui-sans-serif";
+ctx.fillText("Token Distribution", cx, cy - 10);
+
+// Label per sektor (warna sesuai pie)
+ctx.font = "500 12px Inter, ui-sans-serif";
+const labels = [
+  { text: "Mining", color: "#4F7CFF", offset: -2 },
+  { text: "Liquidity", color: "#1CC7A0", offset: 12 },
+  { text: "Treasury", color: "#FFB23D", offset: 26 },
+];
+
+labels.forEach((l) => {
+  ctx.fillStyle = l.color;
+  ctx.fillText(l.text, cx, cy + l.offset);
+});
 
   return (
     <div className="mx-auto w-full max-w-[1120px]">
