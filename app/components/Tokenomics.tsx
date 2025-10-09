@@ -1,293 +1,212 @@
-// app/components/Tokenomics.tsx
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useRef } from "react";
 
-/**
- * $BaseTC — Tokenomics & NFT Mechanics
- * - Self-contained JSX (no CDN)
- * - Canvas pie chart rendered in useEffect
- * - Clean, readable structure & copy
- */
-export default function Tokenomics() {
+export default function TokenomicsLite() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
-  // —— Core numbers (easy to tweak later) ——
-  const totalSupply = 21_000_000;
-  const split = useMemo(
-    () => [
-      { label: "Mining Rewards", value: 85.2, colorVar: "--blue" },
-      { label: "Ecosystem & Liquidity", value: 10.0, colorVar: "--teal" },
-      { label: "Treasury (Satoshi Wallet)", value: 4.8, colorVar: "--gold" },
-    ],
-    []
-  );
-
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const css = getComputedStyle(document.documentElement);
-    const ctx = canvas.getContext("2d");
+    const el = canvasRef.current;
+    if (!el) return;
+    const ctx = el.getContext("2d");
     if (!ctx) return;
 
-    const width = canvas.width;
-    const height = canvas.height;
+    const width = el.width;
+    const height = el.height;
     const cx = width / 2;
     const cy = height / 2;
-    const radius = Math.min(cx, cy) - 10;
+    const radius = Math.min(cx, cy) - 8;
 
-    // bg
+    const parts = [
+      { label: "Mining Rewards", value: 85.2, color: "#3b82f6" },
+      { label: "Ecosystem & Liquidity", value: 10.0, color: "#14b8a6" },
+      { label: "Treasury (Satoshi Wallet)", value: 4.8, color: "#f59e0b" },
+    ];
+
     ctx.clearRect(0, 0, width, height);
+
+    // bg ring
     ctx.beginPath();
     ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-    ctx.fillStyle = "#0c1220";
+    ctx.fillStyle = "#0f1320";
     ctx.fill();
 
     // slices
     let start = -Math.PI / 2;
-    split.forEach((s) => {
-      const color = css.getPropertyValue(s.colorVar).trim() || "#999";
-      const slice = (s.value / 100) * Math.PI * 2;
+    parts.forEach((p) => {
+      const slice = (p.value / 100) * Math.PI * 2;
       ctx.beginPath();
       ctx.moveTo(cx, cy);
       ctx.arc(cx, cy, radius, start, start + slice);
       ctx.closePath();
-      ctx.fillStyle = color;
+      ctx.fillStyle = p.color;
       ctx.fill();
       start += slice;
     });
 
     // donut hole
     ctx.beginPath();
-    ctx.arc(cx, cy, radius * 0.56, 0, Math.PI * 2);
+    ctx.arc(cx, cy, radius * 0.58, 0, Math.PI * 2);
     ctx.fillStyle = "#0b0d12";
     ctx.fill();
 
-    // center labels
-    ctx.fillStyle = "#cfd7e6";
-    ctx.font = "600 15px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial";
+    // center text
+    ctx.fillStyle = "#e5e7eb";
+    ctx.font = "600 14px Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial";
     ctx.textAlign = "center";
     ctx.fillText("Token Distribution", cx, cy - 6);
-
     ctx.fillStyle = "#9aa3b2";
-    ctx.font = "400 13px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial";
+    ctx.font = "400 12px Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial";
     ctx.fillText("85.2% / 10% / 4.8%", cx, cy + 12);
-  }, [split]);
+  }, []);
 
   return (
-    <div className="wrap">
-      <header className="hdr">
-        <span className="dot" />
-        <h1>$BaseTC — Tokenomics &amp; NFT Mechanics</h1>
-      </header>
-      <p className="sub">Clean on-chain mining economy with 30-day halving and deflationary sinks.</p>
+    <div className="mx-auto w-full max-w-[1120px]">
+      {/* top chart */}
+      <div className="rounded-xl border border-white/10 bg-zinc-950/60 p-3 sm:p-4">
+        <canvas
+          ref={canvasRef}
+          width={900}
+          height={360}
+          className="h-[260px] w-full"
+          aria-label="Token distribution pie chart"
+        />
+      </div>
 
-      {/* ——— Pie + main table ——— */}
-      <div className="card">
-        <div className="grid grid-2">
-          <div>
-            <canvas
-              ref={canvasRef}
-              id="pie"
-              width={560}
-              height={360}
-              aria-label="Token distribution pie chart"
-            />
-          </div>
-          <div>
-            <h2>Main Distribution</h2>
-            <table className="tbl">
-              <thead>
-                <tr>
-                  <th>Category</th>
-                  <th>Amount</th>
-                  <th>Share</th>
-                  <th>Notes</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td>
-                    <span className="badge badgeBlue">Mining Rewards</span>
-                  </td>
-                  <td>17,900,000</td>
-                  <td><strong>85.2%</strong></td>
-                  <td>Distributed via NFT mining. Rewards reduce by <b>50%</b> every <b>30 days</b> (halving), ~2 years.</td>
-                </tr>
-                <tr>
-                  <td>
-                    <span className="badge badgeTeal">Ecosystem &amp; Liquidity Reserve</span>
-                  </td>
-                  <td>2,100,000</td>
-                  <td><strong>10%</strong></td>
-                  <td>Presale, LP seeding, partnerships, campaigns — price &amp; growth stability.</td>
-                </tr>
-                <tr>
-                  <td>
-                    <span className="badge badgeGold">Treasury (Satoshi Wallet)</span>
-                  </td>
-                  <td>1,000,000</td>
-                  <td><strong>4.8%</strong></td>
-                  <td>Core team reserve for development, operations, marketing.</td>
-                </tr>
-                <tr>
-                  <td><b>Total Supply</b></td>
-                  <td><b>{totalSupply.toLocaleString()} $BaseTC</b></td>
-                  <td><b>100%</b></td>
-                  <td className="mono">18 decimals — fixed supply.</td>
-                </tr>
-              </tbody>
-            </table>
-
-            <div className="legend">
-              <Legend color="var(--blue)" label="Mining Rewards (85.2%)" />
-              <Legend color="var(--teal)" label="Ecosystem & Liquidity (10%)" />
-              <Legend color="var(--gold)" label="Treasury (4.8%)" />
-            </div>
-          </div>
+      {/* main table */}
+      <div className="mt-4 rounded-xl border border-white/10 bg-zinc-950/60">
+        <div className="border-b border-white/10 px-4 py-3">
+          <h2 className="text-base font-semibold text-zinc-100">Main Distribution</h2>
+          <p className="text-sm text-zinc-400">
+            Fixed supply 21,000,000 (18 decimals). Rewards reduce by <b>50%</b> every <b>30 days</b> (halving).
+          </p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[720px] border-separate border-spacing-0">
+            <thead>
+              <tr className="bg-white/5 text-left text-zinc-200">
+                <th className="px-4 py-3 font-semibold">Category</th>
+                <th className="px-4 py-3 font-semibold">Amount</th>
+                <th className="px-4 py-3 font-semibold">Share</th>
+                <th className="px-4 py-3 font-semibold">Notes</th>
+              </tr>
+            </thead>
+            <tbody className="text-zinc-300">
+              <Row
+                cat="Mining Rewards"
+                amount="17,900,000"
+                share="85.2%"
+                note="Distributed via NFT mining; halving every 30 days (~2 years)."
+              />
+              <Row
+                cat="Ecosystem & Liquidity Reserve"
+                amount="2,100,000"
+                share="10%"
+                note="Presale, LP seeding, partnerships, campaigns."
+              />
+              <Row
+                cat="Treasury (Satoshi Wallet)"
+                amount="1,000,000"
+                share="4.8%"
+                note="Team reserve for development, operations, marketing."
+              />
+              <tr className="border-t border-white/10">
+                <td className="px-4 py-3 font-semibold">Total Supply</td>
+                <td className="px-4 py-3 font-semibold">21,000,000 $BaseTC</td>
+                <td className="px-4 py-3 font-semibold">100%</td>
+                <td className="px-4 py-3 text-zinc-400">18 decimals — fixed.</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
 
-      {/* ——— Leftover split ——— */}
-      <section>
-        <h2>Leftover Rewards (every 30 days)</h2>
-        <table className="tbl">
-          <thead>
-            <tr>
-              <th>Category</th>
-              <th>Share</th>
-              <th>Description</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr><td>Burn</td><td><b>50%</b></td><td>Unmined portion is burned to enforce deflation.</td></tr>
-            <tr><td>Staking Vault</td><td><b>30%</b></td><td>Boosts staking rewards for active holders.</td></tr>
-            <tr><td>Spin Pool</td><td><b>10%</b></td><td>Daily check-in rewards (Roulette Spin).</td></tr>
-            <tr><td>Leaderboard</td><td><b>10%</b></td><td>Distributed to the Top 1,000 miners at the close of each 30-day period.</td></tr>
-          </tbody>
-        </table>
-        <p className="tip">
-          <b>Example:</b> If 100,000 $BaseTC remain unmined → 🔥 50,000 burned, 💎 30,000 to staking, 🎰 10,000 to spin, 🏆 10,000 to leaderboard.
-        </p>
-      </section>
+      {/* leftover */}
+      <div className="mt-4 rounded-xl border border-white/10 bg-zinc-950/60">
+        <div className="border-b border-white/10 px-4 py-3">
+          <h2 className="text-base font-semibold text-zinc-100">Leftover Rewards (every 30 days)</h2>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[680px] border-separate border-spacing-0">
+            <thead>
+              <tr className="bg-white/5 text-left text-zinc-200">
+                <th className="px-4 py-3 font-semibold">Category</th>
+                <th className="px-4 py-3 font-semibold">Share</th>
+                <th className="px-4 py-3 font-semibold">Description</th>
+              </tr>
+            </thead>
+            <tbody className="text-zinc-300">
+              <Row2 cat="Burn" share="50%" desc="Unmined portion is burned to enforce deflation." />
+              <Row2 cat="Staking Vault" share="30%" desc="Extra rewards for active stakers." />
+              <Row2 cat="Spin Pool" share="10%" desc="Daily check-in (Roulette Spin)." />
+              <Row2 cat="Leaderboard" share="10%" desc="Top 1,000 miners at the end of each 30-day period." />
+            </tbody>
+          </table>
+        </div>
+      </div>
 
-      {/* ——— NFT mechanics ——— */}
-      <section>
-        <h2>NFT Mining Mechanics</h2>
-
-        <div className="callout">
-          <span className="ico">💡</span>
-          <div>
-            Rewards reduce by <b>50%</b> every <b>30 days</b> (halving). All upgrade / merge / repair actions require $BaseTC — a portion can be burned or routed to LP to stabilize price.
-          </div>
+      {/* tiers */}
+      <div className="mt-4 rounded-xl border border-white/10 bg-zinc-950/60">
+        <div className="border-b border-white/10 px-4 py-3">
+          <h2 className="text-base font-semibold text-zinc-100">NFT Mining Mechanics</h2>
+          <p className="text-sm text-zinc-400">
+            Rewards reduce by <b>50%</b> every <b>30 days</b>. Upgrades/repairs require $BaseTC (burn/LP sink).
+          </p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[820px] border-separate border-spacing-0">
+            <thead>
+              <tr className="bg-white/5 text-left text-zinc-200">
+                <th className="px-4 py-3 font-semibold">Tier</th>
+                <th className="px-4 py-3 font-semibold">Max Slots / User</th>
+                <th className="px-4 py-3 font-semibold">Reward per Day</th>
+                <th className="px-4 py-3 font-semibold">ROI (approx)</th>
+                <th className="px-4 py-3 font-semibold">Upgrade Path</th>
+              </tr>
+            </thead>
+            <tbody className="text-zinc-300">
+              <Row2 cat="Basic Rig" share="10" desc="1 Basic = 0.333 $BaseTC / day (≈ 3.33 with 10 slots)" />
+              <Row2 cat="Pro Rig" share="5" desc="1 Pro = 8 $BaseTC / day (≈ 40 with 5 slots) • 10 Basic → 1 Pro (+$BaseTC fee)" />
+              <Row2 cat="Legend Rig" share="3" desc="1 Legend = 100 $BaseTC / day (≈ 300 with 3 slots) • 5 Pro → 1 Legend (+$BaseTC fee)" />
+              <tr className="border-t border-white/10">
+                <td className="px-4 py-3 font-medium">Supreme (Status)</td>
+                <td className="px-4 py-3">1</td>
+                <td className="px-4 py-3">Bonus reward tier (Full Farm)</td>
+                <td className="px-4 py-3">—</td>
+                <td className="px-4 py-3">3 Legend → Supreme status</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
 
-        <h3 className="caps" style={{ marginTop: 16 }}>Tier Structure (before the first 30-day halving)</h3>
-        <table className="tbl">
-          <thead>
-            <tr>
-              <th>Tier</th>
-              <th>Max Slots / User</th>
-              <th>Reward per Day</th>
-              <th>ROI (approx)</th>
-              <th>Upgrade Path</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td><b>Basic Rig</b></td>
-              <td>10</td>
-              <td><b>1 Basic = 0.333 $BaseTC / day</b> <span className="tip">(≈ 3.33 $BaseTC with 10 slots)</span></td>
-              <td>~35 days</td>
-              <td>—</td>
-            </tr>
-            <tr>
-              <td><b>Pro Rig</b></td>
-              <td>5</td>
-              <td><b>1 Pro = 8 $BaseTC / day</b> <span className="tip">(≈ 40 $BaseTC with 5 slots)</span></td>
-              <td>~30 days</td>
-              <td>10 Basic → 1 Pro <span className="mono">(+ $BaseTC fee)</span></td>
-            </tr>
-            <tr>
-              <td><b>Legend Rig</b></td>
-              <td>3</td>
-              <td><b>1 Legend = 100 $BaseTC / day</b> <span className="tip">(≈ 300 $BaseTC with 3 slots)</span></td>
-              <td>~25 days</td>
-              <td>5 Pro → 1 Legend <span className="mono">(+ $BaseTC fee)</span></td>
-            </tr>
-            <tr>
-              <td><b>Supreme (Status)</b></td>
-              <td>1</td>
-              <td>Bonus reward tier (Full Farm Status)</td>
-              <td>—</td>
-              <td>3 Legend → Supreme status</td>
-            </tr>
-          </tbody>
-        </table>
-
-        <div className="callout" style={{ marginTop: 14 }}>
-          <span className="ico">⚠️</span>
-          <div>
-            <b>Legend Supply is strictly limited to 3,000 NFTs</b> — <span className="hi">1,500 Market Sale</span> + <span className="hi">1,500 via Merge</span>. This cap will never increase.
+        {/* legend cap */}
+        <div className="px-4 py-4">
+          <div className="rounded-lg border border-amber-400/30 bg-amber-400/10 px-4 py-3 text-amber-100">
+            <b>Legend Supply is strictly limited to 3,000 NFTs</b> — 1,500 Market Sale + 1,500 via Merge. This cap will never increase.
           </div>
         </div>
-
-        <h3 className="caps" style={{ marginTop: 18 }}>Economy Flow</h3>
-        <p>
-          <b>NFT Activity (Mint / Merge / Repair)</b> → <b>Token Utility ($BaseTC)</b> → <b>Burn / LP Injection</b> → <b>Price stabilization</b> → Sustainable ROI &amp; growth.
-        </p>
-      </section>
-
-      <style jsx>{`
-        :root{
-          --bg:#0b0d12; --panel:#121622; --muted:#9aa3b2; --text:#e8eef6;
-          --blue:#3b82f6;    /* Mining Rewards */
-          --teal:#14b8a6;    /* Ecosystem & Liquidity Reserve */
-          --gold:#f59e0b;    /* Treasury (Satoshi Wallet) */
-          --accent:#7c8bff;
-          --card:#0f1320; --border:#1f2536;
-        }
-        .wrap{max-width:1080px; margin:0 auto; padding:24px; background:var(--bg); color:var(--text)}
-        .hdr{display:flex; align-items:center; gap:14px; margin:10px 0 18px}
-        .dot{width:9px;height:9px;border-radius:50%;background:var(--accent)}
-        h1{font-size:26px; margin:0; letter-spacing:.2px}
-        .sub{color:var(--muted)}
-        .card{background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:18px; margin-top:16px}
-        .grid{display:grid; gap:16px}
-        .grid-2{grid-template-columns: 1.1fr .9fr}
-        @media(max-width: 959px){ .grid-2{grid-template-columns: 1fr} }
-        h2{font-size:20px;margin:0 0 10px}
-        section{margin:28px 0}
-        .tbl{width:100%; border-collapse: collapse; overflow:hidden; border-radius:12px; border:1px solid var(--border); background:var(--panel)}
-        .tbl th, .tbl td{padding:12px 12px; border-bottom:1px solid var(--border); vertical-align:top}
-        .tbl th{background:rgba(255,255,255,.02); text-align:left; color:#cfd7e6; font-weight:600}
-        .tbl tr:last-child td{border-bottom:0}
-        .badge{display:inline-block; padding:2px 8px; border-radius:999px; border:1px solid var(--border); background:var(--card); color:#dbe2f0; font-size:12px}
-        .badgeBlue{background:rgba(59,130,246,.15); border-color:transparent; color:#cfe1ff}
-        .badgeTeal{background:rgba(20,184,166,.15); border-color:transparent; color:#a6ffee}
-        .badgeGold{background:rgba(245,158,11,.15); border-color:transparent; color:#ffe3a3}
-        .legend{display:flex; flex-wrap:wrap; gap:12px; margin-top:12px}
-        .legitem{display:flex; align-items:center; gap:8px; padding:6px 10px; background:var(--card); border:1px solid var(--border); border-radius:10px;}
-        .sw{width:12px;height:12px;border-radius:3px}
-        .tip{font-size:13px;color:var(--muted)}
-        .caps{letter-spacing:.4px; text-transform:uppercase; font-size:12px; color:#cbd5e1}
-        .mono{font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace}
-        .callout{display:flex; gap:12px; align-items:flex-start; background:linear-gradient(0deg, rgba(255,255,255,.02), rgba(255,255,255,.02)), var(--panel); border:1px dashed var(--border); padding:14px; border-radius:12px}
-        .ico{font-size:18px}
-      `}</style>
+      </div>
     </div>
   );
 }
 
-function Legend({ color, label }: { color: string; label: string }) {
+function Row({ cat, amount, share, note }: { cat: string; amount: string; share: string; note: string }) {
   return (
-    <div className="legitem">
-      <span className="sw" style={{ background: `var(${color})` }} />
-      <span>{label}</span>
-      <style jsx>{`
-        .legitem{display:flex; align-items:center; gap:8px; padding:6px 10px; background:var(--card); border:1px solid var(--border); border-radius:10px}
-        .sw{width:12px;height:12px;border-radius:3px}
-      `}</style>
-    </div>
+    <tr className="border-b border-white/10 last:border-b-0">
+      <td className="px-4 py-3">{cat}</td>
+      <td className="px-4 py-3">{amount}</td>
+      <td className="px-4 py-3 font-semibold">{share}</td>
+      <td className="px-4 py-3 text-zinc-400">{note}</td>
+    </tr>
+  );
+}
+
+function Row2({ cat, share, desc }: { cat: string; share: string; desc: string }) {
+  return (
+    <tr className="border-b border-white/10 last:border-b-0">
+      <td className="px-4 py-3">{cat}</td>
+      <td className="px-4 py-3 font-semibold">{share}</td>
+      <td className="px-4 py-3 text-zinc-400">{desc}</td>
+    </tr>
   );
 }
