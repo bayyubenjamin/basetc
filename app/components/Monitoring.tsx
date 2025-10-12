@@ -9,7 +9,6 @@ import {
   useWriteContract,
   useWaitForTransactionReceipt,
   useWatchContractEvent,
-  usePublicClient, // ⬅️ tambahkan
 } from "wagmi";
 import { base } from "viem/chains";
 import {
@@ -109,10 +108,9 @@ const CenterPopup: FC<{ open: boolean; message: string; onOK: () => void }> = ({
    ====================== */
 const Monitoring: FC = () => {
   const { address, chainId } = useAccount();
-  const publicClient = usePublicClient(); // ⬅️ tambahkan
 
   // UI state
-  const [statusText, setStatusText] = useState(""); // dipakai internal & popup
+  const [statusText, setStatusText] = useState("");
   const [now, setNow] = useState(Math.floor(Date.now() / 1000));
   const [terminalLogs, setTerminalLogs] = useState<string[]>([]);
   const terminalRef = useRef<HTMLDivElement>(null);
@@ -129,9 +127,6 @@ const Monitoring: FC = () => {
   
   // Pre-launch countdown state
   const [prelaunchTimeLeft, setPrelaunchTimeLeft] = useState<string>("");
-
-  // Fallback cache untuk Base Unit (ambil langsung dari kontrak)
-  const [baseUnitOverride, setBaseUnitOverride] = useState<bigint | null>(null); // ⬅️ tambahkan
 
   // 1s ticker
   useEffect(() => {
@@ -233,11 +228,33 @@ const Monitoring: FC = () => {
   /* ======================
      GameCore Reads
      ====================== */
-  const epochNow = useReadContract({ address: gameCoreAddress as `0x${string}`, abi: gameCoreABI as any, functionName: "epochNow" });
-  const epochLength = useReadContract({ address: gameCoreAddress as `0x${string}`, abi: gameCoreABI as any, functionName: "epochLength" });
-  const startTime = useReadContract({ address: gameCoreAddress as `0x${string}`, abi: gameCoreABI as any, functionName: "startTime" });
-  const isPrelaunch = useReadContract({ address: gameCoreAddress as `0x${string}`, abi: gameCoreABI as any, functionName: "isPrelaunch" });
-  const goLive = useReadContract({ address: gameCoreAddress as `0x${string}`, abi: gameCoreABI as any, functionName: "goLive" });
+  const epochNow = useReadContract({
+    address: gameCoreAddress as `0x${string}`,
+    abi: gameCoreABI as any,
+    functionName: "epochNow",
+    // keep UI fresh
+    query: { refetchInterval: 10_000 },
+  });
+  const epochLength = useReadContract({
+    address: gameCoreAddress as `0x${string}`,
+    abi: gameCoreABI as any,
+    functionName: "epochLength",
+  });
+  const startTime = useReadContract({
+    address: gameCoreAddress as `0x${string}`,
+    abi: gameCoreABI as any,
+    functionName: "startTime",
+  });
+  const isPrelaunch = useReadContract({
+    address: gameCoreAddress as `0x${string}`,
+    abi: gameCoreABI as any,
+    functionName: "isPrelaunch",
+  });
+  const goLive = useReadContract({
+    address: gameCoreAddress as `0x${string}`,
+    abi: gameCoreABI as any,
+    functionName: "goLive",
+  });
 
   const miningActive = useReadContract({
     address: gameCoreAddress as `0x${string}`,
@@ -255,7 +272,11 @@ const Monitoring: FC = () => {
     query: { enabled: Boolean(address) },
   });
 
-  const toggleCooldown = useReadContract({ address: gameCoreAddress as `0x${string}`, abi: gameCoreABI as any, functionName: "toggleCooldown" });
+  const toggleCooldown = useReadContract({
+    address: gameCoreAddress as `0x${string}`,
+    abi: gameCoreABI as any,
+    functionName: "toggleCooldown",
+  });
 
   // legacy hashrate (kept for compatibility)
   const hashrate = useReadContract({
@@ -266,12 +287,13 @@ const Monitoring: FC = () => {
     query: { enabled: Boolean(address) },
   });
 
+  // ✅ Pastikan Base Unit / Epoch muncul & selalu kebaca dari kontrak
   const baseUnit = useReadContract({
     address: gameCoreAddress as `0x${string}`,
     abi: gameCoreABI as any,
     functionName: "getBaseUnit",
     args: address ? [address] : undefined,
-    query: { enabled: Boolean(address), watch: true }, // ⬅️ watch
+    query: { enabled: Boolean(address), refetchInterval: 10_000 }, // <-- refresh berkala
   });
 
   const pendingRw = useReadContract({
@@ -355,53 +377,22 @@ const Monitoring: FC = () => {
     }
   }, [prelaunch, goLiveOn, sTime, eLen]);
 
-  // Fallback fetch langsung dari kontrak untuk Base Unit
-  useEffect(() => {
-    let stop = false;
-    const pull = async () => {
-      if (!publicClient || !address) return;
-      try {
-        const v = (await publicClient.readContract({
-          address: gameCoreAddress as `0x${string}`,
-          abi: gameCoreABI as any,
-          functionName: "getBaseUnit",
-          args: [address],
-        })) as bigint;
-        if (!stop) setBaseUnitOverride(v);
-      } catch {
-        // diamkan (fallback saja)
-      }
-    };
-    pull();
-    // juga tarik ulang saat epoch berubah (agar sinkron per epoch)
-    // polling ringan tiap 15s ketika aktif
-    const id =
-      active
-        ? setInterval(() => pull(), 15000)
-        : undefined;
-
-    return () => {
-      stop = true;
-      if (id) clearInterval(id);
-    };
-  }, [publicClient, address, active, eNowBn]); // ⬅️ tarik saat ganti epoch
 
   const _hrLegacy = useMemo(() => {
     const v = hashrate.data as bigint | undefined;
     return v ? Number(v) : 0;
   }, [hashrate.data]);
 
-  // Sumber prioritas: override (langsung dari kontrak) -> hook -> 0
-  const baseUnitRaw: bigint | undefined = useMemo(() => {
-    if (baseUnitOverride !== null) return baseUnitOverride;
-    return (baseUnit.data as bigint | undefined) ?? undefined;
-  }, [baseUnitOverride, baseUnit.data]);
-
+  // Safe formatter untuk Base Unit / Epoch (18 desimal)
   const baseUnitPerEpoch = useMemo(() => {
-    const v = baseUnitRaw;
-    if (v === undefined) return 0;
-    return Number(formatUnits(v, 18));
-  }, [baseUnitRaw]);
+    const v = baseUnit.data as bigint | undefined;
+    if (!v) return 0;
+    try {
+      return Number(formatUnits(v, 18));
+    } catch {
+      return 0;
+    }
+  }, [baseUnit.data]);
 
   const pendingAmt = useMemo(() => {
     const v = pendingRw.data as bigint | undefined;
@@ -519,18 +510,6 @@ const Monitoring: FC = () => {
       refetchNonce?.(),
       refetchUsage?.(),
     ]);
-    // juga tarik ulang override langsung
-    try {
-      if (publicClient && address) {
-        const v = (await publicClient.readContract({
-          address: gameCoreAddress as `0x${string}`,
-          abi: gameCoreABI as any,
-          functionName: "getBaseUnit",
-          args: [address],
-        })) as bigint;
-        setBaseUnitOverride(v);
-      }
-    } catch {}
     const freshPending = (await (refetchPending?.() || Promise.resolve({ data: pendingRw.data })))?.data as bigint | undefined;
     const pendingStart = freshPending ? Number(formatUnits(freshPending, 18)) : 0;
     setLiveBaseStart(pendingStart);
@@ -593,7 +572,7 @@ const Monitoring: FC = () => {
       setPopupMsg(`Claim successful!\nYou received +${amt.toFixed(6)} $BaseTC.`);
       setPopupOpen(true);
 
-      // Refresh reads without page reload
+      // Refresh reads tanpa reload halaman
       await refreshAll("State updated after claim.");
       setLastAction(null);
     },
@@ -604,7 +583,7 @@ const Monitoring: FC = () => {
      ====================== */
   const onStart = async () => {
     if (!address) { setStatusText("Please connect your wallet."); return; }
-    if (chainId && chainId !== BASE_CHAIN_ID) { setStatusText("Please switch to Base Sepolia."); return; } // (biarkan sesuai kode asli)
+    if (chainId && chainId !== BASE_CHAIN_ID) { setStatusText("Please switch to Base Sepolia."); return; }
     if (prelaunch && goLiveOn) { setStatusText("Prelaunch is active. Wait for epoch 1."); return; }
     if (!canToggle) { setStatusText("In cooldown. Please try again later."); return; }
 
@@ -648,7 +627,7 @@ const Monitoring: FC = () => {
 
   const onClaim = async () => {
     if (!address) { setStatusText("Please connect your wallet."); return; }
-    if (chainId && chainId !== BASE_CHAIN_ID) { setStatusText("Please switch to Base Sepolia."); return; } // (biarkan sesuai kode asli)
+    if (chainId && chainId !== BASE_CHAIN_ID) { setStatusText("Please switch to Base Sepolia."); return; }
     if (!canClaim) { setStatusText("No pending rewards to claim."); return; }
 
     const trySend = async () => {
@@ -845,8 +824,7 @@ const Monitoring: FC = () => {
           )}
         </div>
 
-        {/* Status */}
-        {/* ⬇️ SESUAI PERMINTAAN: Hilangkan keterangan transaksi di bawah "Mining now" (popup saja yang dipakai) */}
+        {/* Status - DIMATIKAN dari UI sesuai permintaan (biar popup saja yang dipakai) */}
         {/* {statusText && <div className="fin-msg whitespace-pre-line">{statusText}</div>} */}
       </section>
 
