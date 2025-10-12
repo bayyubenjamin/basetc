@@ -11,19 +11,60 @@ type EventTab = "spin" | "staking" | "leaderboard";
 const Event: FC = () => {
   const [activeTab, setActiveTab] = useState<EventTab>("spin");
 
-  // --- helper: paksa buka di browser HP (di luar mini app) ---
-  const openExternal = (url: string) => {
+  // --- helper: paksa buka di browser sistem, bukan webview mini app ---
+  const isAndroid = () => /Android/i.test(navigator.userAgent);
+  const isIOS = () => /iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+  const openExternal = (rawUrl: string) => {
+    const url = rawUrl.trim();
+
     try {
-      // coba buka tab baru (biasanya keluar dari webview mini app)
-      const win = window.open(url, "_blank", "noopener,noreferrer");
-      // fallback jika diblokir popup
-      if (!win) {
-        // beberapa webview support gesture membuka external lewat target blank + rel external pada <a>
-        // sebagai fallback terakhir, arahkan juga ke url (meski bisa tetap di webview)
-        window.location.href = url;
+      if (isAndroid()) {
+        // Chrome Intent (keluar dari webview → buka Chrome). Ada fallback ke https biasa.
+        const u = new URL(url);
+        const intent = `intent://${u.host}${u.pathname}${u.search}${u.hash}#Intent;scheme=${u.protocol.replace(
+          ":",
+          ""
+        )};package=com.android.chrome;S.browser_fallback_url=${encodeURIComponent(
+          url
+        )};end`;
+        window.location.href = intent;
+        return;
       }
+
+      if (isIOS()) {
+        // Coba buka Chrome (jika terpasang). Jika gagal dalam 600ms → fallback _blank.
+        const chromeURL = url.replace(/^https?:\/\//, (m) =>
+          m === "https://" ? "googlechromes://" : "googlechrome://"
+        );
+
+        const iframe = document.createElement("iframe");
+        iframe.style.display = "none";
+        iframe.src = chromeURL;
+        document.body.appendChild(iframe);
+
+        const timer = setTimeout(() => {
+          // fallback: tetap coba buka tab baru (user bisa tap ... → Open in Safari)
+          window.open(url, "_blank", "noopener,noreferrer");
+          document.body.removeChild(iframe);
+        }, 600);
+
+        // safety cleanup jika berhasil (tidak ada cara pasti, jadi tetap cleanup setelah 1500ms)
+        setTimeout(() => {
+          clearTimeout(timer);
+          try {
+            document.body.removeChild(iframe);
+          } catch {}
+        }, 1500);
+
+        return;
+      }
+
+      // Desktop / lainnya: buka tab baru normal
+      const win = window.open(url, "_blank", "noopener,noreferrer");
+      if (!win) window.location.href = url; // fallback jika popup diblokir
     } catch {
-      window.location.href = url;
+      window.open(url, "_blank", "noopener,noreferrer");
     }
   };
 
@@ -63,7 +104,7 @@ const Event: FC = () => {
           style={{ borderRadius: "16px / 10px" }}
         />
 
-        {/* Tombol: paksa buka external */}
+        {/* Tombol: paksa buka eksternal */}
         <button
           onClick={() => openExternal("https://forms.gle/BuJpf1UDFNGFvPgm8")}
           className="inline-block bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2 rounded-lg shadow transition-all duration-150"
@@ -71,7 +112,7 @@ const Event: FC = () => {
           SUBMIT GIVEAWAY
         </button>
 
-        {/* Anchor pendukung (untuk user yang tekan-tahan → “Open in Browser”) */}
+        {/* Anchor dukungan (tap & tahan → “Open in Browser”) */}
         <a
           href="https://forms.gle/BuJpf1UDFNGFvPgm8"
           target="_blank"
