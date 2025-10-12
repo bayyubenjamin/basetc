@@ -12,90 +12,38 @@ const GIVEAWAY_URL = "https://forms.gle/BuJpf1UDFNGFvPgm8";
 
 const Event: FC = () => {
   const [activeTab, setActiveTab] = useState<EventTab>("spin");
+  const [showOpenBrowser, setShowOpenBrowser] = useState(false);
 
-  // ==== BUKA DI BROWSER SISTEM (upaya maksimal lintas device/webview) ====
   const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
-  const isAndroid = /\bAndroid\b/i.test(ua);
-  const isIOS = /\b(iPhone|iPad|iPod)\b/i.test(ua);
   const isWarpcast = /\bWarpcast\b/i.test(ua);
 
-  const openExternal = (url: string) => {
-    const targetUrl = url.trim();
-
-    // 0) buat <a> programatik (banyak webview cuma izinkan aksi user→click)
-    const a = document.createElement("a");
-    a.href = targetUrl;
-    a.target = "_blank";
-    a.rel = "external noopener noreferrer";
-    a.style.display = "none";
-    document.body.appendChild(a);
-
-    // 1) ANDROID: intent ke Chrome (paling efektif keluar dari webview)
-    if (isAndroid) {
-      try {
-        const u = new URL(targetUrl);
-        const scheme = u.protocol.replace(":", "");
-        const intent =
-          `intent://${u.host}${u.pathname}${u.search}${u.hash}` +
-          `#Intent;scheme=${scheme};package=com.android.chrome;S.browser_fallback_url=${encodeURIComponent(
-            targetUrl
-          )};end`;
-        // coba lewat intent
-        window.location.href = intent;
-
-        // fallback berurutan bila intent ditolak
-        setTimeout(() => {
-          // skema khusus chrome
-          const chromeUrl = targetUrl.replace(/^https?:\/\//, (m) =>
-            m === "https://" ? "googlechrome://" : "googlechrome://"
-          );
-          window.location.href = chromeUrl;
-
-          // fallback: trigger click <a target=_blank>
-          setTimeout(() => {
-            a.click();
-
-            // fallback terakhir: hard redirect (mungkin tetap di webview)
-            setTimeout(() => {
-              window.location.href = targetUrl;
-              document.body.removeChild(a);
-            }, 200);
-          }, 200);
-        }, 250);
-        return;
-      } catch {
-        // lanjut ke umum
+  // --- opsi 1: minta OS buka share sheet (sering ada "Open in Safari/Chrome")
+  const shareSystem = async (url: string) => {
+    try {
+      if ((navigator as any)?.share) {
+        await (navigator as any).share({ url, title: "Open in Browser" });
+      } else {
+        window.open(url, "_blank", "noopener,noreferrer");
       }
+    } catch {
+      window.open(url, "_blank", "noopener,noreferrer");
     }
+  };
 
-    // 2) iOS: coba share sheet (sering menawarkan buka di Safari)
-    if (isIOS && (navigator as any)?.share) {
-      (navigator as any)
-        .share({ url: targetUrl, title: "Open in Browser" })
-        .catch(() => {
-          // fallback: klik anchor lalu open _blank
-          a.click();
-          setTimeout(() => {
-            window.open(targetUrl, "_blank", "noopener,noreferrer");
-            setTimeout(() => {
-              // fallback terakhir: hard redirect
-              window.location.href = targetUrl;
-              document.body.removeChild(a);
-            }, 200);
-          }, 50);
-        });
-      return;
+  // --- opsi 2: copy ke clipboard
+  const copyLink = async (url: string) => {
+    try {
+      await navigator.clipboard.writeText(url);
+      alert("Link disalin. Di mini app, tap ••• lalu 'Open in Browser', atau buka dari Safari/Chrome.");
+    } catch {
+      alert("Gagal menyalin. Tahan lama pada link lalu pilih 'Copy'.");
     }
+  };
 
-    // 3) Umum/desktop: klik anchor → window.open → hard redirect
-    a.click();
-    setTimeout(() => {
-      const w = window.open(targetUrl, "_blank", "noopener,noreferrer");
-      if (!w) {
-        window.location.href = targetUrl;
-      }
-      document.body.removeChild(a);
-    }, 50);
+  // --- opsi 3: _blank fallback (tetap bisa dibuka di webview jika dibatasi)
+  const openBlank = (url: string) => {
+    const w = window.open(url, "_blank", "noopener,noreferrer");
+    if (!w) window.location.href = url;
   };
 
   // render dynamic content
@@ -132,15 +80,15 @@ const Event: FC = () => {
           style={{ borderRadius: "16px / 10px" }}
         />
 
-        {/* Tombol: upaya maksimal keluar ke browser sistem */}
+        {/* Tombol utama: buka modal kontrol keluar browser */}
         <button
-          onClick={() => openExternal(GIVEAWAY_URL)}
+          onClick={() => setShowOpenBrowser(true)}
           className="inline-block bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2 rounded-lg shadow transition-all duration-150"
         >
           SUBMIT GIVEAWAY
         </button>
 
-        {/* Link pendamping untuk long-press → Open in Browser */}
+        {/* Link pendamping untuk long-press */}
         <a
           href={GIVEAWAY_URL}
           target="_blank"
@@ -150,10 +98,9 @@ const Event: FC = () => {
           (Open in browser)
         </a>
 
-        {/* Tip UI khusus Warpcast (agar user bisa paksa keluar manual jika webview memblokir) */}
         {isWarpcast && (
           <p className="mt-2 text-[11px] text-blue-200/80">
-            Jika masih terbuka di mini app, tap <span className="font-semibold">•••</span> lalu pilih{" "}
+            Jika tetap terbuka di mini app, tap <span className="font-semibold">•••</span> lalu pilih{" "}
             <span className="font-semibold">Open in Browser</span>.
           </p>
         )}
@@ -184,6 +131,61 @@ const Event: FC = () => {
       </section>
 
       <div className="fin-bottom-space" />
+
+      {/* === Modal “Buka di Browser” === */}
+      {showOpenBrowser && (
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 px-4"
+          onClick={() => setShowOpenBrowser(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl bg-neutral-900 border border-neutral-700 p-5 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-semibold text-white mb-2">Buka di Browser</h3>
+            <p className="text-sm text-neutral-300 mb-4">
+              Sistem mini app kadang memaksa link tetap di dalam aplikasi. Pilih salah satu opsi di bawah agar
+              terbuka di Safari/Chrome.
+            </p>
+
+            <div className="space-y-2">
+              <button
+                onClick={() => {
+                  shareSystem(GIVEAWAY_URL);
+                  setShowOpenBrowser(false);
+                }}
+                className="w-full rounded-lg px-4 py-2 font-semibold bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                Share → Open in Safari/Chrome
+              </button>
+
+              <button
+                onClick={() => copyLink(GIVEAWAY_URL)}
+                className="w-full rounded-lg px-4 py-2 font-semibold bg-neutral-800 hover:bg-neutral-700 text-white"
+              >
+                Copy Link
+              </button>
+
+              <button
+                onClick={() => {
+                  openBlank(GIVEAWAY_URL);
+                  setShowOpenBrowser(false);
+                }}
+                className="w-full rounded-lg px-4 py-2 font-semibold bg-neutral-800 hover:bg-neutral-700 text-white"
+              >
+                Open in New Tab (fallback)
+              </button>
+            </div>
+
+            <button
+              onClick={() => setShowOpenBrowser(false)}
+              className="mt-4 w-full rounded-lg px-4 py-2 font-medium text-neutral-300 hover:text-white"
+            >
+              Tutup
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
