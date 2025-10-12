@@ -11,6 +11,22 @@ type EventTab = "spin" | "staking" | "leaderboard";
 const Event: FC = () => {
   const [activeTab, setActiveTab] = useState<EventTab>("spin");
 
+  // --- helper: paksa buka di browser HP (di luar mini app) ---
+  const openExternal = (url: string) => {
+    try {
+      // coba buka tab baru (biasanya keluar dari webview mini app)
+      const win = window.open(url, "_blank", "noopener,noreferrer");
+      // fallback jika diblokir popup
+      if (!win) {
+        // beberapa webview support gesture membuka external lewat target blank + rel external pada <a>
+        // sebagai fallback terakhir, arahkan juga ke url (meski bisa tetap di webview)
+        window.location.href = url;
+      }
+    } catch {
+      window.location.href = url;
+    }
+  };
+
   // render dynamic content
   const renderContent = () => {
     switch (activeTab) {
@@ -46,13 +62,23 @@ const Event: FC = () => {
           className="w-full max-w-md rounded-xl shadow-md mb-3"
           style={{ borderRadius: "16px / 10px" }}
         />
-        <a
-          href="https://forms.gle/BuJpf1UDFNGFvPgm8"
-          target="_blank"
-          rel="noopener noreferrer"
+
+        {/* Tombol: paksa buka external */}
+        <button
+          onClick={() => openExternal("https://forms.gle/BuJpf1UDFNGFvPgm8")}
           className="inline-block bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2 rounded-lg shadow transition-all duration-150"
         >
           SUBMIT GIVEAWAY
+        </button>
+
+        {/* Anchor pendukung (untuk user yang tekan-tahan → “Open in Browser”) */}
+        <a
+          href="https://forms.gle/BuJpf1UDFNGFvPgm8"
+          target="_blank"
+          rel="external noopener noreferrer"
+          className="mt-2 text-xs text-blue-300 underline decoration-dotted"
+        >
+          (Open in browser)
         </a>
       </div>
 
