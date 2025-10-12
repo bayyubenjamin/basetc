@@ -33,6 +33,29 @@ const Event: FC = () => {
         <p>Join special events to earn extra rewards</p>
       </div>
 
+      {/* 🎁 Giveaway Banner Section */}
+      <div
+        className="flex flex-col items-center justify-center text-center mx-4 mb-4 p-4 bg-gradient-to-br from-blue-900/40 to-purple-800/30 border border-blue-500/30 shadow-lg"
+        style={{
+          borderRadius: "20px / 12px", // oval-like corners
+        }}
+      >
+        <img
+          src="https://ik.imagekit.io/5spt6gb2z/IMG_9023.jpeg"
+          alt="Giveaway Banner"
+          className="w-full max-w-md rounded-xl shadow-md mb-3"
+          style={{ borderRadius: "16px / 10px" }}
+        />
+        <a
+          href="https://forms.gle/BuJpf1UDFNGFvPgm8"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-block bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2 rounded-lg shadow transition-all duration-150"
+        >
+          SUBMIT GIVEAWAY
+        </a>
+      </div>
+
       {/* Sub navigation (tabs) */}
       <div className="fin-card fin-card-trans fin-card-pad" style={{ margin: "16px" }}>
         <div className="flex items-center justify-center gap-2">
