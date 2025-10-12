@@ -3,39 +3,31 @@
     "header": "eyJmaWQiOjg2ODc2NywidHlwZSI6ImN1c3RvZHkiLCJrZXkiOiIweDJmNUU1RDc5MGQ3Mzg4N2Y2NjcxQ0Y4NmZhNGNkNzAxMkEzNUQ1NzQifQ",
     "payload": "eyJkb21haW4iOiJiYXNldGMueHl6In0",
     "signature": "MHg1ZDdiNDYzZjM0NTk5MzY3YjFjMThlYjc3YmM3MGU4YTkyM2E4ZjY4Y2QwYzQ3YzFkYjIwMWU1OTM3N2ZiMzZmMmFlOGVjMjFmZjhmNDI2M2EzMzBjY2RjYTNkNjI2MWY3MjAwMzVlY2E0NTgwMzk4YmI3ZTA4ODFkZjIyMDRmZTFj"
-},
-"frame": {
-  "version": "1",
-  "name": "BaseTC Console",
-  "iconUrl": "https://basetc.xyz/img/logo.png",
-  "homeUrl": "https://basetc.xyz/launch",
-  "imageUrl": "https://basetc.xyz/img/feed.png",
-  "splashImageUrl": "https://basetc.xyz/img/splash.gif",
-  "splashBackgroundColor": "#FFFFFF",
-  "buttonTitle": "Open BaseTC",
-  "webhookUrl": "https://basetc.xyz/api/frame",
-
-  "canonicalDomain": "basetc.xyz",
-  "subtitle": "Mining NFT Game on Base",
-
-  "description": "BaseTC Console is a Farcaster Mini App for mining NFT rigs on the Base network. Claim a free rig, merge into Pro and Legend tiers, and earn BaseTC tokens onchain.",
-
-  "tagline": "Build your Rig. Dominate the chain.",
-
-  "primaryCategory": "Game",
-  
-  "tags": ["base", "nft", "mining", "game", "defi", "finance", "token", "airdrop"]
-
-  "heroImageUrl": "https://basetc.xyz/img/feed.png",
-  "screenshotUrls": [
-    "https://basetc.xyz/img/screenshot1.png",
-    "https://basetc.xyz/img/screenshot2.png"
-  ],
-
-  "ogTitle": "BaseTC Console Mini App",
-  "ogDescription": "Build rigs, upgrade to Legend, and earn BaseTC. Claim your first Basic rig for free!",
-  "ogImageUrl": "https://basetc.xyz/img/feed.png",
-
-  "castShareUrl": "https://basetc.xyz/launch"
- }
+  },
+  "frame": {
+    "version": "1",
+    "name": "BaseTC Console",
+    "iconUrl": "https://basetc.xyz/img/logo.png",
+    "homeUrl": "https://basetc.xyz/launch",
+    "imageUrl": "https://basetc.xyz/img/feed.png",
+    "splashImageUrl": "https://basetc.xyz/img/splash.gif",
+    "splashBackgroundColor": "#FFFFFF",
+    "buttonTitle": "Open BaseTC",
+    "webhookUrl": "https://basetc.xyz/api/frame",
+    "canonicalDomain": "basetc.xyz",
+    "subtitle": "Mining NFT Game on Base",
+    "description": "BaseTC Console is a Farcaster Mini App for mining NFT rigs on the Base network. Claim a free rig, merge into Pro and Legend tiers, and earn BaseTC tokens onchain.",
+    "tagline": "Build your Rig. Dominate the chain.",
+    "primaryCategory": "Game",
+    "tags": ["base", "nft", "mining", "game", "defi", "finance", "token", "airdrop"],
+    "heroImageUrl": "https://basetc.xyz/img/feed.png",
+    "screenshotUrls": [
+      "https://basetc.xyz/img/screenshot1.png",
+      "https://basetc.xyz/img/screenshot2.png"
+    ],
+    "ogTitle": "BaseTC Console Mini App",
+    "ogDescription": "Build rigs, upgrade to Legend, and earn BaseTC. Claim your first Basic rig for free!",
+    "ogImageUrl": "https://basetc.xyz/img/feed.png",
+    "castShareUrl": "https://basetc.xyz/launch"
+  }
 }
