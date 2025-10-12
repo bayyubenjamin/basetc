@@ -8,63 +8,63 @@ import Leaderboard from "./Leaderboard";
 
 type EventTab = "spin" | "staking" | "leaderboard";
 
+const GIVEAWAY_URL = "https://forms.gle/BuJpf1UDFNGFvPgm8";
+
 const Event: FC = () => {
   const [activeTab, setActiveTab] = useState<EventTab>("spin");
 
-  // --- helper: paksa buka di browser sistem, bukan webview mini app ---
-  const isAndroid = () => /Android/i.test(navigator.userAgent);
-  const isIOS = () => /iPhone|iPad|iPod/i.test(navigator.userAgent);
+  // --- helper: upaya maksimal buka di BROWSER SISTEM (keluar dari webview/mini app) ---
+  const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
+  const isAndroid = /\bAndroid\b/i.test(ua);
+  const isIOS = /\b(iPhone|iPad|iPod)\b/i.test(ua);
+  const isWarpcast = /\bWarpcast\b/i.test(ua);
 
-  const openExternal = (rawUrl: string) => {
-    const url = rawUrl.trim();
+  const openExternal = (url: string) => {
+    // 1) iOS: pakai Share Sheet sistem (sering memaksa keluar ke Safari/Chrome dari mini webview)
+    if (isIOS && (navigator as any)?.share) {
+      try {
+        (navigator as any).share({ url, title: "Open in Browser" });
+        return;
+      } catch {
+        // lanjut ke fallback
+      }
+    }
 
-    try {
-      if (isAndroid()) {
-        // Chrome Intent (keluar dari webview → buka Chrome). Ada fallback ke https biasa.
+    // 2) ANDROID: Chrome intent (paling efektif keluar dari webview)
+    if (isAndroid) {
+      try {
         const u = new URL(url);
-        const intent = `intent://${u.host}${u.pathname}${u.search}${u.hash}#Intent;scheme=${u.protocol.replace(
-          ":",
-          ""
-        )};package=com.android.chrome;S.browser_fallback_url=${encodeURIComponent(
-          url
-        )};end`;
+        const scheme = u.protocol.replace(":", "");
+        const intent =
+          `intent://${u.host}${u.pathname}${u.search}${u.hash}` +
+          `#Intent;scheme=${scheme};package=com.android.chrome;` +
+          `S.browser_fallback_url=${encodeURIComponent(url)};end`;
+        // coba via intent
         window.location.href = intent;
-        return;
-      }
-
-      if (isIOS()) {
-        // Coba buka Chrome (jika terpasang). Jika gagal dalam 600ms → fallback _blank.
-        const chromeURL = url.replace(/^https?:\/\//, (m) =>
-          m === "https://" ? "googlechromes://" : "googlechrome://"
-        );
-
-        const iframe = document.createElement("iframe");
-        iframe.style.display = "none";
-        iframe.src = chromeURL;
-        document.body.appendChild(iframe);
-
-        const timer = setTimeout(() => {
-          // fallback: tetap coba buka tab baru (user bisa tap ... → Open in Safari)
-          window.open(url, "_blank", "noopener,noreferrer");
-          document.body.removeChild(iframe);
-        }, 600);
-
-        // safety cleanup jika berhasil (tidak ada cara pasti, jadi tetap cleanup setelah 1500ms)
+        // siapkan fallback jika intent tidak didukung
         setTimeout(() => {
-          clearTimeout(timer);
-          try {
-            document.body.removeChild(iframe);
-          } catch {}
-        }, 1500);
-
+          // alternatif skema chrome spesifik
+          const chromeUrl = url.replace(/^https?:\/\//, (m) =>
+            m === "https://" ? "googlechrome://" : "googlechrome://"
+          );
+          window.location.href = chromeUrl;
+          // fallback terakhir: tab baru
+          setTimeout(() => {
+            const win = window.open(url, "_blank", "noopener,noreferrer");
+            if (!win) window.location.href = url;
+          }, 250);
+        }, 350);
         return;
+      } catch {
+        // fallback umum
       }
+    }
 
-      // Desktop / lainnya: buka tab baru normal
-      const win = window.open(url, "_blank", "noopener,noreferrer");
-      if (!win) window.location.href = url; // fallback jika popup diblokir
-    } catch {
-      window.open(url, "_blank", "noopener,noreferrer");
+    // 3) Umum: coba _blank (kadang menawarkan "Open in Browser")
+    const win = window.open(url, "_blank", "noopener,noreferrer");
+    if (!win) {
+      // 4) Fallback terakhir: hard redirect (tetap bisa di webview jika dibatasi)
+      window.location.href = url;
     }
   };
 
@@ -93,9 +93,7 @@ const Event: FC = () => {
       {/* 🎁 Giveaway Banner Section */}
       <div
         className="flex flex-col items-center justify-center text-center mx-4 mb-4 p-4 bg-gradient-to-br from-blue-900/40 to-purple-800/30 border border-blue-500/30 shadow-lg"
-        style={{
-          borderRadius: "20px / 12px", // oval-like corners
-        }}
+        style={{ borderRadius: "20px / 12px" }} // sudut oval
       >
         <img
           src="https://ik.imagekit.io/5spt6gb2z/IMG_9023.jpeg"
@@ -104,23 +102,30 @@ const Event: FC = () => {
           style={{ borderRadius: "16px / 10px" }}
         />
 
-        {/* Tombol: paksa buka eksternal */}
+        {/* Tombol: upaya maksimal keluar ke browser sistem */}
         <button
-          onClick={() => openExternal("https://forms.gle/BuJpf1UDFNGFvPgm8")}
+          onClick={() => openExternal(GIVEAWAY_URL)}
           className="inline-block bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2 rounded-lg shadow transition-all duration-150"
         >
           SUBMIT GIVEAWAY
         </button>
 
-        {/* Anchor dukungan (tap & tahan → “Open in Browser”) */}
+        {/* Link pendamping untuk long-press → Open in Browser */}
         <a
-          href="https://forms.gle/BuJpf1UDFNGFvPgm8"
+          href={GIVEAWAY_URL}
           target="_blank"
           rel="external noopener noreferrer"
           className="mt-2 text-xs text-blue-300 underline decoration-dotted"
         >
           (Open in browser)
         </a>
+
+        {/* Tip khusus jika terdeteksi di Warpcast webview */}
+        {isWarpcast && (
+          <p className="mt-2 text-[11px] text-blue-200/80">
+            Jika masih terbuka di dalam mini app, tap tombol ••• lalu pilih <span className="font-semibold">Open in Browser</span>.
+          </p>
+        )}
       </div>
 
       {/* Sub navigation (tabs) */}
