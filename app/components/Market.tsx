@@ -139,6 +139,15 @@ const Market: FC = () => {
   const publicClient = usePublicClient();
   const { writeContractAsync } = useWriteContract();
 
+  // --- START PERUBAHAN: qty & max per tier ---
+  const MAX_PER_TIER: Record<TierID, number> = { basic: 10, pro: 5, legend: 3 };
+  const [qty, setQty] = useState<Record<TierID, number>>({ basic: 1, pro: 1, legend: 1 });
+  const clamp = (t: TierID, v: number) => Math.min(MAX_PER_TIER[t], Math.max(1, Math.floor(v || 1)));
+  const dec = (t: TierID) => setQty((q) => ({ ...q, [t]: clamp(t, q[t] - 1) }));
+  const inc = (t: TierID) => setQty((q) => ({ ...q, [t]: clamp(t, q[t] + 1) }));
+  const setManual = (t: TierID, v: string) => setQty((q) => ({ ...q, [t]: clamp(t, Number(v)) }));
+  // --- AKHIR PERUBAHAN ---
+
   // --- START PERUBAHAN ---
   // State untuk menyimpan data referral dari API
   const [inviteStats, setInviteStats] = useState({
@@ -147,7 +156,6 @@ const Market: FC = () => {
     loading: true,
   });
 
-  // Fungsi untuk memuat data referral dari API
   const fetchInviteStats = useCallback(async () => {
     if (!address) {
       setInviteStats({ totalInvites: 0, claimedRewards: 0, loading: false });
@@ -172,11 +180,7 @@ const Market: FC = () => {
     }
   }, [address]);
 
-  // Muat data saat komponen pertama kali dirender atau saat alamat akun berubah
-  useEffect(() => {
-    fetchInviteStats();
-  }, [fetchInviteStats]);
-  
+  useEffect(() => { fetchInviteStats(); }, [fetchInviteStats]);
   // --- AKHIR PERUBAHAN ---
 
   /* ---------- Rig IDs & Kontrak (DIPERTAHANKAN) ---------- */
@@ -281,36 +285,64 @@ const Market: FC = () => {
 
       finishSuccess("Claim successful! Referral counted.");
       refetchFreeUsed?.();
-      fetchInviteStats(); // <-- Muat ulang data invite setelah berhasil
+      fetchInviteStats();
     } catch (e: any) {
       finishError(e?.shortMessage || e?.message || "Transaction failed");
     }
   };
 
-  const handleBuy = async (id: bigint) => {
+  // --- PERUBAHAN: handleBuy pakai qty + limit per tier ---
+  const handleBuy = async (id: bigint, tier: TierID) => {
     try {
       if (!address) return finishError("Please connect your wallet.");
-      const price = priceOf(id) as bigint | undefined;
-      if (!price || price === 0n) return finishError("Item is not for sale.");
+      const unitPrice = priceOf(id) as bigint | undefined;
+      if (!unitPrice || unitPrice === 0n) return finishError("Item is not for sale.");
 
-      if (id === (LEGEND as bigint | undefined) && ownedLegend >= 3n) {
+      const q = BigInt(clamp(tier, qty[tier]));
+
+      // per-wallet limit legend
+      if (tier === "legend" && ownedLegend + q > 3n) {
         return finishError("Per-wallet limit is 3 Legend rigs.");
       }
 
+      const totalPrice = unitPrice * q;
+
       if (mode === 0) {
         beginProcessing("Sending transaction (ETH) …");
-        const txHash = await writeContractAsync({ address: rigSaleAddress, abi: rigSaleABI as any, functionName: "buyWithETH", args: [id, 1n], value: price, account: address, chain: base });
+        const txHash = await writeContractAsync({
+          address: rigSaleAddress,
+          abi: rigSaleABI as any,
+          functionName: "buyWithETH",
+          args: [id, q],
+          value: totalPrice,
+          account: address,
+          chain: base,
+        });
         setMessage("Waiting for confirmation…");
         await publicClient?.waitForTransactionReceipt({ hash: txHash });
       } else if (mode === 1 && tokenAddr) {
-        if ((allowance as bigint) < price) {
+        if ((allowance as bigint) < totalPrice) {
           beginProcessing("Approving spending limit…");
-          const approveHash = await writeContractAsync({ address: tokenAddr as Address, abi: erc20ABI, functionName: "approve", args: [rigSaleAddress, price], account: address, chain: base });
+          const approveHash = await writeContractAsync({
+            address: tokenAddr as Address,
+            abi: erc20ABI,
+            functionName: "approve",
+            args: [rigSaleAddress, totalPrice],
+            account: address,
+            chain: base,
+          });
           setMessage("Waiting for approval confirmation…");
           await publicClient?.waitForTransactionReceipt({ hash: approveHash });
         }
         beginProcessing("Sending transaction (ERC20) …");
-        const buyHash = await writeContractAsync({ address: rigSaleAddress, abi: rigSaleABI as any, functionName: "buyWithERC20", args: [id, 1n], account: address, chain: base });
+        const buyHash = await writeContractAsync({
+          address: rigSaleAddress,
+          abi: rigSaleABI as any,
+          functionName: "buyWithERC20",
+          args: [id, q],
+          account: address,
+          chain: base,
+        });
         setMessage("Waiting for confirmation…");
         await publicClient?.waitForTransactionReceipt({ hash: buyHash });
       } else {
@@ -322,12 +354,13 @@ const Market: FC = () => {
       finishError(e?.shortMessage || e?.message || "Transaction failed");
     }
   };
+  // --- AKHIR PERUBAHAN ---
 
   const tierId = (t: TierID) => (t === "basic" ? (BASIC as bigint) : t === "pro" ? (PRO as bigint) : (LEGEND as bigint));
   const onClickCta = (t: TierID) => {
     const id = tierId(t);
     if (t === "basic" && isBasicFreeForMe) return handleClaimBasicFree;
-    return () => handleBuy(id);
+    return () => handleBuy(id, t);
   };
   const ctaText = (t: TierID) => (t === "basic" && isBasicFreeForMe ? "Claim Free Rig" : "Buy");
 
@@ -364,10 +397,7 @@ const Market: FC = () => {
 
       setInviteMsg(`Reward claimed! Relayer tx: ${json.txHash?.slice?.(0, 8) ?? ""}…`);
       finishSuccess("Invite reward claimed successfully.");
-      
-      // --- PERBAIKAN: Muat ulang data setelah berhasil klaim ---
       await fetchInviteStats();
-
     } catch (e: any) {
       const err = e?.shortMessage || e?.message || "Claim failed.";
       setInviteMsg(err);
@@ -378,7 +408,7 @@ const Market: FC = () => {
   }
 
   /* =============================
-     UI - DIPERBARUI
+     UI - DIPERBARUI (Buy di bawah + stepper)
    ============================== */
   return (
     <div className="fin-wrap fin-content-pad-bottom px-4 pt-4 space-y-5">
@@ -425,7 +455,7 @@ const Market: FC = () => {
         {!!inviteMsg && <div className="mt-2 text-xs text-blue-400">{inviteMsg}</div>}
       </section>
 
-      {/* Sisa dari UI tidak perlu diubah */}
+      {/* Cards */}
       <section className="space-y-4">
         {NFT_DATA.map((tier) => {
           const id = tierId(tier.id);
@@ -439,47 +469,87 @@ const Market: FC = () => {
                 : `${formatUnits(p as bigint, tokenDecimals)} ${tokenSymbol}`
               : "N/A";
           const disabled = loading || !address || !id;
+
           return (
-            <div key={tier.id} className="fin-card p-3 flex items-center justify-between">
+            <div key={tier.id} className="fin-card p-3">
               <div className="flex items-center gap-3">
                 <div className="w-16 h-16 rounded-md bg-neutral-800 border border-white/5 flex items-center justify-center overflow-hidden">
                   <Image src={tier.image} alt={tier.name} width={64} height={64} className="object-contain" />
                 </div>
-                <div>
+                <div className="flex-1">
                   <h3 className="text-sm font-semibold">{tier.name}</h3>
                   <p className="text-xs text-neutral-400">{tier.description}</p>
                   <p className="text-[11px] text-neutral-500">Est. Hashrate: {tier.hashrateHint}</p>
                 </div>
+                <div className="text-xs text-neutral-400">{priceText}</div>
               </div>
-              <div className="flex flex-col items-end">
-                <span className="text-xs text-neutral-400 mb-1">{priceText}</span>
+
+              {/* Bottom controls */}
+              {tier.id === "basic" && isBasicFreeForMe ? (
                 <button
                   onClick={onClickCta(tier.id)}
                   disabled={disabled}
-                  title={!address ? "Connect wallet first" : undefined}
-                  className={`fin-btn fin-btn-claim px-3 py-1.5 text-xs transition-transform active:scale-[0.98] ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
+                  className={`mt-3 w-full fin-btn fin-btn-claim py-2 text-xs ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
                 >
-                  {loading ? (
-                    <span className="inline-flex items-center gap-2">
-                      <span className="h-3 w-3 rounded-full border-2 border-white/30 border-t-transparent animate-spin" />
-                      Processing…
-                    </span>
-                  ) : (
-                    ctaText(tier.id)
-                  )}
+                  {ctaText(tier.id)}
                 </button>
-              </div>
+              ) : (
+                <div className="mt-3 flex items-center gap-2">
+                  {/* Quantity selector */}
+                  <div className="flex items-center border border-[#1e263f] rounded-md">
+                    <button
+                      type="button"
+                      onClick={() => dec(tier.id)}
+                      className="px-3 py-1 text-sm hover:bg-[#1b2133]"
+                    >
+                      −
+                    </button>
+                    <input
+                      value={qty[tier.id]}
+                      onChange={(e) => setManual(tier.id, e.target.value)}
+                      inputMode="numeric"
+                      className="w-12 text-center bg-[#0f1426] py-1 text-sm outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => inc(tier.id)}
+                      className="px-3 py-1 text-sm hover:bg-[#1b2133]"
+                    >
+                      +
+                    </button>
+                  </div>
+                  <div className="text-[11px] text-neutral-500">
+                    Max {MAX_PER_TIER[tier.id]}
+                  </div>
+
+                  <button
+                    onClick={onClickCta(tier.id)}
+                    disabled={disabled}
+                    title={!address ? "Connect wallet first" : undefined}
+                    className={`ml-auto w-full fin-btn fin-btn-claim py-2 text-xs ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
+                  >
+                    {loading ? (
+                      <span className="inline-flex items-center gap-2">
+                        <span className="h-3 w-3 rounded-full border-2 border-white/30 border-t-transparent animate-spin" />
+                        Processing…
+                      </span>
+                    ) : (
+                      `Buy`
+                    )}
+                  </button>
+                </div>
+              )}
             </div>
           );
         })}
-</section>
+      </section>
 
-{/* Legend supply note */}
-<p className="text-center text-[12px] text-yellow-400 font-semibold uppercase tracking-wide mt-2 drop-shadow-[0_0_4px_rgba(255,255,0,0.3)]">
-  ⚠️ Legend supply is limited to 3000 only — 1500 for sale + 1500 via merge.
-</p>
+      {/* Legend supply note */}
+      <p className="text-center text-[12px] text-yellow-400 font-semibold uppercase tracking-wide mt-2 drop-shadow-[0_0_4px_rgba(255,255,0,0.3)]">
+        ⚠️ Legend supply is limited to 3000 only — 1500 for sale + 1500 via merge.
+      </p>
 
-{!!message && <p className="text-center text-xs text-neutral-400 whitespace-pre-line">{message}</p>}
+      {!!message && <p className="text-center text-xs text-neutral-400 whitespace-pre-line">{message}</p>}
       <div className="fin-bottom-space" />
       <LoadingOverlay show={loading} label={message || "Processing…"} />
       <CenterPopup
