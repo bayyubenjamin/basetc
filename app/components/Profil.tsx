@@ -155,7 +155,6 @@ export default function Profil() {
   // Local state for invites
   const [invites, setInvites] = useState<InvitedUser[]>([]);
   const [loadingInvites, setLoadingInvites] = useState(false);
-  // (dipertahankan, tapi tak dipakai untuk slicing karena sekarang scroll)
   const [showAllInvites, setShowAllInvites] = useState(false);
 
   // Fetch list of invitees from API whenever address changes
@@ -194,7 +193,6 @@ export default function Profil() {
           setTotalValidCount(calcValid);
         }
       } catch {
-        // fallback terakhir: pakai hitung dari invites state (yang mungkin kosong)
         setTotalValidCount(0);
         setInvites([]);
       } finally {
@@ -209,6 +207,14 @@ export default function Profil() {
       setTotalValidCount(Number(totalInvitesValid));
     }
   }, [totalInvitesValid]);
+
+  // === NEW: derive counts for invited users section ===
+  const totalInvitedAll = invites.length;
+  const totalInvitedPending = useMemo(
+    () => invites.filter((u) => u.status !== "valid").length,
+    [invites]
+  );
+  // totalValidCount sudah ditampilkan di summary atas (tetap)
 
   // Build short address for display
   const shortAddr = address ? `${address.slice(0, 6)}…${address.slice(-4)}` : "—";
@@ -332,13 +338,23 @@ export default function Profil() {
           >
             {shareLoading ? "Opening…" : "Share to Farcaster"}
           </button>
+          {/* NEW: note under the share button */}
+          <p className="text-[11px] text-[#9fb0d6] opacity-80">
+            Only users who claimed the free rig are counted as valid.
+          </p>
         </div>
 
         {/* Invited users table */}
         <div className="space-y-2">
-          <div className="text-xs text-[#9fb0d6]">Invited Users</div>
+          {/* NEW: show counts for all / valid / pending */}
+          <div className="text-xs text-[#9fb0d6] flex items-center gap-2">
+            <span>Invited Users</span>
+            <span className="px-1.5 py-0.5 rounded bg-[#1b2133] text-[#d7e2ff]">Total: {totalInvitedAll}</span>
+            <span className="px-1.5 py-0.5 rounded bg-[#14321d] text-[#1db954]">Valid: {totalValidCount}</span>
+            <span className="px-1.5 py-0.5 rounded bg-[#3a2f10] text-[#eab308]">Pending: {totalInvitedPending}</span>
+          </div>
 
-          {/* NEW: wrapper dengan tinggi 5 baris (±) + scroll */}
+          {/* wrapper tinggi 5 baris + scroll */}
           <div className="overflow-hidden rounded-md border border-[#1e263f]">
             <div className="max-h-44 overflow-y-auto"> {/* ~5 rows */}
               <table className="w-full text-xs">
@@ -362,7 +378,6 @@ export default function Profil() {
                       </td>
                     </tr>
                   ) : (
-                    // NEW: tampilkan semua, biar scroll — tidak slice(0,5)
                     invites.map((u, i) => (
                       <tr key={`${u.fid ?? "x"}-${i}`} className="border-t border-[#1e263f]">
                         <td className="px-2 py-1.5">
@@ -389,8 +404,6 @@ export default function Profil() {
               </table>
             </div>
           </div>
-
-          {/* REMOVED: tombol "View all" karena sekarang scroll di dalam card */}
         </div>
       </section>
 
