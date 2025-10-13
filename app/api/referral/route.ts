@@ -13,13 +13,9 @@ export const dynamic = "force-dynamic";
    Invite Tiering
    ========================= */
 function calculateMaxClaims(validInvites: number): number {
-  if (!Number.isFinite(validInvites) || validInvites <= 0) return 0;
-  const first = validInvites >= 1 ? 1 : 0;
-  const midInvites = Math.max(Math.min(validInvites, 11) - 1, 0);
-  const mid = Math.floor(midInvites / 2);
-  const tailInvites = Math.max(validInvites - 11, 0);
-  const tail = Math.floor(tailInvites / 3);
-  return first + mid + tail;
+  const n = Math.floor(Number(validInvites) || 0);
+  if (n < 1) return 0;                // belum ada invite ⇒ 0
+  return 1 + Math.floor((n - 1) / 2); // 1 pertama, sisanya tiap 2
 }
 
 function remainingClaims(validInvites: number, usedClaims: number): number {
