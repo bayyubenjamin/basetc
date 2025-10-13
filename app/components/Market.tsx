@@ -76,8 +76,8 @@ interface NFTTier {
 }
 const NFT_DATA: NFTTier[] = [
   { id: "basic", name: "Basic Rig", image: "/img/vga_basic.png", hashrateHint: "~1.5 H/s", description: "Claim a free starter rig to begin mining." },
-  { id: "pro", name: "Pro Rig", image: "/img/vga_pro.png", hashrateHint: "~5.0 H/s", description: "Upgrade to significantly increase hashrate." },
-  { id: "legend", name: "Legend Rig", image: "/img/vga_legend.png", hashrateHint: "~25.0 H/s", description: "Top-tier rig for maximum performance." },
+  { id: "pro", name: "Pro Rig", image: "/img/vga_pro.png", hashrateHint: "~8.0 H/s", description: "Upgrade to significantly increase hashrate." },
+  { id: "legend", name: "Legend Rig", image: "/img/vga_legend.png", hashrateHint: "~100.0 H/s", description: "Top-tier rig for maximum performance." },
 ];
 
 /* =============================
@@ -482,6 +482,10 @@ const Market: FC = () => {
         message={message}
         onOK={() => setPopupOpen(false)}
       />
+{/* Legend supply note */}
+<p className="text-center text-[12px] text-yellow-400 font-semibold mt-2">
+  ⚠️ Legend supply is limited to 3000 only — 1500 for sale + 1500 via merge.
+</p>
     </div>
   );
 };
