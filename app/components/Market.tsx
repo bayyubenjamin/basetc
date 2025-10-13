@@ -23,16 +23,16 @@ import { getFidRefFallback } from "../lib/utils";
    Invite math (original rules) - DIPERTAHANKAN
    ============================= */
 function maxClaimsFrom(totalInvites: number): number {
-  if (totalInvites <= 0) return 0;
-  if (totalInvites <= 10) return 1 + Math.floor(Math.max(0, totalInvites - 1) / 2);
-  return 5 + Math.floor((totalInvites - 10) / 3);
+  const n = Math.floor(Number(totalInvites) || 0);
+  if (n < 1) return 0;
+  return 1 + Math.floor((n - 1) / 2); // 1 pertama, lalu tiap 2 invite
 }
+
 function invitesNeededForNext(totalInvites: number, claimed: number): number {
   const nowMax = maxClaimsFrom(totalInvites);
   if (claimed < nowMax) return 0;
-  let t = totalInvites;
-  while (maxClaimsFrom(t) < claimed + 1) t++;
-  return t - totalInvites;
+  const nextThreshold = 1 + 2 * nowMax; // 1, 3, 5, 7, 9, 11, ...
+  return Math.max(0, nextThreshold - totalInvites);
 }
 
 /* =============================
