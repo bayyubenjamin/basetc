@@ -31,7 +31,7 @@ html::before{
   content:"";
   position: fixed;
   top: 0; left: 0; right: 0;
-  height: 750px; /* tinggi area biru; ubah sesuai selera */
+  height: 500px; /* tinggi area biru; ubah sesuai selera */
   pointer-events: none;
   z-index: -1; /* DI BELAKANG seluruh konten */
   background: linear-gradient(
