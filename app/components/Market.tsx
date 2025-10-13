@@ -483,7 +483,7 @@ const Market: FC = () => {
         onOK={() => setPopupOpen(false)}
       />
 {/* Legend supply note */}
-<p className="text-center text-[12px] text-yellow-400 font-semibold mt-2">
+<p className="text-center text-[12px] text-yellow-400 font-semibold uppercase tracking-wide mt-3 drop-shadow-[0_0_4px_rgba(255,255,0,0.3)]">
   ⚠️ Legend supply is limited to 3000 only — 1500 for sale + 1500 via merge.
 </p>
     </div>
