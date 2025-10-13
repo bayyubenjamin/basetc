@@ -11,7 +11,7 @@ const GIVEAWAY_URL = "https://forms.gle/BuJpf1UDFNGFvPgm8";
 
 const Event: FC = () => {
   const [activeTab, setActiveTab] = useState<EventTab>("spin");
-  const [showOpenBrowser, setShowOpenBrowser] = useState(false);
+  const [showPopup, setShowPopup] = useState(false);
 
   const shareSystem = async (url: string) => {
     try {
@@ -23,20 +23,6 @@ const Event: FC = () => {
     } catch {
       window.open(url, "_blank", "noopener,noreferrer");
     }
-  };
-
-  const copyLink = async (url: string) => {
-    try {
-      await navigator.clipboard.writeText(url);
-      alert("Link copied. Open your Safari/Chrome and paste it.");
-    } catch {
-      alert("Copy failed. Long-press the link and choose Copy.");
-    }
-  };
-
-  const openBlank = (url: string) => {
-    const w = window.open(url, "_blank", "noopener,noreferrer");
-    if (!w) window.location.href = url;
   };
 
   const renderContent = () => {
@@ -71,10 +57,10 @@ const Event: FC = () => {
         />
 
         <button
-          onClick={() => setShowOpenBrowser(true)}
+          onClick={() => setShowPopup(true)}
           className="inline-block bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2 rounded-lg shadow transition-all duration-150"
         >
-          SUBMIT GIVEAWAY!
+          SUBMIT GIVEAWAY
         </button>
       </div>
 
@@ -102,10 +88,10 @@ const Event: FC = () => {
 
       <div className="fin-bottom-space" />
 
-      {showOpenBrowser && (
+      {showPopup && (
         <div
           className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 px-4"
-          onClick={() => setShowOpenBrowser(false)}
+          onClick={() => setShowPopup(false)}
         >
           <div
             className="w-full max-w-md rounded-2xl bg-neutral-900 border border-neutral-700 p-5 shadow-2xl"
@@ -113,40 +99,21 @@ const Event: FC = () => {
           >
             <h3 className="text-lg font-semibold text-white mb-2">Open in your browser</h3>
             <p className="text-sm text-neutral-300 mb-4">
-              Mini app browsers may keep links inside the app. Please choose one option below to open the form in Safari/Chrome.
+              Please open this form directly in your Safari or Chrome browser for the best experience.
             </p>
 
-            <div className="space-y-2">
-              <button
-                onClick={() => {
-                  shareSystem(GIVEAWAY_URL);
-                  setShowOpenBrowser(false);
-                }}
-                className="w-full rounded-lg px-4 py-2 font-semibold bg-blue-600 hover:bg-blue-700 text-white"
-              >
-                Share → Open in Browser
-              </button>
-
-              <button
-                onClick={() => copyLink(GIVEAWAY_URL)}
-                className="w-full rounded-lg px-4 py-2 font-semibold bg-neutral-800 hover:bg-neutral-700 text-white"
-              >
-                Copy link
-              </button>
-
-              <button
-                onClick={() => {
-                  openBlank(GIVEAWAY_URL);
-                  setShowOpenBrowser(false);
-                }}
-                className="w-full rounded-lg px-4 py-2 font-semibold bg-neutral-800 hover:bg-neutral-700 text-white"
-              >
-                Open in new tab (fallback)
-              </button>
-            </div>
+            <button
+              onClick={() => {
+                shareSystem(GIVEAWAY_URL);
+                setShowPopup(false);
+              }}
+              className="w-full rounded-lg px-4 py-2 font-semibold bg-blue-600 hover:bg-blue-700 text-white"
+            >
+              Open in Browser
+            </button>
 
             <button
-              onClick={() => setShowOpenBrowser(false)}
+              onClick={() => setShowPopup(false)}
               className="mt-4 w-full rounded-lg px-4 py-2 font-medium text-neutral-300 hover:text-white"
             >
               Close
