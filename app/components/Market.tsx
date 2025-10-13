@@ -472,9 +472,14 @@ const Market: FC = () => {
             </div>
           );
         })}
-      </section>
+</section>
 
-      {!!message && <p className="text-center text-xs text-neutral-400 whitespace-pre-line">{message}</p>}
+{/* Legend supply note */}
+<p className="text-center text-[12px] text-yellow-400 font-semibold uppercase tracking-wide mt-2 drop-shadow-[0_0_4px_rgba(255,255,0,0.3)]">
+  ⚠️ Legend supply is limited to 3000 only — 1500 for sale + 1500 via merge.
+</p>
+
+{!!message && <p className="text-center text-xs text-neutral-400 whitespace-pre-line">{message}</p>}
       <div className="fin-bottom-space" />
       <LoadingOverlay show={loading} label={message || "Processing…"} />
       <CenterPopup
@@ -482,10 +487,6 @@ const Market: FC = () => {
         message={message}
         onOK={() => setPopupOpen(false)}
       />
-{/* Legend supply note */}
-<p className="text-center text-[12px] text-yellow-400 font-semibold uppercase tracking-wide mt-3 drop-shadow-[0_0_4px_rgba(255,255,0,0.3)]">
-  ⚠️ Legend supply is limited to 3000 only — 1500 for sale + 1500 via merge.
-</p>
     </div>
   );
 };
