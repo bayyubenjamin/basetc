@@ -51,6 +51,9 @@ export default function Profil() {
   const [copied, setCopied] = useState(false);
   const [refAddr, setRefAddr] = useState<string | null>(null);
 
+  // NEW: total valid dari API/DB (fallback jika kontrak 0)
+  const [totalValidCount, setTotalValidCount] = useState<number>(0);
+
   // Read referral address (inviter) from local storage to show "Referred By" badge
   useEffect(() => {
     const r = typeof window !== "undefined" ? localStorage.getItem("basetc_ref") : null;
@@ -140,7 +143,7 @@ export default function Profil() {
       : []),
   ];
 
-  // Read number of valid invites from contract
+  // Read number of valid invites from contract (tetap dipertahankan)
   const { data: totalInvitesValid = 0 } = useReadContract({
     address: rigSaleAddress,
     abi: rigSaleABI as any,
@@ -152,18 +155,23 @@ export default function Profil() {
   // Local state for invites
   const [invites, setInvites] = useState<InvitedUser[]>([]);
   const [loadingInvites, setLoadingInvites] = useState(false);
+  // (dipertahankan, tapi tak dipakai untuk slicing karena sekarang scroll)
   const [showAllInvites, setShowAllInvites] = useState(false);
 
   // Fetch list of invitees from API whenever address changes
   useEffect(() => {
     if (!address) {
       setInvites([]);
+      setTotalValidCount(0);
       return;
     }
     (async () => {
       setLoadingInvites(true);
       try {
-        const r = await fetch(`/api/referral?inviter=${address}&detail=1`);
+        const r = await fetch(
+          `/api/referral?inviter=${address}&detail=1`,
+          { cache: "no-store", next: { revalidate: 0 } } as any
+        );
         const j = await r.json();
         if (j?.list && Array.isArray(j.list)) {
           setInvites(
@@ -176,7 +184,18 @@ export default function Profil() {
         } else {
           setInvites([]);
         }
+
+        // NEW: pakai angka valid dari API bila ada (fallback ke hitung list)
+        const apiValid = Number(j?.validInvites ?? 0);
+        if (apiValid > 0) {
+          setTotalValidCount(apiValid);
+        } else {
+          const calcValid = (j?.list || []).filter((u: any) => u?.status === "valid").length;
+          setTotalValidCount(calcValid);
+        }
       } catch {
+        // fallback terakhir: pakai hitung dari invites state (yang mungkin kosong)
+        setTotalValidCount(0);
         setInvites([]);
       } finally {
         setLoadingInvites(false);
@@ -184,13 +203,19 @@ export default function Profil() {
     })();
   }, [address]);
 
+  // Sinkronisasi opsional: kalau kontrak punya angka > 0, boleh override
+  useEffect(() => {
+    if (Number(totalInvitesValid) > 0) {
+      setTotalValidCount(Number(totalInvitesValid));
+    }
+  }, [totalInvitesValid]);
+
   // Build short address for display
   const shortAddr = address ? `${address.slice(0, 6)}…${address.slice(-4)}` : "—";
   // Build display name from Farcaster user info or fallback
   const displayName = fcUser?.displayName || fcUser?.username || (fcUser?.fid ? `fid:${fcUser.fid}` : "Guest");
 
   // Build shareable invite link.
-  // Prefer using fidref when a Farcaster user is connected, but fallback to wallet if not.
   const inviteLink = useMemo(() => {
     if (typeof window === "undefined") return "";
     const base = window.location.origin || "";
@@ -213,11 +238,9 @@ export default function Profil() {
     const castText = buildCastText();
     setShareLoading(true);
     try {
-      // Append a version parameter to ensure Farcaster treats link as unique
       const finalLink = `${inviteLink}&v=${Date.now().toString(36)}`;
       await sdk.actions.composeCast({ text: castText, embeds: [finalLink] });
     } catch {
-      // Fallback: open warpcast compose URL
       const finalLink = `${inviteLink}&v=${Date.now().toString(36)}`;
       const composeUrl = `https://warpcast.com/~/compose?text=${encodeURIComponent(castText)}&embeds[]=${encodeURIComponent(finalLink)}`;
       try {
@@ -276,7 +299,8 @@ export default function Profil() {
         <div className="flex justify-between text-sm">
           <div>
             <div className="text-xs text-[#9fb0d6]">Total Invited (valid)</div>
-            <div className="text-lg font-bold">{totalInvitesValid}</div>
+            {/* NEW: pakai totalValidCount yang diset dari API/kontrak */}
+            <div className="text-lg font-bold">{totalValidCount}</div>
           </div>
           <div>
             <div className="text-xs text-[#9fb0d6]">Your $BaseTC</div>
@@ -313,31 +337,33 @@ export default function Profil() {
         {/* Invited users table */}
         <div className="space-y-2">
           <div className="text-xs text-[#9fb0d6]">Invited Users</div>
+
+          {/* NEW: wrapper dengan tinggi 5 baris (±) + scroll */}
           <div className="overflow-hidden rounded-md border border-[#1e263f]">
-            <table className="w-full text-xs">
-              <thead className="bg-[#0f1426] text-[#9fb0d6]">
-                <tr>
-                  <th className="text-left px-2 py-1.5">User (FID)</th>
-                  <th className="text-left px-2 py-1.5">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loadingInvites ? (
+            <div className="max-h-44 overflow-y-auto"> {/* ~5 rows */}
+              <table className="w-full text-xs">
+                <thead className="bg-[#0f1426] text-[#9fb0d6] sticky top-0 z-10">
                   <tr>
-                    <td className="px-2 py-2 text-[#9fb0d6]" colSpan={2}>
-                      Loading…
-                    </td>
+                    <th className="text-left px-2 py-1.5">User (FID)</th>
+                    <th className="text-left px-2 py-1.5">Status</th>
                   </tr>
-                ) : invites.length === 0 ? (
-                  <tr>
-                    <td className="px-2 py-2 text-[#9fb0d6]" colSpan={2}>
-                      No invites yet.
-                    </td>
-                  </tr>
-                ) : (
-                  invites
-                    .slice(0, showAllInvites ? invites.length : 5)
-                    .map((u, i) => (
+                </thead>
+                <tbody>
+                  {loadingInvites ? (
+                    <tr>
+                      <td className="px-2 py-2 text-[#9fb0d6]" colSpan={2}>
+                        Loading…
+                      </td>
+                    </tr>
+                  ) : invites.length === 0 ? (
+                    <tr>
+                      <td className="px-2 py-2 text-[#9fb0d6]" colSpan={2}>
+                        No invites yet.
+                      </td>
+                    </tr>
+                  ) : (
+                    // NEW: tampilkan semua, biar scroll — tidak slice(0,5)
+                    invites.map((u, i) => (
                       <tr key={`${u.fid ?? "x"}-${i}`} className="border-t border-[#1e263f]">
                         <td className="px-2 py-1.5">
                           {u.fid ?? "—"}
@@ -358,20 +384,13 @@ export default function Profil() {
                         </td>
                       </tr>
                     ))
-                )}
-              </tbody>
-            </table>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
-          {/* Show more invites button if there are more than 5 */}
-          {invites.length > 5 && !showAllInvites && (
-            <button
-              type="button"
-              onClick={() => setShowAllInvites(true)}
-              className="text-xs text-blue-400 underline mt-1"
-            >
-              View all {invites.length} invites
-            </button>
-          )}
+
+          {/* REMOVED: tombol "View all" karena sekarang scroll di dalam card */}
         </div>
       </section>
 
