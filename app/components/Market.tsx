@@ -518,9 +518,7 @@ const Market: FC = () => {
                       +
                     </button>
                   </div>
-                  <div className="text-[11px] text-neutral-500">
-                    Max {MAX_PER_TIER[tier.id]}
-                  </div>
+                  
 
                   <button
                     onClick={onClickCta(tier.id)}
