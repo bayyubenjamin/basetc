@@ -489,7 +489,7 @@ const Market: FC = () => {
                 <button
                   onClick={onClickCta(tier.id)}
                   disabled={disabled}
-                  className={`mt-3 w-full fin-btn fin-btn-claim py-2 text-xs ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
+                  className={`mt-3 w-full fin-btn fin-btn-claim py-1.7 text-xs ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
                 >
                   {ctaText(tier.id)}
                 </button>
