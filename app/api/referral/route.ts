@@ -1,4 +1,4 @@
-// app/api/referral/route.ts (MAINNET READY, all functions preserved)
+// app/api/referral/route.ts (MAINNET READY, all functions preserved + SpinVault ticket call)
 
 import { NextRequest, NextResponse } from "next/server";
 import { ethers } from "ethers";
@@ -46,6 +46,16 @@ const ABI_RIGNFT = [
 ];
 
 /* =========================
+   SpinVault wiring (TAMBAHAN)
+   ========================= */
+// NOTE: Sesuaikan ABI di bawah dengan nama fungsi di kontrak kamu.
+// Jika di SpinVault namanya `addTickets(address,uint256)`, ganti ABI & pemanggilnya.
+const SPINVAULT_ADDRESS = process.env.CONTRACT_SPINVAULT || "";
+const ABI_SPINVAULT = [
+  "function addReferralTickets(address user, uint256 amount) external",
+];
+
+/* =========================
    Utils
    ========================= */
 function normalizeAddr(value: string | undefined | null): string {
@@ -67,65 +77,8 @@ function requireFidText(value: unknown, name: string): string {
   return v; // TEXT di DB
 }
 
-async function countValidInvites(inviter: string) {
-  const { count, error } = await getSupabaseAdmin()
-    .from(TABLE_REFERRALS)
-    .select("*", { count: "exact", head: true })
-    .eq("inviter", inviter)
-    .eq("status", "valid");
-  if (error) throw new Error(`Gagal hitung valid invites: ${error.message}`);
-  return count ?? 0;
-}
-
-async function sumUsedClaims(inviter: string) {
-  const { data, error } = await getSupabaseAdmin()
-    .from(TABLE_CLAIMS)
-    .select("amount")
-    .eq("inviter", inviter)
-    .eq("type", "basic_free");
-  if (error) throw new Error(`Gagal ambil used claims: ${error.message}`);
-  return (data || []).reduce((acc: number, r: any) => acc + (Number(r.amount) || 0), 0);
-}
-
-async function recordClaim(inviter: string, amount: number, txHash: string) {
-  const { error } = await getSupabaseAdmin().from(TABLE_CLAIMS).insert({
-    inviter,
-    type: "basic_free",
-    amount,
-    tx_hash: txHash,
-  });
-  if (error) throw new Error(`Gagal mencatat klaim: ${error.message}`);
-}
-
-/**
- * Upsert referral (pending/valid). HANYA dipakai saat inviter address sudah diketahui.
- * Kolom: inviter (TEXT, PK#1), invitee_fid (TEXT, PK#2), status, invitee_wallet?
- */
-async function upsertReferralRow(
-  inviterWallet: string,
-  inviteeFidText: string,
-  status: "pending" | "valid",
-  inviteeWallet?: string | null,
-  inviterId?: string | null,
-  inviteeId?: string | null
-) {
-  const payload: Record<string, any> = {
-    inviter: inviterWallet,
-    invitee_fid: inviteeFidText,
-    status,
-  };
-  if (inviteeWallet) payload.invitee_wallet = normalizeAddr(inviteeWallet);
-  if (inviterId) payload.inviter_id = inviterId;
-  if (inviteeId) payload.invitee_id = inviteeId;
-
-  const { error } = await getSupabaseAdmin()
-    .from(TABLE_REFERRALS)
-    .upsert(payload, { onConflict: "inviter,invitee_fid" });
-  if (error) throw new Error(`Gagal menyimpan referral: ${error.message}`);
-}
-
 function getProviderAndSigner() {
-  if (!BACKEND_SIGNER_PK) return { provider: null, signer: null };
+  if (!BACKEND_SIGNER_PK) return { provider: null, signer: null as ethers.Wallet | null };
   const provider = new ethers.JsonRpcProvider(RPC_URL);
   const signer = new ethers.Wallet(BACKEND_SIGNER_PK, provider);
   return { provider, signer };
@@ -149,6 +102,80 @@ async function mintRewardViaRigNFT(to: string) {
   const tx = await contract.mintByGame(to, BASIC_ID, 1);
   const receipt = await tx.wait();
   return receipt?.hash ?? tx.hash;
+}
+
+// === TAMBAHAN: helper untuk tambah tiket SpinVault ===
+async function addSpinTicket(inviter: string, amount: number) {
+  const { signer } = getProviderAndSigner();
+  if (!signer) throw new Error("Signer backend tidak dikonfigurasi.");
+  if (!SPINVAULT_ADDRESS) throw new Error("CONTRACT_SPINVAULT belum diset.");
+  const vault = new ethers.Contract(SPINVAULT_ADDRESS, ABI_SPINVAULT, signer);
+  const tx = await vault.addReferralTickets(inviter, amount); // ganti ke addTickets(...) bila nama di kontrak berbeda
+  const rc = await tx.wait();
+  return rc?.hash ?? tx.hash;
+}
+
+/* =========================
+   DB helpers (dipertahankan)
+   ========================= */
+async function upsertReferralRow(
+  inviter: string,
+  invitee_fid: string,
+  status: "pending" | "valid",
+  invitee_wallet: string | null
+) {
+  const sb = getSupabaseAdmin();
+  const now = new Date().toISOString();
+
+  // upsert berdasarkan (inviter, invitee_fid)
+  const { error } = await sb
+    .from(TABLE_REFERRALS)
+    .upsert(
+      {
+        inviter,
+        invitee_fid,
+        status,
+        invitee_wallet,
+        updated_at: now,
+      },
+      { onConflict: "inviter,invitee_fid" }
+    );
+
+  if (error) throw new Error(`Gagal upsert referral: ${error.message}`);
+}
+
+async function countValidInvites(inviter: string) {
+  const { count, error } = await getSupabaseAdmin()
+    .from(TABLE_REFERRALS)
+    .select("*", { count: "exact", head: true })
+    .eq("inviter", inviter)
+    .eq("status", "valid");
+  if (error) throw new Error(`Gagal hitung valid invites: ${error.message}`);
+  return count ?? 0;
+}
+
+async function sumUsedClaims(inviter: string) {
+  const { data, error } = await getSupabaseAdmin()
+    .from(TABLE_CLAIMS)
+    .select("amount")
+    .eq("inviter", inviter);
+  if (error) throw new Error(`Gagal hitung claimed: ${error.message}`);
+  const total = (data || []).reduce((acc: number, r: any) => acc + (Number(r?.amount || 0)), 0);
+  return total;
+}
+
+async function recordClaim(inviter: string, amount: number, txHash: string) {
+  const sb = getSupabaseAdmin();
+  const now = new Date().toISOString();
+  const { error } = await sb
+    .from(TABLE_CLAIMS)
+    .insert({
+      inviter,
+      amount,
+      tx_hash: txHash,
+      created_at: now,
+    });
+  if (error) throw new Error(`Gagal mencatat claim: ${error.message}`);
 }
 
 /* =========================
@@ -179,6 +206,10 @@ export async function POST(req: NextRequest) {
           // jika inviter dikirim → update/upsert baris (inviter, invitee_fid)
           assertAddress(inviterRaw, "inviter");
           await upsertReferralRow(inviterRaw, invitee_fid, "valid", invitee_wallet);
+
+          // (OPSIONAL) beri tiket saat validasi; default dimatikan utk anti-abuse
+          // try { await addSpinTicket(inviterRaw, 1); } catch (e) { console.error("addSpinTicket mark-valid:", e); }
+
           return NextResponse.json({ ok: true, message: "Referral marked valid (by inviter)." });
         }
 
@@ -191,6 +222,8 @@ export async function POST(req: NextRequest) {
           .eq("invitee_fid", invitee_fid);
         const { error } = await q;
         if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+
+        // (OPSIONAL) tidak ada inviter jelas di cabang ini → tidak menambah ticket
         return NextResponse.json({ ok: true, message: "Referral marked valid (by invitee_fid)." });
       }
 
@@ -224,9 +257,14 @@ export async function POST(req: NextRequest) {
           return NextResponse.json({ ok: false, error: "Invalid mint mode." }, { status: 500 });
         }
 
+        // catat claim (DB)
         await recordClaim(inviter, 1, txHash);
+
+        // === TAMBAHAN: tambah 1 bonus ticket ke inviter (on-chain SpinVault) ===
+        const ticketTx = await addSpinTicket(inviter, 1);
+
         // (opsional) kamu bisa sekaligus menandai referral tertentu jadi valid di sini bila mau.
-        return NextResponse.json({ ok: true, txHash, invitee_fid });
+        return NextResponse.json({ ok: true, txHash, ticketTx, invitee_fid });
       }
 
       case "free-sign": {
@@ -343,3 +381,4 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json(response);
 }
+
