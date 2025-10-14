@@ -156,14 +156,14 @@ export async function POST(req: Request) {
         address: spinVaultAddress,
         abi: spinVaultABI,
         functionName: 'epochNow',
-      });
+      } as any); // <-- FIX
 
       const hasClaimedDaily = await publicClient.readContract({
         address: spinVaultAddress,
         abi: spinVaultABI,
         functionName: 'claimed',
         args: [currentEpoch, user],
-      });
+      } as any); // <-- FIX
 
       if (hasClaimedDaily) {
           // Daily spin sudah dipakai, cek bonus tiket
@@ -173,7 +173,7 @@ export async function POST(req: Request) {
               abi: spinVaultABI,
               functionName: 'usedTickets',
               args: [user],
-          });
+          } as any); // <-- FIX
 
           const availableBonusTickets = totalInvites - Number(usedTickets);
           if (availableBonusTickets <= 0) {
