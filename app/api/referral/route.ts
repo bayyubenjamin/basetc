@@ -1,4 +1,4 @@
-// app/api/referral/route.ts (MAINNET READY, all functions preserved + SpinVault ticket call)
+// app/api/referral/route.ts (MAINNET READY, all functions preserved + SpinVault ticket backfill)
 
 import { NextRequest, NextResponse } from "next/server";
 import { ethers } from "ethers";
@@ -52,6 +52,7 @@ const ABI_RIGNFT = [
 // Jika di SpinVault namanya `addTickets(address,uint256)`, ganti ABI & pemanggilnya.
 const SPINVAULT_ADDRESS = process.env.CONTRACT_SPINVAULT || "";
 const ABI_SPINVAULT = [
+  "function availableTickets(address) view returns (uint256)",
   "function addReferralTickets(address user, uint256 amount) external",
 ];
 
@@ -104,13 +105,14 @@ async function mintRewardViaRigNFT(to: string) {
   return receipt?.hash ?? tx.hash;
 }
 
-// === TAMBAHAN: helper untuk tambah tiket SpinVault ===
+// === TAMBAHAN: helper untuk tambah tiket SpinVault (tetap dipertahankan)
 async function addSpinTicket(inviter: string, amount: number) {
   const { signer } = getProviderAndSigner();
   if (!signer) throw new Error("Signer backend tidak dikonfigurasi.");
   if (!SPINVAULT_ADDRESS) throw new Error("CONTRACT_SPINVAULT belum diset.");
   const vault = new ethers.Contract(SPINVAULT_ADDRESS, ABI_SPINVAULT, signer);
-  const tx = await vault.addReferralTickets(inviter, amount); // ganti ke addTickets(...) bila nama di kontrak berbeda
+  // Jika nama fungsi asli addTickets(...), ganti baris di bawah:
+  const tx = await vault.addReferralTickets(inviter, amount);
   const rc = await tx.wait();
   return rc?.hash ?? tx.hash;
 }
@@ -248,6 +250,31 @@ export async function POST(req: NextRequest) {
           return NextResponse.json({ ok: false, error: "No remaining claims." }, { status: 400 });
         }
 
+        // =============== BACKFILL DELTA TICKETS (BARU) ===============
+        // target = validInvites  (sesuai teks UI: 1 friend = 1 ticket)
+        // baca tickets on-chain, hitung deficit, top-up jika perlu
+        let ticketTopupTx: string | undefined;
+        try {
+          const { signer } = getProviderAndSigner();
+          if (!signer) throw new Error("Signer backend tidak dikonfigurasi.");
+          if (!SPINVAULT_ADDRESS) throw new Error("CONTRACT_SPINVAULT belum diset.");
+
+          const spinVaultRW = new ethers.Contract(SPINVAULT_ADDRESS, ABI_SPINVAULT, signer);
+          const currentTickets: bigint = await spinVaultRW.availableTickets(inviter);
+          const targetTickets = BigInt(validInvites);
+          if (targetTickets > currentTickets) {
+            const deficit = targetTickets - currentTickets;
+            // Jika nama fungsi asli addTickets(...), ganti baris di bawah:
+            const tx = await spinVaultRW.addReferralTickets(inviter, deficit);
+            const rc = await tx.wait();
+            ticketTopupTx = rc?.hash ?? tx.hash;
+          }
+        } catch (e) {
+          console.error("Spin ticket backfill failed:", e);
+          // tidak fail-fast; lanjut proses mint + recordClaim
+        }
+        // ============================================================
+
         let txHash: string;
         if (MINT_MODE === "rigsale") {
           txHash = await mintRewardViaRigSale(receiver);
@@ -260,11 +287,19 @@ export async function POST(req: NextRequest) {
         // catat claim (DB)
         await recordClaim(inviter, 1, txHash);
 
-        // === TAMBAHAN: tambah 1 bonus ticket ke inviter (on-chain SpinVault) ===
-        const ticketTx = await addSpinTicket(inviter, 1);
+        // === PER-CLAIM +1 (dipertahankan) HANYA bila belum ada top-up delta ===
+        // Tujuan: hindari dobel tiket saat backfill sudah menambah banyak tiket.
+        let ticketTx: string | undefined = ticketTopupTx;
+        if (!ticketTx) {
+          try {
+            ticketTx = await addSpinTicket(inviter, 1);
+          } catch (e) {
+            console.error("addSpinTicket per-claim failed:", e);
+          }
+        }
 
         // (opsional) kamu bisa sekaligus menandai referral tertentu jadi valid di sini bila mau.
-        return NextResponse.json({ ok: true, txHash, ticketTx, invitee_fid });
+        return NextResponse.json({ ok: true, txHash, ticketTopupTx: ticketTopupTx ?? null, ticketTx: ticketTx ?? null, invitee_fid });
       }
 
       case "free-sign": {
