@@ -62,41 +62,40 @@ const Spin: FC = () => {
     args: address ? [address] : undefined,
     query: { enabled: !!address }
   });
-
+  
   const { data: nonceValue, refetch: refetchNonces } = useReadContract({ address: spinVaultAddress, abi: spinVaultABI as any, functionName: "nonces", args: address ? [address as `0x${string}`] : undefined, query: { enabled: Boolean(address) }});
   const { data: vaultBalance, refetch: refetchVaultBalance } = useReadContract({ address: baseTcAddress, abi: baseTcABI as any, functionName: "balanceOf", args: [spinVaultAddress] });
 
   // --- EFEK BARU: Fetch total invites dari API & hitung bonus tiket ---
-  const fetchTickets = useCallback(async () => {
-      if (!address) {
-          setBonusTickets(0);
-          setLoadingTickets(false);
-          return;
-      }
-      setLoadingTickets(true);
-      try {
-          const res = await fetch(`/api/referral?inviter=${address}`);
-          const data = await res.json();
-          if (!data.ok) throw new Error(data.error || "API error");
+    const fetchTickets = useCallback(async () => {
+        if (!address) {
+            setBonusTickets(0);
+            setLoadingTickets(false);
+            return;
+        }
+        setLoadingTickets(true);
+        try {
+            const res = await fetch(`/api/referral?inviter=${address}`);
+            const data = await res.json();
+            if (!data.ok) throw new Error(data.error || "API error");
 
-          const totalInvites = data.totalInvites ?? 0;
-          // Ambil usedTickets terbaru
-          const usedResult = await refetchUsedTickets();
-          const usedTickets = Number(usedResult.data ?? 0n);
+            const totalInvites = data.totalInvites ?? 0;
+            // Ambil usedTickets terbaru
+            const usedResult = await refetchUsedTickets();
+            const usedTickets = Number(usedResult.data ?? 0n);
+            
+            setBonusTickets(Math.max(0, totalInvites - usedTickets));
+        } catch (error) {
+            console.error("Failed to fetch bonus tickets:", error);
+            setBonusTickets(0);
+        } finally {
+            setLoadingTickets(false);
+        }
+    }, [address, refetchUsedTickets]);
 
-          setBonusTickets(Math.max(0, totalInvites - usedTickets));
-      } catch (error) {
-          console.error("Failed to fetch bonus tickets:", error);
-          setBonusTickets(0);
-      } finally {
-          setLoadingTickets(false);
-      }
-  }, [address, refetchUsedTickets]);
-
-  useEffect(() => {
-      fetchTickets();
-  }, [fetchTickets]);
-
+    useEffect(() => {
+        fetchTickets();
+    }, [fetchTickets]);
 
   useEffect(() => {
     const t = setInterval(() => {
