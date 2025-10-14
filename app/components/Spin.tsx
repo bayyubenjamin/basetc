@@ -50,20 +50,17 @@ const Spin: FC = () => {
   // ---------- Reads On-chain ----------
   const { data: epoch } = useReadContract({ address: spinVaultAddress, abi: spinVaultABI as any, functionName: "epochNow" });
   const { data: claimed, refetch: refetchClaimed } = useReadContract({ address: spinVaultAddress, abi: spinVaultABI as any, functionName: "claimed", args: epoch !== undefined && address ? [epoch as bigint, address as `0x${string}`] : undefined, query: { enabled: Boolean(address && epoch !== undefined) }});
-  const { data: tickets, refetch: refetchTickets } = useReadContract({ address: spinVaultAddress, abi: spinVaultABI as any, functionName: "availableTickets", args: address ? [address as `0x${string}`] : undefined, query: { enabled: Boolean(address) }});
   const { data: nonceValue, refetch: refetchNonces } = useReadContract({ address: spinVaultAddress, abi: spinVaultABI as any, functionName: "nonces", args: address ? [address as `0x${string}`] : undefined, query: { enabled: Boolean(address) }});
   const { data: vaultBalance, refetch: refetchVaultBalance } = useReadContract({ address: baseTcAddress, abi: baseTcABI as any, functionName: "balanceOf", args: [spinVaultAddress] });
 
   useEffect(() => {
     const t = setInterval(() => {
       refetchVaultBalance();
-      refetchTickets();
     }, 15000);
     return () => clearInterval(t);
-  }, [refetchVaultBalance, refetchTickets]);
+  }, [refetchVaultBalance]);
 
-  const ticketNum = useMemo(() => (typeof tickets === "bigint" ? Number(tickets) : 0), [tickets]);
-  const canClaim = useMemo(() => !loading && isConnected && address && (claimed === false || ticketNum > 0), [loading, isConnected, address, claimed, ticketNum]);
+  const canClaim = useMemo(() => !loading && isConnected && address && claimed === false, [loading, isConnected, address, claimed]);
   const poolBalanceStr = useMemo(() => (vaultBalance !== undefined ? Number(formatEther(vaultBalance as bigint)).toFixed(4) : "—"), [vaultBalance]);
 
   // ---------- Action ----------
@@ -107,19 +104,18 @@ const Spin: FC = () => {
         const events = (parseEventLogs({ abi: spinVaultABI as any, logs: receipt.logs as any, eventName: "ClaimedSpin" }) || []) as any[];
         const amt: bigint | undefined = events?.[0]?.args?.amount;
         if (typeof amt === "bigint") {
-            wonStr = formatEther(amt); // Gunakan formatEther untuk presisi penuh
+            wonStr = formatEther(amt);
         }
       } catch (e) {
         console.error("Error parsing spin event:", e);
-        wonStr = "a prize"; // Fallback
+        wonStr = "a prize";
       }
       
-      // Hentikan animasi dan tampilkan hasil final
       setIsSpinning(false);
       setFinalResult(wonStr);
       setStatus(`Spin successful!`);
       
-      await Promise.all([refetchClaimed(), refetchNonces(), refetchTickets(), refetchVaultBalance()]);
+      await Promise.all([refetchClaimed(), refetchNonces(), refetchVaultBalance()]);
 
     } catch (e: any) {
       setStatus(`Error: ${e?.shortMessage || e?.message || "Unknown error"}`);
@@ -143,12 +139,6 @@ const Spin: FC = () => {
         </div>
       </div>
 
-      {isConnected && (
-        <div className="text-sm text-neutral-300">
-          Bonus Tickets: <span className="font-semibold text-sky-400">{ticketNum}</span>
-        </div>
-      )}
-
       <div className="py-2 min-h-[120px] flex flex-col justify-center items-center">
         {isSpinning ? (
           <div className="text-4xl font-bold text-yellow-400">
@@ -171,7 +161,6 @@ const Spin: FC = () => {
 
       <div className="mt-6 text-xs text-neutral-400 space-y-1">
         <p>• Spins increase your leaderboard points.</p>
-        <p>• 1 friend invited = 1 Bonus Ticket.</p>
         <p>• Spin pool is funded from 10% of leftover rewards each epoch.</p>
       </div>
     </div>
@@ -179,3 +168,4 @@ const Spin: FC = () => {
 };
 
 export default Spin;
+

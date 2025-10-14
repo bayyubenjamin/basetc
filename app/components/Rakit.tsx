@@ -107,9 +107,9 @@ export default function Rakit() {
   const onBase = !chainId || chainId === BASE_CHAIN_ID;
   const publicClient = usePublicClient();
 
-  const [status, setStatus] = useState<string>("");       // step status (also shown in popup on finish)
-  const [loading, setLoading] = useState<boolean>(false);  // processing overlay
-  const [popupOpen, setPopupOpen] = useState<boolean>(false); // OK popup (only on success/fail)
+  const [status, setStatus] = useState<string>("");
+  const [loading, setLoading] = useState<boolean>(false);
+  const [popupOpen, setPopupOpen] = useState<boolean>(false);
 
   /* IDs */
   const basicId  = useReadContract({ address: rigNftAddress as `0x${string}`, abi: rigNftABI as any, functionName: "BASIC" });
@@ -212,13 +212,13 @@ export default function Rakit() {
   // === helpers for consistent UX ===
   function beginProcessing(label: string) {
     setStatus(label);
-    setLoading(true);      // show overlay
-    setPopupOpen(false);   // make sure popup hidden during processing
+    setLoading(true);
+    setPopupOpen(false);
   }
   function finishSuccess(label: string) {
     setStatus(label);
-    setLoading(false);     // hide overlay
-    setPopupOpen(true);    // show OK popup
+    setLoading(false);
+    setPopupOpen(true);
   }
   function finishError(label: string) {
     setStatus(label);
@@ -241,7 +241,6 @@ export default function Rakit() {
     setStatus(`Waiting for approval confirmation…`);
     await publicClient!.waitForTransactionReceipt({ hash: tx });
     setStatus(`Approval confirmed.`);
-    // keep overlay on; next steps will continue
   }
 
   async function runMerge(kind: "BASIC_TO_PRO" | "PRO_TO_LEGEND") {
@@ -332,8 +331,9 @@ export default function Rakit() {
           ))}
         </div>
 
-        <div className="fin-actions">
-          <div className="fin-cooldown">
+        {/* Bottom bar actions (full width) */}
+        <div className="mt-4 border-t border-white/10 pt-3">
+          <div className="text-sm text-neutral-300">
             Need: <b>{String(needBP)}</b> Basic → Pro
             <span className="opacity-70 ml-2">
               (fee {fmt2(Number(formatUnits(feeB2P, feeDecimals)))} {feeSymbol})
@@ -341,7 +341,7 @@ export default function Rakit() {
           </div>
           <button
             onClick={(e) => { e.preventDefault(); onMergeBasicToPro(); }}
-            className="fin-btn fin-btn-claim transition-transform active:scale-[0.98]"
+            className="mt-3 w-full fin-btn fin-btn-claim !py-3 transition-transform active:scale-[0.98]"
             disabled={!user || loading}
             title={!user ? "Connect wallet" : "Merge to Pro"}
           >
@@ -379,8 +379,9 @@ export default function Rakit() {
           ))}
         </div>
 
-        <div className="fin-actions">
-          <div className="fin-cooldown">
+        {/* Bottom bar actions (full width) */}
+        <div className="mt-4 border-t border-white/10 pt-3">
+          <div className="text-sm text-neutral-300">
             Need: <b>{String(needPL)}</b> Pro → Legend
             <span className="opacity-70 ml-2">
               (fee {fmt2(Number(formatUnits(feeP2L, feeDecimals)))} {feeSymbol})
@@ -388,7 +389,7 @@ export default function Rakit() {
           </div>
           <button
             onClick={(e) => { e.preventDefault(); onMergeProToLegend(); }}
-            className="fin-btn fin-btn-claim transition-transform active:scale-[0.98]"
+            className="mt-3 w-full fin-btn fin-btn-claim !py-3 transition-transform active:scale-[0.98]"
             disabled={!user || loading}
             title={!user ? "Connect wallet" : "Merge to Legend"}
           >
@@ -411,7 +412,7 @@ export default function Rakit() {
             <small>Legend</small>
             <strong>Owned: {String(ownedLegend)}</strong>
           </div>
-          <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2">
             <Image src={TierImg.legend} alt="Legend rig" width={44} height={44} />
           </div>
         </div>
@@ -437,3 +438,4 @@ export default function Rakit() {
     </div>
   );
 }
+
