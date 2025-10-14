@@ -77,6 +77,16 @@ async function countValidInvites(inviter: string) {
   return count ?? 0;
 }
 
+// FUNGSI BARU: untuk menghitung semua invite (pending dan valid)
+async function countAllInvites(inviter: string) {
+    const { count, error } = await getSupabaseAdmin()
+        .from(TABLE_REFERRALS)
+        .select('*', { count: 'exact', head: true })
+        .eq('inviter', inviter); // <-- Filter status dihapus
+    if (error) throw new Error(`Gagal hitung semua invites: ${error.message}`);
+    return count ?? 0;
+}
+
 async function sumUsedClaims(inviter: string) {
   const { data, error } = await getSupabaseAdmin()
     .from(TABLE_CLAIMS)
@@ -316,15 +326,17 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "Invalid inviter address." }, { status: 400 });
   }
 
-  const [validInvites, usedClaims] = await Promise.all([
+  const [validInvites, usedClaims, totalInvites] = await Promise.all([
     countValidInvites(inviter),
     sumUsedClaims(inviter),
+    countAllInvites(inviter),
   ]);
 
   const remainingQuota = remainingClaims(validInvites, usedClaims);
   const response: any = {
     ok: true,
     mintMode: MINT_MODE,
+    totalInvites,
     validInvites,
     claimedRewards: usedClaims,
     remainingQuota,
