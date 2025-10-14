@@ -340,22 +340,20 @@ export default function Rakit() {
             </span>
           </div>
           <button
-            onClick={(e) => { e.preventDefault(); onMergeBasicToPro(); }}
-            className="mt-3 w-full fin-btn fin-btn-claim !py-3 transition-transform active:scale-[0.98]"
-            disabled={!user || loading}
-            title={!user ? "Connect wallet" : "Merge to Pro"}
-          >
-            {loading ? (
-              <span className="inline-flex items-center gap-2">
-                <span className="h-3 w-3 rounded-full border-2 border-white/30 border-t-transparent animate-spin" />
-                Processing…
-              </span>
-            ) : (
-              "Merge to Pro"
-            )}
-          </button>
-        </div>
-      </section>
+  onClick={(e) => { e.preventDefault(); onMergeBasicToPro(); }}
+  className="mt-3 w-full fin-btn fin-btn-claim !py-2 text-sm transition-transform active:scale-[0.98]"
+  disabled={!user || loading}
+>
+  {loading ? (
+    <span className="inline-flex items-center gap-1.5 text-[13px]">
+      <span className="h-2.5 w-2.5 rounded-full border-2 border-white/30 border-t-transparent animate-spin" />
+      Processing…
+    </span>
+  ) : (
+    "Merge to Pro"
+  )}
+</button>
+
 
       {/* PRO */}
       <section className="fin-card fin-card-pad" aria-label="Pro rigs">
