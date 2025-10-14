@@ -389,7 +389,7 @@ export default function Rakit() {
           </div>
           <button
             onClick={(e) => { e.preventDefault(); onMergeProToLegend(); }}
-            className="mt-3 w-full fin-btn fin-btn-claim !py-1.5 text-xs transition-transform active:scale-[0.98]"
+            className="mt-3 w-full fin-btn fin-btn-claim !py-2 text-sm transition-transform active:scale-[0.98]"
             disabled={!user || loading}
             title={!user ? "Connect wallet" : "Merge to Legend"}
           >
