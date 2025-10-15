@@ -59,7 +59,7 @@ const NftSlot: FC<{ filled: boolean; tier: "basic" | "pro" | "legend" }> = ({ fi
         alt={`${tier} rig`}
         width={64}
         height={64}
-        className="w-full h-full object-cover rounded-[6px]" // sudut gambar ikut sedikit oval
+        className="w-full h-full object-cover rounded-[4px]" // sudut gambar ikut sedikit oval
       />
     ) : (
       <div className="text-[10px] text-neutral-400">empty</div>
@@ -68,7 +68,7 @@ const NftSlot: FC<{ filled: boolean; tier: "basic" | "pro" | "legend" }> = ({ fi
     {/* Overlay ring untuk bingkai tipis berwarna (tidak bentrok dengan neu-inner) */}
     <span
       aria-hidden="true"
-      className={`pointer-events-none absolute inset-0 rounded-[8px] ring-1 ${slotRingByTier[tier]}`}
+      className={`pointer-events-none absolute inset-0 rounded-[4px] ring-1 ${slotRingByTier[tier]}`}
     />
   </div>
 );
