@@ -46,12 +46,18 @@ function json(body: any, status = 200) {
   });
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     if (!gameCoreAddress) return json({ ok: false, error: "Missing env CONTRACT_GAMECORE" }, 500);
     if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
       return json({ ok: false, error: "Missing Supabase server env" }, 500);
     }
+
+    // --- NEW: query params (force mode untuk QA tanpa idempotency) ---
+    const u = new URL(req.url);
+    const force =
+      u.searchParams.get("force") === "1" ||
+      u.searchParams.get("force") === "true";
 
     // 1) Ambil epoch sekarang dari kontrak (bypass typing viem dengan cast `as any`)
     const publicClient = createPublicClient({ chain: base, transport: http() });
@@ -81,7 +87,11 @@ export async function GET() {
     const byUrl: Record<string, TokenRow[]> = {};
     for (const r of rows) (byUrl[r.url] ??= []).push(r);
 
-    const notificationId = `epoch-reminder-${currentEpoch}`; // idempotent per epoch
+    // Jika force=1 → pakai ID unik (hindari idempotency), selain itu idempotent per epoch
+    const notificationId = force
+      ? `epoch-test-${Date.now()}`
+      : `epoch-reminder-${currentEpoch}`;
+
     const title = `Epoch ${currentEpoch} dimulai`;
     const body = `Klaim harianmu untuk epoch ${currentEpoch} sekarang.`;
     const targetUrl = "https://basetc.xyz/launch";
@@ -120,7 +130,8 @@ export async function GET() {
         rl += rateLimitedTokens.length;
 
         // 5) Update DB: sukses -> last_epoch_notified = currentEpoch
-        if (successfulTokens.length > 0) {
+        //    (hanya saat mode normal; di mode force biarkan tidak mengubah epoch agar pure QA)
+        if (!force && successfulTokens.length > 0) {
           const fidsOk = chunk.filter((c) => successfulTokens.includes(c.token)).map((c) => c.fid);
           if (fidsOk.length > 0) {
             await supabase
@@ -130,7 +141,7 @@ export async function GET() {
           }
         }
 
-        // 6) Token invalid -> disabled = true
+        // 6) Token invalid -> disabled = true (tetap dilakukan di kedua mode)
         if (invalidTokens.length > 0) {
           const fidsBad = chunk.filter((c) => invalidTokens.includes(c.token)).map((c) => c.fid);
           if (fidsBad.length > 0) {
@@ -150,7 +161,7 @@ export async function GET() {
     }
 
     // 7) Balas JSON rapi (bisa | jq .)
-    return json({ ok: true, epoch: currentEpoch, results });
+    return json({ ok: true, epoch: currentEpoch, force, results });
   } catch (e: any) {
     console.error("[notify-epoch] error:", e?.message || e);
     return json({ ok: false, error: e?.message || "notify-epoch-error" }, 500);
