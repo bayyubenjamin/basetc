@@ -411,14 +411,20 @@ const Market: FC = () => {
      UI - Neumorphism applied (card + controls + buttons)
    ============================== */
   return (
-    <div className="fin-wrap fin-content-pad-bottom px-4 pt-4 space-y-5">
+    <div className="fin-wrap fin-content-pad-bottom px-1.5 pt-1.5 space-y-5">
       <header className="space-y-1">
         <h1 className="text-xl font-semibold">Market</h1>
         <p className="text-sm text-neutral-400">Mint rigs and invite to earn</p>
       </header>
 
-      {/* Invite Summary Card */}
-      <section className="fin-card p-4 neu">
+      {/* Invite Summary Card (DILEBARKAN) */}
+      <section
+        className="fin-card p-4 neu"
+        style={{
+          marginLeft: "max(10px, env(safe-area-inset-left))",
+          marginRight: "max(10px, env(safe-area-inset-right))",
+        }}
+      >
         <div className="flex items-center justify-between gap-3">
           <div>
             <h2 className="text-sm font-semibold">Invite Friends</h2>
@@ -456,7 +462,7 @@ const Market: FC = () => {
         {!!inviteMsg && <div className="mt-2 text-xs text-blue-400">{inviteMsg}</div>}
       </section>
 
-      {/* Product Cards */}
+      {/* Product Cards (DILEBARKAN) */}
       <section className="space-y-4">
         {NFT_DATA.map((tier) => {
           const id = tierId(tier.id);
@@ -472,7 +478,14 @@ const Market: FC = () => {
           const disabled = loading || !address || !id;
 
           return (
-            <div key={tier.id} className="fin-card p-3 neu">
+            <div
+              key={tier.id}
+              className="fin-card p-3 neu"
+              style={{
+                marginLeft: "max(10px, env(safe-area-inset-left))",
+                marginRight: "max(10px, env(safe-area-inset-right))",
+              }}
+            >
               <div className="flex items-center gap-3">
                 <div className="w-16 h-16 rounded-md neu-inner border border-white/5 flex items-center justify-center overflow-hidden">
                   <Image src={tier.image} alt={tier.name} width={64} height={64} className="object-contain" />

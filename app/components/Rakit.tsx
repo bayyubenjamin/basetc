@@ -37,20 +37,30 @@ const TierImg: Record<"basic"|"pro"|"legend", string> = {
   legend: "/img/vga_legend.png",
 };
 
-/* Small slot preview component (neumorphic pressed look, tanpa ubah logic) */
+/* Slot: sudut sedikit oval + bingkai tipis per-tier (Basic=putih, Pro=biru, Legend=gold) */
+const slotBorderByTier: Record<"basic"|"pro"|"legend", string> = {
+  basic: "border-white/55",
+  pro: "border-[#67a8ff]/70",
+  legend: "border-[#f5d06f]/80",
+};
+
 const NftSlot: FC<{ filled: boolean; tier: "basic" | "pro" | "legend" }> = ({ filled, tier }) => (
   <div
-    className={`rounded-md grid place-items-center border neu-inner
-      ${filled ? "bg-green-500/12 border-green-500/40" : "bg-[#151a2e] border-[#1e263f]"}
-      w-12 h-12 md:w-16 md:h-16`}
+    className={[
+      "grid place-items-center w-12 h-12 md:w-16 md:h-16",
+      "rounded-[12px] overflow-hidden",           // oval & potong isi
+      "neu-inner",                                 // tetap pressed look
+      "bg-[#151a2e]",                              // dasar slot
+      "border", slotBorderByTier[tier],            // bingkai tipis per-tier
+    ].join(" ")}
   >
     {filled ? (
       <Image
         src={TierImg[tier]}
         alt={`${tier} rig`}
-        width={48}
-        height={48}
-        className="object-contain"
+        width={64}
+        height={64}
+        className="w-full h-full object-cover rounded-[12px]"  // sudut gambar ikut oval
       />
     ) : (
       <div className="text-[10px] text-neutral-400">empty</div>
@@ -316,9 +326,7 @@ export default function Rakit() {
             <small>Basic</small>
             <strong>Owned: {String(ownedBasic)}</strong>
           </div>
-          <div className="flex items-center gap-2">
-            <Image src={TierImg.basic} alt="Basic rig" width={44} height={44} />
-          </div>
+          {/* Gambar header di kanan DIHAPUS sesuai request */}
         </div>
 
         <div className="mt-3 grid grid-cols-5 gap-2">
@@ -364,9 +372,7 @@ export default function Rakit() {
             <small>Pro</small>
             <strong>Owned: {String(ownedPro)}</strong>
           </div>
-          <div className="flex items-center gap-2">
-            <Image src={TierImg.pro} alt="Pro rig" width={44} height={44} />
-          </div>
+          {/* Gambar header di kanan DIHAPUS sesuai request */}
         </div>
 
         <div className="mt-3 grid grid-cols-5 gap-2">
@@ -412,9 +418,7 @@ export default function Rakit() {
             <small>Legend</small>
             <strong>Owned: {String(ownedLegend)}</strong>
           </div>
-          <div className="flex items-center gap-2">
-            <Image src={TierImg.legend} alt="Legend rig" width={44} height={44} />
-          </div>
+          {/* Gambar header di kanan DIHAPUS sesuai request */}
         </div>
 
         <div className="mt-3 grid grid-cols-5 gap-2">
