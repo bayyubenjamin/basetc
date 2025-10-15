@@ -7,18 +7,23 @@ const UNIVERSAL_LINK = "https://farcaster.xyz/miniapps/PkHG0AuDhXrd/basetc-conso
 
 export function middleware(req: NextRequest) {
   const url = req.nextUrl;
+  const pathname = url.pathname;
+
+  // 0) BYPASS eksplisit untuk endpoint penting (jaga-jaga)
+  if (pathname.startsWith("/api/") || pathname.startsWith("/.well-known/")) {
+    return NextResponse.next();
+  }
 
   // 1) Simpan fidref ke cookie (SEBELUM redirect apa pun)
   const fidref = url.searchParams.get("fidref");
   let res = NextResponse.next();
   if (fidref && /^\d+$/.test(fidref)) {
-    // SameSite: "none" memastikan cookie dikirim dalam permintaan lintas domain (e.g. iframe Farcaster)
     res.cookies.set("fid_ref", fidref, {
       path: "/",
       httpOnly: true,
       sameSite: "none",
       secure: true,
-      maxAge: 60 * 60 * 24,
+      maxAge: 60 * 60 * 24, // 1 hari
     });
   }
 
@@ -34,13 +39,12 @@ export function middleware(req: NextRequest) {
   const isFarcasterClient = FARCASTER_HINTS.some((k) => ua.includes(k));
   const isMobile = /iPhone|iPad|iPod|Android/i.test(ua);
 
-  if (!isFarcasterClient && isMobile && url.pathname === "/launch") {
+  if (!isFarcasterClient && isMobile && pathname === "/launch") {
     const to = new URL(UNIVERSAL_LINK);
     to.search = url.search;
     const redirectRes = NextResponse.redirect(to, 307);
 
     if (fidref && /^\d+$/.test(fidref)) {
-      // Gunakan SameSite: "none" juga pada redirect agar cookie ikut pada permintaan berikutnya
       redirectRes.cookies.set("fid_ref", fidref, {
         path: "/",
         httpOnly: true,
@@ -56,6 +60,7 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
+  // tetap hanya match route ini; /api dan /.well-known sudah aman karena di-bypass di atas
   matcher: ["/", "/launch"],
 };
 
