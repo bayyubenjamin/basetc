@@ -1,273 +1,55 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+import "./globals.css";
+import type { Metadata } from "next";
+import Ticker from "./components/Ticker";
+import SilentAddMiniApp from "./components/SilentAddMiniApp";
 
-/* ==============================
-   PALETTE & BASE — Light Blue UI
-============================== */
-:root{
-  --bg:#f4f9ff;
-  --surface:#eef5ff;
-  --card:#e7f0ff;            /* kartu lebih terang */
-  --muted:#4a67a1;           /* TEKS SEKUNDER LEBIH GELAP (biar kebaca) */
-  --text:#0a1833;            /* teks utama */
-  --accent:#2b7bff;
-  --accent2:#0055ff;
-  --ok:#1db954;
-  --warn:#eab308;
-  --err:#ef4444;
-  --stroke:rgba(0,0,0,.08);
+const fcPayload = {
+  version: "1",
+  imageUrl: "https://basetc.xyz/img/feed.png",
+  button: {
+    title: "Open BaseTC",
+    action: {
+      type: "launch_miniapp",
+      name: "BaseTC Console",
+      url: "https://basetc.xyz/launch",
+      splashImageUrl: "https://basetc.xyz/s.png",
+      splashBackgroundColor: "#FFFFFF",
+    },
+  },
+};
 
-  /* Neumorphism (versi terang) */
-  --neu-top:#ffffff;
-  --neu-bottom:#c7d9ff;
-  --neu-shadow:rgba(13,37,84,.15);
-  --neu-light:rgba(255,255,255,.9);
+export const metadata: Metadata = {
+  metadataBase: new URL("https://basetc.xyz"),
+  alternates: { canonical: "https://basetc.xyz/" },
+  title: "BaseTC Console",
+  description: "Farcaster mining console built with Next.js and Tailwind.",
+  openGraph: {
+    type: "website",
+    url: "https://basetc.xyz/",
+    title: "BaseTC Console",
+    description: "Start mining with a free Basic rig onchain.",
+    images: [{ url: "/img/feed.png", width: 1200, height: 630, alt: "BaseTC Console" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "BaseTC Console",
+    description: "Start mining with a free Basic rig onchain.",
+    images: ["/img/feed.png"],
+  },
+  other: {
+    "fc:miniapp": JSON.stringify(fcPayload),
+    "fc:frame": JSON.stringify(fcPayload),
+  },
+};
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="en">
+      <body className="min-h-dvh antialiased pt-[calc(env(safe-area-inset-top)+36px)]">
+        <Ticker />
+        <SilentAddMiniApp />
+        {children}
+      </body>
+    </html>
+  );
 }
-
-html, body { min-height:100%; color-scheme: light; }
-body { @apply overflow-x-hidden; color: var(--text); }
-
-/* ==============================
-   GLOBAL BACKGROUND (GRADIENT)
-   — taruh langsung di html biar stabil di iOS
-============================== */
-html{
-  background-color: var(--bg);
-  background-image: linear-gradient(180deg,#c9e1ff 0%,#d9e9ff 50%,#f4f9ff 100%);
-  background-repeat: no-repeat;
-  background-attachment: fixed;
-  background-size: 100% 100%;
-}
-
-/* (Opsional) soft glow di atas */
-html::after{
-  content:"";
-  position: fixed;
-  inset: 0 0 auto 0;
-  height: 520px;
-  z-index:-1;
-  background: radial-gradient(circle at 50% -20%, rgba(43,123,255,.22), transparent 60%);
-  filter: blur(60px);
-  pointer-events:none;
-}
-
-/* ==============================
-   PAGE HEADING
-============================== */
-.fin-page-head{ padding:18px 16px 0; }
-.fin-page-head h1{ margin:0; font-size:22px; font-weight:700; color:var(--text); }
-.fin-page-head p{
-  margin:6px 0 0;
-  color:var(--muted);        /* dulu #d7e2ff + opacity .85 => terlalu pudar */
-  opacity:1;                 /* full opacity agar jelas */
-  font-size:12px;
-  font-weight:600;           /* sedikit tebal biar stand out */
-}
-
-/* ==============================
-   CARDS & COMPONENTS (NO OUTLINE)
-============================== */
-.fin-card{
-  background: var(--card);   /* terang */
-  border:0;
-  border-radius:18px;
-  box-shadow:0 18px 40px rgba(0,0,0,.18);
-  margin:14px 16px;
-}
-.fin-card-pad{ padding:14px; }
-
-.fin-row{ display:flex; justify-content:space-between; align-items:center; gap:12px; }
-.fin-epoch{ display:flex; align-items:center; gap:6px; }
-.fin-epoch small{ color:var(--muted); opacity:1; font-weight:600; }
-
-/* badges */
-.fin-badge{ font-size:12px; padding:6px 10px; border-radius:10px; border:1px solid; font-weight:700; }
-.fin-badge-active{ background:rgba(29,185,84,.1); color:#137a3f; border-color:rgba(29,185,84,.25); }
-.fin-badge-paused{ background:#e9efff; color:#2b3e6b; border-color:#c6d3ff; }
-.fin-badge-pre{ background:rgba(234,179,8,.12); color:#6b5306; border-color:rgba(234,179,8,.35); }
-
-/* progress */
-.fin-progress{ margin-top:10px; }
-.fin-progress-head{ display:flex; justify-content:space-between; color:var(--muted); font-size:12px; margin-bottom:6px; }
-.fin-bar{ height:8px; background:#cfe0ff; border-radius:6px; overflow:hidden; }  /* terang */
-.fin-bar>i{ display:block; height:100%; background:var(--accent); width:0; transition:width .4s; }
-
-/* actions */
-.fin-actions{ display:flex; justify-content:space-between; align-items:center; margin-top:12px; }
-.fin-cooldown{ font-size:12px; color:var(--muted); }
-.fin-btn{ border:0; border-radius:12px; padding:10px 14px; font-weight:700; color:#fff; cursor:pointer; }
-.fin-btn:disabled{ opacity:.45; cursor:not-allowed; }
-.fin-btn-start{ background:#10b981; }
-.fin-btn-claim{ background:#2b7bff; }
-
-/* ==============================
-   TERMINAL (KEEP)
-============================== */
-.fin-terminal{
-  height:130px; margin:10px 16px 0; background:#00000080; border:1px solid #d2dbeb;
-  border-radius:12px; padding:10px;
-  font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;
-  font-size:12px; color:#08c608; overflow:auto;
-}
-.fin-terminal p{ margin:2px 0; }
-
-/* ==============================
-   STATS (NO OUTLINE)
-============================== */
-.fin-stats{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin:12px 16px; }
-.fin-stat{
-  background:#eef5ff;        /* terang */
-  border:0;
-  border-radius:14px;
-  padding:12px;
-  text-align:center;
-  box-shadow:0 12px 28px rgba(0,0,0,.15);
-}
-.fin-val{ font-size:18px; font-weight:800; color:var(--text); }
-.fin-cap{ font-size:11px; color:var(--muted); margin-top:2px; font-weight:600; }
-
-/* tooltip */
-.fin-tooltip{ position:relative; display:inline-block; }
-.fin-tip{
-  position:absolute; left:50%; bottom:100%; transform:translate(-50%,-6px);
-  white-space:nowrap; background:#1f2f55; border:1px solid #344a7a; color:#fff; font-size:11px;
-  padding:4px 8px; border-radius:6px; display:none;
-}
-.fin-tooltip:hover .fin-tip{ display:block; }
-
-/* ==============================
-   RIGS (NO OUTLINE)
-============================== */
-.fin-rigs{ padding:14px; }
-.fin-rig-head{ display:flex; justify-content:space-between; align-items:center; }
-.fin-rig-head h2{ font-size:14px; margin:0; color:var(--text); }
-.fin-rig-note{ font-size:11px; color:var(--muted); }
-
-.fin-rig-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:12px; }
-.fin-rig{
-  background:#eef4ff;        /* terang */
-  border:0;
-  border-radius:12px;
-  padding:10px;
-  text-align:center;
-  box-shadow:0 12px 28px rgba(0,0,0,.14);
-}
-.fin-rig-img{
-  width:100%; aspect-ratio:1/1; background:#f3f7ff;
-  border-radius:10px; border:0;
-  display:grid; place-items:center; color:#2b7bff; position:relative;
-}
-.fin-tier{ font-size:12px; color:var(--muted); margin-top:6px; font-weight:600; }
-.fin-count{ font-weight:800; color:var(--text); }
-.fin-badge-mini{ margin-top:4px; font-size:11px; color:var(--muted); }
-.fin-blur{ filter:blur(2px); opacity:.55; }
-
-/* ==============================
-   NAV SPACER & CONTENT PADDING
-============================== */
-.fin-bottom-space{ height:96px; }
-.fin-content-pad-bottom{ padding-bottom: calc(96px + env(safe-area-inset-bottom)) !important; }
-
-/* ==============================
-   FINTECH BOTTOM NAV
-============================== */
-.fin-bottom-nav{
-  position:fixed !important;
-  left:10px; right:10px; bottom:10px;
-  padding-bottom:max(10px, env(safe-area-inset-bottom)) !important;
-  height:auto;
-  background:rgba(255,255,255,.65);
-  backdrop-filter: blur(14px);
-  border-radius:28px;
-  box-shadow:0 10px 30px rgba(0,0,0,.18), 0 0 0 1px var(--stroke) inset;
-  padding-top:10px; padding-left:14px; padding-right:14px;
-  display:grid !important;
-  grid-template-columns:repeat(5,1fr) !important;
-  align-items:end !important; gap:4px;
-  z-index:60;
-}
-.fin-nav-tab{
-  position:relative;
-  display:flex !important; flex-direction:column !important;
-  align-items:center !important; justify-content:center !important;
-  gap:6px !important;
-  color:var(--muted); font-size:13px; font-weight:700;
-  opacity:1;
-  border:0 !important; background:transparent !important;
-  padding:6px 0 8px !important;
-  border-radius:14px !important;
-  transition:transform .12s ease, color .12s ease, opacity .12s ease;
-  width:100% !important;
-}
-.fin-nav-tab:hover{ transform:translateY(-1px); }
-.fin-nav-tab.is-active{ color:var(--text) !important; }
-.fin-nav-tab.is-active::before{ display:none !important; }
-.fin-nav-icon{ width:22px !important; height:22px !important; margin:0 !important; padding:0 !important; display:block !important; pointer-events:none; z-index:1; }
-.fin-nav-label{ display:block !important; line-height:1 !important; white-space:nowrap !important; z-index:1; }
-
-/* ==============================
-   RESPONSIVE TWEAKS
-============================== */
-@media (min-width: 400px){ html::after{ height:560px; } }
-@media (min-width: 480px){ html::after{ height:600px; } }
-
-/* ==============================
-   Transparent card variant for Event page (NO OUTLINE)
-============================== */
-.fin-card-trans{
-  background: rgba(255,255,255,0.55);
-  backdrop-filter: blur(12px);
-  border:0;
-  border-radius:18px;
-  box-shadow:0 14px 32px rgba(0,0,0,.16);
-  transition: all .25s ease;
-}
-.fin-card-trans:hover{ background: rgba(255,255,255,0.65); }
-
-/* ==============================
-   Ticker
-============================== */
-.ticker{ overflow:hidden; width:100%; }
-.ticker__track{ display:flex; width:max-content; animation:marquee 22s linear infinite; }
-@media (hover:hover){ .ticker:hover .ticker__track{ animation-play-state:paused; } }
-@media (prefers-reduced-motion:reduce){ .ticker__track{ animation:none; transform:translateX(0); } }
-.basetc-ticker{overflow:hidden;width:100%}
-.basetc-track{display:flex;width:max-content;animation:basetc-marquee 40s linear infinite; will-change:transform;}
-@keyframes basetc-marquee{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
-
-/* NEUMORPHISM UTILITIES (tetap) */
-.neu{
-  position:relative;
-  background:linear-gradient(145deg,var(--neu-top),var(--neu-bottom));
-  border-radius:14px;
-  border:1px solid rgba(255,255,255,0.04);
-  box-shadow:8px 8px 16px var(--neu-shadow), -8px -8px 16px var(--neu-light);
-}
-.neu-inner{
-  position:relative;
-  background:linear-gradient(145deg,var(--neu-bottom),var(--neu-top));
-  border-radius:14px;
-  border:1px solid rgba(255,255,255,0.03);
-  box-shadow:inset 6px 6px 10px var(--neu-shadow), inset -6px -6px 10px var(--neu-light);
-}
-.neu-btn{
-  background:linear-gradient(145deg,var(--accent),#1a54d9);
-  color:#fff; border-radius:12px;
-  border:1px solid rgba(255,255,255,0.06);
-  box-shadow:3px 3px 6px var(--neu-shadow), -3px -3px 6px var(--neu-light);
-  transition:transform .12s ease, box-shadow .12s ease;
-}
-.neu-btn:active{
-  transform:translateY(1px);
-  box-shadow:inset 3px 3px 6px var(--neu-shadow), inset -3px -3px 6px var(--neu-light);
-}
-.neu-chip{
-  background:linear-gradient(145deg,#ffffff,#eaf1ff);
-  border-radius:10px;
-  border:1px solid rgba(0,0,0,0.05);
-  box-shadow:4px 4px 8px var(--neu-shadow), -4px -4px 8px var(--neu-light);
-}
-
-/* Hard override: matikan sisa bg gelap kalau ada */
-.bg-black, .bg-zinc-950, .bg-neutral-950, .bg-slate-950 { background-color: transparent !important; }
