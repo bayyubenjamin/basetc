@@ -8,14 +8,14 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 // ==== ENV ====
-// Alamat kontrak GameCore (punya fungsi view epochNow())
+// GameCore contract (must expose epochNow(): uint256)
 const gameCoreAddress = process.env.CONTRACT_GAMECORE as `0x${string}` | undefined;
 
 // Supabase server-side (SERVICE ROLE KEY!)
 const SUPABASE_URL = process.env.SUPABASE_URL!;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
-// ==== Minimal ABI: hanya epochNow() ====
+// ==== Minimal ABI: only epochNow() ====
 const gameCoreABI = [
   {
     type: "function",
@@ -26,7 +26,7 @@ const gameCoreABI = [
   },
 ] as const;
 
-// ==== Types untuk tabel ====
+// ==== Table row type ====
 type TokenRow = {
   fid: number;
   token: string;
@@ -35,7 +35,7 @@ type TokenRow = {
   disabled: boolean;
 };
 
-// Helper JSON response
+// JSON helper
 function json(body: any, status = 200) {
   return NextResponse.json(body, {
     status,
@@ -53,13 +53,13 @@ export async function GET(req: Request) {
       return json({ ok: false, error: "Missing Supabase server env" }, 500);
     }
 
-    // --- NEW: query params (force mode untuk QA tanpa idempotency) ---
+    // --- query params ---
     const u = new URL(req.url);
     const force =
       u.searchParams.get("force") === "1" ||
-      u.searchParams.get("force") === "true";
+      u.searchParams.get("force")?.toLowerCase() === "true";
 
-    // 1) Ambil epoch sekarang dari kontrak (bypass typing viem dengan cast `as any`)
+    // 1) Read current epoch from contract (TS bypass on viem read)
     const publicClient = createPublicClient({ chain: base, transport: http() });
     const epochNowBn = await (publicClient as any).readContract({
       address: gameCoreAddress,
@@ -68,7 +68,16 @@ export async function GET(req: Request) {
     });
     const currentEpoch = Number(epochNowBn);
 
-    // 2) Ambil token yang butuh dikirimi (aktif & belum dinotifikasi utk epoch ini)
+    // Optional: overrides via query (fallback to English defaults)
+    const defaultTitle = `Epoch ${currentEpoch} started`;
+    const defaultBody  = `Claim your daily reward for epoch ${currentEpoch}.`;
+    const defaultTarget = "https://basetc.xyz/launch";
+
+    const title = u.searchParams.get("title") || defaultTitle;
+    const body = u.searchParams.get("body") || defaultBody;
+    const targetUrl = u.searchParams.get("targetUrl") || defaultTarget;
+
+    // 2) Pick tokens needing notifications
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     const { data, error } = await supabase
       .from("farcaster_tokens")
@@ -83,18 +92,14 @@ export async function GET(req: Request) {
       return json({ ok: true, epoch: currentEpoch, message: "No users need notification", results: [] });
     }
 
-    // 3) Kelompok per URL server notifikasi (Farcaster)
+    // 3) Group by Farcaster notification server URL
     const byUrl: Record<string, TokenRow[]> = {};
     for (const r of rows) (byUrl[r.url] ??= []).push(r);
 
-    // Jika force=1 → pakai ID unik (hindari idempotency), selain itu idempotent per epoch
+    // Use unique ID in force mode to avoid idempotency; otherwise idempotent per epoch
     const notificationId = force
       ? `epoch-test-${Date.now()}`
       : `epoch-reminder-${currentEpoch}`;
-
-    const title = `Epoch ${currentEpoch} dimulai`;
-    const body = `Klaim harianmu untuk epoch ${currentEpoch} sekarang.`;
-    const targetUrl = "https://basetc.xyz/launch";
 
     const results: Array<{
       url: string;
@@ -105,13 +110,13 @@ export async function GET(req: Request) {
       sampleFids?: number[];
     }> = [];
 
-    // 4) Kirim per-URL, batch per 100 token
+    // 4) Send per URL, batch of 100
     for (const [serverUrl, list] of Object.entries(byUrl)) {
       let succ = 0, inv = 0, rl = 0, sent = 0;
 
       for (let i = 0; i < list.length; i += 100) {
         const chunk = list.slice(i, i + 100);
-        const tokens = chunk.map((c) => c.token);
+        const tokens = chunk.map(c => c.token);
         sent += tokens.length;
 
         const resp = await fetch(serverUrl, {
@@ -126,13 +131,12 @@ export async function GET(req: Request) {
         const rateLimitedTokens: string[] = jr.rateLimitedTokens || [];
 
         succ += successfulTokens.length;
-        inv += invalidTokens.length;
-        rl += rateLimitedTokens.length;
+        inv  += invalidTokens.length;
+        rl   += rateLimitedTokens.length;
 
-        // 5) Update DB: sukses -> last_epoch_notified = currentEpoch
-        //    (hanya saat mode normal; di mode force biarkan tidak mengubah epoch agar pure QA)
+        // 5) Update DB: on success, mark epoch (skip on force mode to keep QA clean)
         if (!force && successfulTokens.length > 0) {
-          const fidsOk = chunk.filter((c) => successfulTokens.includes(c.token)).map((c) => c.fid);
+          const fidsOk = chunk.filter(c => successfulTokens.includes(c.token)).map(c => c.fid);
           if (fidsOk.length > 0) {
             await supabase
               .from("farcaster_tokens")
@@ -141,11 +145,14 @@ export async function GET(req: Request) {
           }
         }
 
-        // 6) Token invalid -> disabled = true (tetap dilakukan di kedua mode)
+        // 6) Disable invalid tokens
         if (invalidTokens.length > 0) {
-          const fidsBad = chunk.filter((c) => invalidTokens.includes(c.token)).map((c) => c.fid);
+          const fidsBad = chunk.filter(c => invalidTokens.includes(c.token)).map(c => c.fid);
           if (fidsBad.length > 0) {
-            await supabase.from("farcaster_tokens").update({ disabled: true }).in("fid", fidsBad);
+            await supabase
+              .from("farcaster_tokens")
+              .update({ disabled: true })
+              .in("fid", fidsBad);
           }
         }
       }
@@ -156,12 +163,11 @@ export async function GET(req: Request) {
         succeeded: succ,
         invalid: inv,
         rateLimited: rl,
-        sampleFids: (byUrl[serverUrl] || []).slice(0, 5).map((r) => r.fid),
+        sampleFids: (byUrl[serverUrl] || []).slice(0, 5).map(r => r.fid),
       });
     }
 
-    // 7) Balas JSON rapi (bisa | jq .)
-    return json({ ok: true, epoch: currentEpoch, force, results });
+    return json({ ok: true, epoch: currentEpoch, force, title, body, targetUrl, results });
   } catch (e: any) {
     console.error("[notify-epoch] error:", e?.message || e);
     return json({ ok: false, error: e?.message || "notify-epoch-error" }, 500);
