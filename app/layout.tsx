@@ -3,7 +3,6 @@ import "./globals.css";
 import type { Metadata } from "next";
 import Ticker from "./components/Ticker";
 import SilentAddMiniApp from "./components/SilentAddMiniApp";
-import NotificationsGate from "./components/NotificationsGate";
 
 // Payload Mini App (global)
 const fcPayload = {
@@ -53,7 +52,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Ticker />
         {/* HANYA pemicu otomatis tanpa UI */}
         <SilentAddMiniApp />
-        <NotificationsGate />
         {children}
       </body>
     </html>
