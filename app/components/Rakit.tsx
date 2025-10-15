@@ -44,21 +44,18 @@ const slotBorderByTier: Record<"basic"|"pro"|"legend", string> = {
   legend: "border-[#f5d06f]/85",
 };
 
-/* === SLOT ===
-   - Border di CONTAINER + padding 1px → tidak “nabrak”
-   - Sudut sedikit oval (8px di container, 7px di isi)
-*/
+/* === SLOT === (tampilan terang) */
 const NftSlot: FC<{ filled: boolean; tier: "basic" | "pro" | "legend" }> = ({ filled, tier }) => (
   <div
     className={[
       "relative grid place-items-center w-12 h-12 md:w-16 md:h-16",
       "rounded-[8px]",
       "border", slotBorderByTier[tier],
-      "p-[1px]", // jarak kecil antara border & isi
+      "p-[1px]",
       "bg-transparent",
     ].join(" ")}
   >
-    <div className="w-full h-full rounded-[7px] overflow-hidden neu-inner bg-[#151a2e] grid place-items-center">
+    <div className="w-full h-full rounded-[7px] overflow-hidden neu-inner bg-[#f3f7ff] grid place-items-center">
       {filled ? (
         <Image
           src={TierImg[tier]}
@@ -68,20 +65,20 @@ const NftSlot: FC<{ filled: boolean; tier: "basic" | "pro" | "legend" }> = ({ fi
           className="w-full h-full object-cover rounded-[7px]"
         />
       ) : (
-        <div className="text-[10px] text-neutral-400">empty</div>
+        <div className="text-[10px] text-[var(--muted)] font-semibold">empty</div>
       )}
     </div>
   </div>
 );
 
-/* ---------------- Popup (shown only on success/fail) + Processing overlay ---------------- */
+/* ---------------- Popup (visual light) + Processing overlay ---------------- */
 const CenterPopup: FC<{ open: boolean; message: string; onOK: () => void }> = ({ open, message, onOK }) => {
   if (!open) return null;
   return (
     <>
-      <div className="fixed inset-0 z-[1100] bg-black/60 backdrop-blur-sm" />
+      <div className="fixed inset-0 z-[1100] bg-black/50 backdrop-blur-sm" />
       <div className="fixed inset-0 z-[1200] grid place-items-center p-4">
-        <div className="w-full max-w-sm rounded-2xl bg-neutral-900 text-white shadow-2xl border border-white/10">
+        <div className="w-full max-w-sm rounded-2xl bg-white/90 text-[var(--text)] shadow-2xl border border-[color:rgba(0,0,0,.06)] backdrop-blur-md">
           <div className="p-5">
             <div className="text-center text-sm leading-relaxed whitespace-pre-line">
               {message || "Done."}
@@ -89,7 +86,7 @@ const CenterPopup: FC<{ open: boolean; message: string; onOK: () => void }> = ({
             <div className="mt-5 flex justify-center">
               <button
                 onClick={onOK}
-                className="px-4 py-2 rounded-md bg-blue-600 text-white text-sm hover:bg-blue-500 active:scale-[0.99]"
+                className="px-4 py-2 rounded-md bg-[var(--accent)] text-white text-sm hover:opacity-90 active:scale-[0.99]"
               >
                 OK
               </button>
@@ -107,8 +104,8 @@ const LoadingOverlay: FC<{ show: boolean; label?: string }> = ({ show, label }) 
     <>
       <div className="fixed inset-0 z-[1000] bg-black/40 backdrop-blur-[1px]" />
       <div className="fixed inset-0 z-[1010] grid place-items-center">
-        <div className="flex items-center gap-3 rounded-xl bg-neutral-900 text-white border border-white/10 px-4 py-3 shadow-xl">
-          <div className="h-5 w-5 rounded-full border-2 border-white/30 border-t-transparent animate-spin" />
+        <div className="flex items-center gap-3 rounded-xl bg-white/90 text-[var(--text)] border border-[color:rgba(0,0,0,.06)] px-4 py-3 shadow-xl backdrop-blur-md">
+          <div className="h-5 w-5 rounded-full border-2 border-[rgba(0,0,0,.2)] border-t-transparent animate-spin" />
           <span className="text-sm whitespace-pre-line">{label ?? "Processing…"}</span>
         </div>
       </div>
@@ -306,7 +303,7 @@ export default function Rakit() {
 
       finishSuccess("Merge to Pro successful!. Please go to Monitoring and start mining to sync your RigNFT.");
     } catch (e: any) {
-      finishError(prettyErr(e)); // <— hanya ubah teks popup
+      finishError(prettyErr(e));
     }
   }
 
@@ -327,7 +324,7 @@ export default function Rakit() {
 
       finishSuccess("Merge to Legend successful!. Please go to Monitoring and start mining to sync your RigNFT.");
     } catch (e: any) {
-      finishError(prettyErr(e)); // <— hanya ubah teks popup
+      finishError(prettyErr(e));
     }
   }
 
@@ -335,16 +332,16 @@ export default function Rakit() {
   return (
     <div className="fin-wrap fin-content-pad-bottom">
       <div className="fin-page-head">
-        <h1>Build Rig</h1>
-        <p>Upgrade &amp; merge your rigs</p>
+        <h1 className="text-[var(--text)]">Build Rig</h1>
+        <p className="text-[var(--muted)] font-semibold">Upgrade &amp; merge your rigs</p>
       </div>
 
       {/* BASIC */}
       <section className="fin-card fin-card-pad neu" aria-label="Basic rigs">
         <div className="fin-row">
           <div className="fin-epoch">
-            <small>Basic</small>
-            <strong>Owned: {String(ownedBasic)}</strong>
+            <small className="text-[var(--muted)] font-semibold">Basic</small>
+            <strong className="text-[var(--text)]">Owned: {String(ownedBasic)}</strong>
           </div>
         </div>
 
@@ -354,11 +351,11 @@ export default function Rakit() {
           ))}
         </div>
 
-        <div className="mt-4 border-t border-white/10 pt-3">
-          <div className="text-sm text-neutral-300">
-            Need: <b>{String(needBP)}</b> Basic → Pro
-            <span className="opacity-70 ml-2">
-              (fee {fmt2(Number(formatUnits(feeB2P, feeDecimals)))} {feeSymbol})
+        <div className="mt-4 border-t border-[rgba(0,0,0,.08)] pt-3">
+          <div className="text-sm text-[var(--muted)] font-semibold">
+            Need: <b className="text-[var(--text)]">{String(needBP)}</b> Basic → Pro
+            <span className="ml-2">
+              (fee <b className="text-[var(--text)]">{fmt2(Number(formatUnits(feeB2P, feeDecimals)))}</b> {feeSymbol})
             </span>
           </div>
           <button
@@ -381,8 +378,8 @@ export default function Rakit() {
       <section className="fin-card fin-card-pad neu" aria-label="Pro rigs">
         <div className="fin-row">
           <div className="fin-epoch">
-            <small>Pro</small>
-            <strong>Owned: {String(ownedPro)}</strong>
+            <small className="text-[var(--muted)] font-semibold">Pro</small>
+            <strong className="text-[var(--text)]">Owned: {String(ownedPro)}</strong>
           </div>
         </div>
 
@@ -392,11 +389,11 @@ export default function Rakit() {
           ))}
         </div>
 
-        <div className="mt-4 border-t border-white/10 pt-3">
-          <div className="text-sm text-neutral-300">
-            Need: <b>{String(needPL)}</b> Pro → Legend
-            <span className="opacity-70 ml-2">
-              (fee {fmt2(Number(formatUnits(feeP2L, feeDecimals)))} {feeSymbol})
+        <div className="mt-4 border-t border-[rgba(0,0,0,.08)] pt-3">
+          <div className="text-sm text-[var(--muted)] font-semibold">
+            Need: <b className="text-[var(--text)]">{String(needPL)}</b> Pro → Legend
+            <span className="ml-2">
+              (fee <b className="text-[var(--text)]">{fmt2(Number(formatUnits(feeP2L, feeDecimals)))}</b> {feeSymbol})
             </span>
           </div>
           <button
@@ -419,8 +416,8 @@ export default function Rakit() {
       <section className="fin-card fin-card-pad neu" aria-label="Legend rigs">
         <div className="fin-row">
           <div className="fin-epoch">
-            <small>Legend</small>
-            <strong>Owned: {String(ownedLegend)}</strong>
+            <small className="text-[var(--muted)] font-semibold">Legend</small>
+            <strong className="text-[var(--text)]">Owned: {String(ownedLegend)}</strong>
           </div>
         </div>
 
@@ -431,7 +428,7 @@ export default function Rakit() {
         </div>
       </section>
 
-      <div className="fin-msg min-h-5 whitespace-pre-line">{status}</div>
+      <div className="fin-msg min-h-5 whitespace-pre-line text-[var(--muted)] font-semibold">{status}</div>
       <div className="fin-bottom-space" />
 
       <LoadingOverlay show={loading} label={status || "Processing…"} />
