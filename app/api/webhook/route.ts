@@ -1,10 +1,17 @@
 // app/api/webhook/route.ts
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { parseWebhookEvent } from "@farcaster/miniapp-node";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+// helper: base64url → JSON
+function b64urlToJson<T = any>(b64url: string): T {
+  const norm = b64url.replace(/-/g, "+").replace(/_/g, "/");
+  const pad = norm.length % 4 === 2 ? "==" : norm.length % 4 === 3 ? "=" : "";
+  const str = Buffer.from(norm + pad, "base64").toString("utf8");
+  return JSON.parse(str);
+}
 
 export async function GET()  { return new NextResponse("ok", { status: 200 }); }
 export async function HEAD() { return new NextResponse(null, { status: 200 }); }
@@ -17,31 +24,35 @@ export async function POST(req: Request) {
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
-    const raw = await req.json().catch(() => ({}));
+    // 1) Ambil body apa adanya
+    const raw: any = await req.json().catch(() => ({}));
+
+    // 2) Normalisasi ke bentuk { event, user, notificationDetails }
     let eventType: string | undefined;
     let fid: number | undefined;
-    let details: { url?: string; token?: string } | undefined;
+    let notificationDetails: { url?: string; token?: string } | undefined;
 
-    // 1) Coba parse JFS (header/payload/signature)
-    try {
-      const parsed = await parseWebhookEvent(raw);
-      eventType = parsed?.event;
-      fid = parsed?.user?.fid;
-      details = parsed?.notificationDetails;
-      console.log("[WEBHOOK:JFS]", eventType, "fid=", fid, "hasNotif=", !!details);
-    } catch (e) {
-      // 2) Fallback: mungkin host kirim raw JSON tanpa JFS (untuk debugging/dev)
+    if (raw && typeof raw === "object" && raw.header && raw.payload && raw.signature) {
+      // ==== JFS MODE (Warpcast dsb) ====
+      // payload = base64url(JSON string)
+      const payload = b64urlToJson<any>(raw.payload);
+      eventType = payload?.event;
+      fid = payload?.user?.fid ?? payload?.fid;
+      notificationDetails = payload?.notificationDetails;
+      console.log("[WEBHOOK:JFS]", eventType, "fid=", fid, "hasNotif=", !!notificationDetails);
+    } else {
+      // ==== RAW JSON MODE (dev / curl manual) ====
       eventType = raw?.event;
       fid = raw?.user?.fid ?? raw?.fid;
-      details = raw?.notificationDetails;
-      console.log("[WEBHOOK:RAW]", eventType, "fid=", fid, "hasNotif=", !!details);
+      notificationDetails = raw?.notificationDetails;
+      console.log("[WEBHOOK:RAW]", eventType, "fid=", fid, "hasNotif=", !!notificationDetails);
     }
 
     // 3) Simpan token saat add/enable
     if (
       fid &&
-      details?.token &&
-      details?.url &&
+      notificationDetails?.token &&
+      notificationDetails?.url &&
       (eventType === "miniapp_added" || eventType === "notifications_enabled")
     ) {
       await supabase
@@ -49,8 +60,8 @@ export async function POST(req: Request) {
         .upsert(
           {
             fid,
-            token: details.token,
-            url: details.url,
+            token: notificationDetails.token,
+            url: notificationDetails.url,
             last_epoch_notified: 0,
             disabled: false,
           },
@@ -68,7 +79,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true }, { status: 200 });
   } catch (e: any) {
     console.error("[WEBHOOK] ERR:", e?.message || e);
-    // tetap 200 supaya host gak retry spam
+    // tetap 200 supaya host nggak spam retry
     return NextResponse.json({ ok: false }, { status: 200 });
   }
 }
