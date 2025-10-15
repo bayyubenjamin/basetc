@@ -47,7 +47,8 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className="min-h-dvh antialiased pt-[calc(env(safe-area-inset-top)+36px)] bg-[var(--bg)] text-[var(--text)]">
+      {/* HAPUS bg-[var(--bg)] dan warna teks di sini */}
+      <body className="min-h-dvh antialiased pt-[calc(env(safe-area-inset-top)+36px)]">
         <Ticker />
         <SilentAddMiniApp />
         {children}
