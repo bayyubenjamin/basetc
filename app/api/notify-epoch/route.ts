@@ -1,127 +1,140 @@
-// app/api/webhook/route.ts
+// app/api/notify-epoch/route.ts
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { createPublicClient, http } from "viem";
+import { base } from "viem/chains";
+// --- SESUAIKAN ini ---
+const gameCoreAddress = process.env.GAME_CORE_ADDRESS as `0x${string}`;
+import gameCoreABI from "@/lib/abi/GameCore.json";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type AnyObj = Record<string, any>;
+type Row = {
+  fid: number;
+  token: string;
+  url: string;
+  last_epoch_notified: number;
+  disabled: boolean;
+};
 
-// base64url -> JSON
-function b64urlToJson<T = any>(b64url: string): T {
-  const norm = b64url.replace(/-/g, "+").replace(/_/g, "/");
-  const pad = norm.length % 4 === 2 ? "==" : norm.length % 4 === 3 ? "=" : "";
-  const str = Buffer.from(norm + pad, "base64").toString("utf8");
-  return JSON.parse(str);
+function json(body: any, status = 200) {
+  return NextResponse.json(body, {
+    status,
+    headers: {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store",
+    },
+  });
 }
 
-// ambil kandidat objek {header,payload,signature} dari berbagai bentuk body
-function extractJfsLike(obj: AnyObj): AnyObj | null {
-  if (!obj || typeof obj !== "object") return null;
-  if (obj.header && obj.payload && obj.signature) return obj;
-  if (obj.data && obj.data.header && obj.data.payload && obj.data.signature) return obj.data;
-  if (Array.isArray(obj.events) && obj.events.length > 0) {
-    const ev = obj.events[0];
-    if (ev.header && ev.payload && ev.signature) return ev;
-    if (ev.data && ev.data.header && ev.data.payload && ev.data.signature) return ev.data;
-  }
-  return null;
-}
-
-// ambil bentuk raw JSON (tanpa JFS) yang mungkin nested
-function extractRawLike(obj: AnyObj): AnyObj | null {
-  if (!obj || typeof obj !== "object") return null;
-  if (obj.event || obj.user || obj.notificationDetails) return obj;
-  if (obj.data && (obj.data.event || obj.data.user || obj.data.notificationDetails)) return obj.data;
-  if (Array.isArray(obj.events) && obj.events.length > 0) {
-    const ev = obj.events[0];
-    if (ev.event || ev.user || ev.notificationDetails) return ev;
-    if (ev.data && (ev.data.event || ev.data.user || ev.data.notificationDetails)) return ev.data;
-  }
-  return null;
-}
-
-export async function GET()  { return new NextResponse("ok", { status: 200 }); }
-export async function HEAD() { return new NextResponse(null, { status: 200 }); }
-export async function OPTIONS() { return new NextResponse(null, { status: 204 }); }
-
-export async function POST(req: Request) {
+export async function GET() {
   try {
-    const supabase = createClient(
-      process.env.SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
+    // 1) Epoch sekarang dari kontrak
+    const publicClient = createPublicClient({ chain: base, transport: http() });
+    const epochNowBn = await publicClient.readContract({
+      address: gameCoreAddress,
+      abi: gameCoreABI as any,
+      functionName: "epochNow",
+    });
+    const currentEpoch = Number(epochNowBn);
 
-    // 1) Ambil raw text (menghindari gagal parse bila content-type/format aneh)
-    const text = await req.text();
-    let body: AnyObj | string = "";
-    try { body = JSON.parse(text) as AnyObj; } catch { body = text; }
+    // 2) Ambil token yang perlu dikirim (last_epoch_notified < currentEpoch)
+    const supabase = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+    const { data, error } = await supabase
+      .from("farcaster_tokens")
+      .select("fid, token, url, last_epoch_notified, disabled")
+      .eq("disabled", false)
+      .lt("last_epoch_notified", currentEpoch);
+    if (error) throw error;
 
-    let eventType: string | undefined;
-    let fid: number | undefined;
-    let details: { url?: string; token?: string } | undefined;
+    const rows = (data || []) as Row[];
+    if (rows.length === 0) {
+      return json({ ok: true, epoch: currentEpoch, message: "No users need notification", results: [] });
+    }
 
-    if (typeof body === "string") {
-      console.log("[WEBHOOK] body is plain string, len=", body.length);
-    } else {
-      // 2) Coba mode JFS dulu
-      const jfs = extractJfsLike(body);
-      if (jfs) {
-        try {
-          const payload = b64urlToJson<AnyObj>(jfs.payload);
-          eventType = payload?.event;
-          const payloadUser = payload?.user as AnyObj | undefined;
-          fid = typeof payloadUser?.fid === "number" ? payloadUser!.fid : (payload as AnyObj)?.fid;
-          details = payload?.notificationDetails as AnyObj | undefined;
-          console.log("[WEBHOOK:JFS]", eventType, "fid=", fid, "hasNotif=", !!details);
-        } catch (e) {
-          console.warn("[WEBHOOK:JFS] decode payload gagal:", (e as any)?.message);
+    // 3) Kelompok per server URL; batch per 100 token
+    const byUrl: Record<string, Row[]> = {};
+    for (const r of rows) (byUrl[r.url] ??= []).push(r);
+
+    const notificationId = `epoch-reminder-${currentEpoch}`; // idempotent per epoch
+    const title = `Epoch ${currentEpoch} dimulai`;
+    const body = `Klaim harianmu untuk epoch ${currentEpoch} sekarang.`;
+    const targetUrl = "https://basetc.xyz/launch";
+
+    const results: Array<{
+      url: string;
+      sent: number;
+      succeeded: number;
+      invalid: number;
+      rateLimited: number;
+      sampleFids?: number[];
+    }> = [];
+
+    for (const [serverUrl, list] of Object.entries(byUrl)) {
+      let succ = 0, inv = 0, rl = 0, sent = 0;
+
+      for (let i = 0; i < list.length; i += 100) {
+        const chunk = list.slice(i, i + 100);
+        const tokens = chunk.map(c => c.token);
+        sent += tokens.length;
+
+        const resp = await fetch(serverUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ notificationId, title, body, targetUrl, tokens }),
+        });
+
+        const jsonResp = await resp.json().catch(() => ({} as any));
+        const successfulTokens: string[] = jsonResp.successfulTokens || [];
+        const invalidTokens: string[] = jsonResp.invalidTokens || [];
+        const rateLimitedTokens: string[] = jsonResp.rateLimitedTokens || [];
+
+        succ += successfulTokens.length;
+        inv  += invalidTokens.length;
+        rl   += rateLimitedTokens.length;
+
+        // 4) Update DB: yang sukses -> last_epoch_notified = currentEpoch
+        if (successfulTokens.length > 0) {
+          const fidsOk = chunk
+            .filter(c => successfulTokens.includes(c.token))
+            .map(c => c.fid);
+          if (fidsOk.length > 0) {
+            await supabase
+              .from("farcaster_tokens")
+              .update({ last_epoch_notified: currentEpoch })
+              .in("fid", fidsOk);
+          }
+        }
+
+        // 5) Token invalid -> disabled = true
+        if (invalidTokens.length > 0) {
+          const fidsBad = chunk
+            .filter(c => invalidTokens.includes(c.token))
+            .map(c => c.fid);
+          if (fidsBad.length > 0) {
+            await supabase
+              .from("farcaster_tokens")
+              .update({ disabled: true })
+              .in("fid", fidsBad);
+          }
         }
       }
 
-      // 3) Kalau JFS gagal / kosong, coba RAW-like
-      if (!eventType) {
-        const rawLike = extractRawLike(body);
-        if (rawLike) {
-          eventType = rawLike.event as string | undefined;
-          const rawUser = rawLike.user as AnyObj | undefined;
-          const fidFromUser = typeof rawUser?.fid === "number" ? rawUser!.fid : undefined;
-          const fidFromRoot = (rawLike as AnyObj).fid;
-          fid = typeof fidFromUser === "number" ? fidFromUser : (typeof fidFromRoot === "number" ? fidFromRoot : undefined);
-          details = rawLike.notificationDetails as AnyObj | undefined;
-          console.log("[WEBHOOK:RAW]", eventType, "fid=", fid, "hasNotif=", !!details);
-        } else {
-          console.log("[WEBHOOK] unknown body shape keys=", Object.keys(body));
-        }
-      }
+      results.push({
+        url: serverUrl,
+        sent,
+        succeeded: succ,
+        invalid: inv,
+        rateLimited: rl,
+        sampleFids: (byUrl[serverUrl] || []).slice(0, 5).map(r => r.fid),
+      });
     }
 
-    // 4) Simpan token hanya saat add/enable + ada token & url
-    if (
-      fid &&
-      details?.token &&
-      details?.url &&
-      (eventType === "miniapp_added" || eventType === "notifications_enabled")
-    ) {
-      await supabase
-        .from("farcaster_tokens")
-        .upsert(
-          { fid, token: details.token!, url: details.url!, last_epoch_notified: 0, disabled: false },
-          { onConflict: "fid,token" }
-        );
-      console.log("[WEBHOOK] UPSERT OK fid=", fid);
-    }
-
-    // 5) Nonaktifkan saat remove / disable
-    if (fid && (eventType === "miniapp_removed" || eventType === "notifications_disabled")) {
-      await supabase.from("farcaster_tokens").update({ disabled: true }).eq("fid", fid);
-      console.log("[WEBHOOK] DISABLED fid=", fid);
-    }
-
-    return NextResponse.json({ ok: true }, { status: 200 });
+    return json({ ok: true, epoch: currentEpoch, results });
   } catch (e: any) {
-    console.error("[WEBHOOK] ERR:", e?.message || e);
-    return NextResponse.json({ ok: false }, { status: 200 });
+    console.error("[notify-epoch] error:", e?.message || e);
+    return json({ ok: false, error: e?.message || "notify-epoch-error" }, 500);
   }
 }
 
