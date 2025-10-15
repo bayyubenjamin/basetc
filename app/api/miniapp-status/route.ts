@@ -1,8 +1,8 @@
 // app/api/miniapp-status/route.ts
 import { NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabaseAdmin";
+import { createAdminClient } from "../../../lib/supabaseAdmin";
 
-export const runtime = "nodejs"; // supaya bisa pakai supabase-js node
+export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
@@ -21,7 +21,6 @@ export async function GET(req: Request) {
       .maybeSingle();
 
     if (error) {
-      // Jangan ganggu UX; fallback tampilkan CTA
       return NextResponse.json({ added: false, notificationsEnabled: false });
     }
 
