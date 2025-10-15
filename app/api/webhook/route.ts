@@ -5,12 +5,38 @@ import { createClient } from "@supabase/supabase-js";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// helper: base64url → JSON
+// base64url -> JSON
 function b64urlToJson<T = any>(b64url: string): T {
   const norm = b64url.replace(/-/g, "+").replace(/_/g, "/");
   const pad = norm.length % 4 === 2 ? "==" : norm.length % 4 === 3 ? "=" : "";
   const str = Buffer.from(norm + pad, "base64").toString("utf8");
   return JSON.parse(str);
+}
+
+// ambil kandidat objek {header,payload,signature} dari berbagai bentuk body
+function extractJfsLike(obj: any): any | null {
+  if (!obj || typeof obj !== "object") return null;
+  if (obj.header && obj.payload && obj.signature) return obj;
+  if (obj.data && obj.data.header && obj.data.payload && obj.data.signature) return obj.data;
+  if (Array.isArray(obj.events) && obj.events.length > 0) {
+    const ev = obj.events[0];
+    if (ev.header && ev.payload && ev.signature) return ev;
+    if (ev.data && ev.data.header && ev.data.payload && ev.data.signature) return ev.data;
+  }
+  return null;
+}
+
+// ambil bentuk raw JSON (tanpa JFS) yang mungkin nested
+function extractRawLike(obj: any): { event?: string; user?: any; notificationDetails?: any } | null {
+  if (!obj || typeof obj !== "object") return null;
+  if (obj.event || obj.user || obj.notificationDetails) return obj;
+  if (obj.data && (obj.data.event || obj.data.user || obj.data.notificationDetails)) return obj.data;
+  if (Array.isArray(obj.events) && obj.events.length > 0) {
+    const ev = obj.events[0];
+    if (ev.event || ev.user || ev.notificationDetails) return ev;
+    if (ev.data && (ev.data.event || ev.data.user || ev.data.notificationDetails)) return ev.data;
+  }
+  return null;
 }
 
 export async function GET()  { return new NextResponse("ok", { status: 200 }); }
@@ -24,53 +50,65 @@ export async function POST(req: Request) {
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
-    // 1) Ambil body apa adanya
-    const raw: any = await req.json().catch(() => ({}));
+    // 1) Ambil raw text (menghindari gagal parse bila content-type/format aneh)
+    const text = await req.text();
+    let body: any = {};
+    try { body = JSON.parse(text); } catch { body = text; }
 
-    // 2) Normalisasi ke bentuk { event, user, notificationDetails }
     let eventType: string | undefined;
     let fid: number | undefined;
-    let notificationDetails: { url?: string; token?: string } | undefined;
+    let details: { url?: string; token?: string } | undefined;
 
-    if (raw && typeof raw === "object" && raw.header && raw.payload && raw.signature) {
-      // ==== JFS MODE (Warpcast dsb) ====
-      // payload = base64url(JSON string)
-      const payload = b64urlToJson<any>(raw.payload);
-      eventType = payload?.event;
-      fid = payload?.user?.fid ?? payload?.fid;
-      notificationDetails = payload?.notificationDetails;
-      console.log("[WEBHOOK:JFS]", eventType, "fid=", fid, "hasNotif=", !!notificationDetails);
+    if (typeof body === "string") {
+      // kalau benar-benar string random, gak bisa apa-apa
+      console.log("[WEBHOOK] body is plain string, len=", body.length);
     } else {
-      // ==== RAW JSON MODE (dev / curl manual) ====
-      eventType = raw?.event;
-      fid = raw?.user?.fid ?? raw?.fid;
-      notificationDetails = raw?.notificationDetails;
-      console.log("[WEBHOOK:RAW]", eventType, "fid=", fid, "hasNotif=", !!notificationDetails);
+      // 2) Coba mode JFS dulu
+      const jfs = extractJfsLike(body);
+      if (jfs) {
+        try {
+          const payload = b64urlToJson<any>(jfs.payload);
+          eventType = payload?.event;
+          fid = payload?.user?.fid ?? payload?.fid;
+          details = payload?.notificationDetails;
+          console.log("[WEBHOOK:JFS]", eventType, "fid=", fid, "hasNotif=", !!details);
+        } catch (e) {
+          console.warn("[WEBHOOK:JFS] decode payload gagal:", (e as any)?.message);
+        }
+      }
+
+      // 3) Kalau JFS gagal / kosong, coba RAW-like
+      if (!eventType) {
+        const rawLike = extractRawLike(body);
+        if (rawLike) {
+          eventType = rawLike.event;
+          fid = rawLike.user?.fid ?? rawLike.fid;
+          details = rawLike.notificationDetails;
+          console.log("[WEBHOOK:RAW]", eventType, "fid=", fid, "hasNotif=", !!details);
+        } else {
+          // log bentuk kunci untuk debugging
+          console.log("[WEBHOOK] unknown body shape keys=", Object.keys(body));
+        }
+      }
     }
 
-    // 3) Simpan token saat add/enable
+    // 4) Simpan token hanya saat add/enable + ada token & url
     if (
       fid &&
-      notificationDetails?.token &&
-      notificationDetails?.url &&
+      details?.token &&
+      details?.url &&
       (eventType === "miniapp_added" || eventType === "notifications_enabled")
     ) {
       await supabase
         .from("farcaster_tokens")
         .upsert(
-          {
-            fid,
-            token: notificationDetails.token,
-            url: notificationDetails.url,
-            last_epoch_notified: 0,
-            disabled: false,
-          },
+          { fid, token: details.token, url: details.url, last_epoch_notified: 0, disabled: false },
           { onConflict: "fid,token" }
         );
       console.log("[WEBHOOK] UPSERT OK fid=", fid);
     }
 
-    // 4) Nonaktifkan saat remove/disable
+    // 5) Nonaktifkan saat remove / disable
     if (fid && (eventType === "miniapp_removed" || eventType === "notifications_disabled")) {
       await supabase.from("farcaster_tokens").update({ disabled: true }).eq("fid", fid);
       console.log("[WEBHOOK] DISABLED fid=", fid);
@@ -79,7 +117,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true }, { status: 200 });
   } catch (e: any) {
     console.error("[WEBHOOK] ERR:", e?.message || e);
-    // tetap 200 supaya host nggak spam retry
     return NextResponse.json({ ok: false }, { status: 200 });
   }
 }
