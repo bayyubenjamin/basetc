@@ -47,7 +47,8 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className="bg-zinc-950">
-      <body className="min-h-dvh text-zinc-200 antialiased pt-[calc(env(safe-area-inset-top)+36px)]">
+<body className="min-h-dvh text-zinc-200 antialiased pt-[calc(env(safe-area-inset-top)+36px)]">
+        {/* ticker global muncul di semua halaman */}
         <Ticker />
         {/* HANYA pemicu otomatis tanpa UI */}
         <SilentAddMiniApp />
@@ -56,4 +57,3 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     </html>
   );
 }
-
