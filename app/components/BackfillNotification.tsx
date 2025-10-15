@@ -52,11 +52,11 @@ export default function BackfillNotification() {
   };
 
   return (
-    <div className="fixed bottom-4 left-4 right-4 z-50 rounded-xl bg-[#101525] border border-white/10 p-4 shadow-lg">
+    <div className="fixed bottom-2 left-4 right-4 z-50 rounded-xl bg-[#101525] border border-white/10 p-4 shadow-lg">
       <div className="text-sm">
         <b>Enable Daily Reminder</b><br />
-        Aktifkan notifikasi untuk BaseTC supaya dapat pengingat klaim jam 07:00 WIB.
-        Jika dulu sudah enable, lakukan <i>Disable → Enable</i> lagi agar token terdaftar.
+        Enable notifications for BaseTC to receive claim reminders at 7:00 a.m. WIB.
+If you've already enabled them, do the following: <i>Disable → Enable</i> lagi agar token terdaftar.
       </div>
       <div className="mt-3 flex gap-2">
         <button
