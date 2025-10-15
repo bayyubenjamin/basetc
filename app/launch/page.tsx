@@ -12,6 +12,7 @@ import Market from "../components/Market";
 import Profil from "../components/Profil";
 import Event from "../components/Event";
 import FidInput from "../components/FidInput";
+import AddMiniAppPrompt from "./components/AddMiniAppPrompt";
 import ClaimPopup from "../components/ClaimPopup"; // <-- Impor komponen baru
 import { isAddress } from "ethers";
 
