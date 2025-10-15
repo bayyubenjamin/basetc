@@ -1,0 +1,9 @@
+{
+  "crons": [
+    {
+      "path": "/api/notify-epoch",
+      "schedule": "0 0 * * *"
+    }
+  ]
+}
+
