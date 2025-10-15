@@ -3,26 +3,26 @@
 @tailwind utilities;
 
 /* ==============================
-   PALETTE & BASE — Light Blue Theme
+   PALETTE & BASE — Light Blue UI
 ============================== */
-:root{
-  --bg:#f4f9ff;          /* latar paling bawah: putih kebiruan */
-  --surface:#eef5ff;     /* area konten */
-  --card:#dfeaff;        /* kartu/panel */
-  --muted:#7b94c9;       /* teks sekunder */
-  --text:#0b234a;        /* teks utama (biru gelap) */
-  --accent:#2b7bff;      /* CTA / link utama */
-  --accent2:#0055ff;     /* aksen sekunder */
+:root {
+  --bg:#f4f9ff;
+  --surface:#eef5ff;
+  --card:#dfeaff;
+  --muted:#5a6fa8;
+  --text:#0a1833;          /* teks utama lebih gelap biar kebaca */
+  --accent:#2b7bff;
+  --accent2:#0055ff;
   --ok:#1db954;
   --warn:#eab308;
   --err:#ef4444;
-  --stroke:rgba(0,0,0,.08); /* garis halus untuk light mode */
+  --stroke:rgba(0,0,0,.08);
 
-  /* Neumorphism tokens (versi light) */
-  --neu-top:#ffffff;                 /* highlight atas */
-  --neu-bottom:#c7d9ff;              /* bayangan bawah lembut */
-  --neu-shadow:rgba(13,37,84,.15);   /* soft shadow kebiruan */
-  --neu-light:rgba(255,255,255,.85); /* soft light */
+  /* Neumorphism (versi terang) */
+  --neu-top:#ffffff;
+  --neu-bottom:#c7d9ff;
+  --neu-shadow:rgba(13,37,84,.15);
+  --neu-light:rgba(255,255,255,.9);
 }
 
 html, body { min-height:100%; }
@@ -31,15 +31,14 @@ body { @apply overflow-x-hidden; color: var(--text); }
 
 /* ==============================
    GLOBAL STATIC HERO BACKGROUND
-   (stays fixed; not scrolling)
 ============================== */
-html::before{
+html::before {
   content:"";
   position: fixed;
   top: 0; left: 0; right: 0;
-  height: 500px; /* tinggi area biru; ubah sesuai selera */
+  height: 500px;
   pointer-events: none;
-  z-index: -1; /* DI BELAKANG seluruh konten */
+  z-index: -1;
   background: linear-gradient(
     180deg,
     #c9e1ff 0%,
@@ -49,8 +48,6 @@ html::before{
   background-repeat: no-repeat;
   background-attachment: fixed;
   background-size: 100% 100%;
-  transform: translateZ(0);
-  will-change: transform;
 }
 
 /* (Opsional) glow lembut dari atas */
