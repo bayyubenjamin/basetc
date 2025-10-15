@@ -1,4 +1,4 @@
-// app/components/Profil.tsx (modified version)
+// app/components/Profil.tsx
 "use client";
 
 import { useEffect, useMemo, useState, useCallback } from "react";
@@ -165,15 +165,19 @@ export default function Profil() {
 
   return (
     <div className="fin-wrap fin-content-pad-bottom">
-      {/* Profile Header (neumorphic card + avatar pressed) */}
+      {/* Profile Header */}
       <section className="fin-card fin-card-pad neu flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-full overflow-hidden bg-[#0e1220] flex items-center justify-center border border-[#1b2133] neu-inner">
-            {fcUser?.pfpUrl ? <Image src={fcUser.pfpUrl} alt="pfp" width={48} height={48} /> : <span className="text-xs text-neutral-400">PFP</span>}
+          <div className="w-12 h-12 rounded-full overflow-hidden bg-white/70 flex items-center justify-center border border-[rgba(0,0,0,.06)] neu-inner">
+            {fcUser?.pfpUrl ? (
+              <Image src={fcUser.pfpUrl} alt="pfp" width={48} height={48} />
+            ) : (
+              <span className="text-xs text-[var(--muted)]">PFP</span>
+            )}
           </div>
           <div>
-            <h2 className="font-bold text-[15px]">{displayName}</h2>
-            <p className="text-[12px] text-[#9fb0d6] opacity-75">
+            <h2 className="font-bold text-[15px] text-[var(--text)]">{displayName}</h2>
+            <p className="text-[12px] text-[var(--muted)] font-semibold">
               {address ? shortAddr : "—"} · FID: {fcUser?.fid ?? "—"}
             </p>
             {!!refAddr && (
@@ -184,20 +188,20 @@ export default function Profil() {
             )}
           </div>
         </div>
-        {isSupreme && <div className="fin-badge fin-badge-active neu-chip text:[11px]">Supreme</div>}
+        {isSupreme && <div className="fin-badge fin-badge-active neu-chip text-[11px]">Supreme</div>}
       </section>
 
       {/* Invites Summary */}
       <section className="fin-card fin-card-pad neu space-y-3">
-        <h2 className="font-semibold text-[14px]">Invites</h2>
+        <h2 className="font-semibold text-[14px] text-[var(--text)]">Invites</h2>
         <div className="flex justify-between text-sm">
           <div>
-            <div className="text-xs text-[#9fb0d6]">Total Invited (valid)</div>
-            <div className="text-lg font-bold">{totalValidCount}</div>
+            <div className="text-xs text-[var(--muted)] font-semibold">Total Invited (valid)</div>
+            <div className="text-lg font-bold text-[var(--text)]">{totalValidCount}</div>
           </div>
           <div>
-            <div className="text-xs text-[#9fb0d6]">Your $BaseTC</div>
-            <div className="text-lg font-bold">{Number(baseReadable).toLocaleString()}</div>
+            <div className="text-xs text-[var(--muted)] font-semibold">Your $BaseTC</div>
+            <div className="text-lg font-bold text-[var(--text)]">{Number(baseReadable).toLocaleString()}</div>
           </div>
         </div>
 
@@ -207,7 +211,7 @@ export default function Profil() {
             <input
               readOnly
               value={inviteLink}
-              className="w-full text-xs bg-transparent outline-none text-[#d7e2ff] select-all"
+              className="w-full text-xs bg-transparent outline-none text-[var(--text)] select-all"
             />
             <button
               type="button"
@@ -224,7 +228,7 @@ export default function Profil() {
           >
             {shareLoading ? "Opening…" : "Share to Farcaster"}
           </button>
-          <p className="text-[11px] text-[#9fb0d6] opacity-80 text-center">
+          <p className="text-[11px] text-[var(--muted)] font-semibold text-center">
             Only users who claimed the free rig are counted as valid.
           </p>
         </div>
@@ -234,38 +238,44 @@ export default function Profil() {
           <div className="overflow-hidden rounded-md neu-inner border border-white/[0.06]">
             <div className="max-h-44 overflow-y-auto">
               <table className="w-full text-xs">
-                <thead className="bg-[#0f1426] text-[#9fb0d6] sticky top-0 z-10">
+                <thead className="sticky top-0 z-10 bg-[#eaf1ff] text-[var(--muted)]">
                   <tr>
-                    <th className="text-left px-2 py-1.5">User (FID)</th>
-                    <th className="text-left px-2 py-1.5">Valid ({totalValidCount})</th>
-                    <th className="text-left px-2 py-1.5">Pending ({totalInvitedPending})</th>
-                    <th className="text-left px-2 py-1.5">Total ({totalInvitedAll})</th>
+                    <th className="text-left px-2 py-1.5 font-semibold">User (FID)</th>
+                    <th className="text-left px-2 py-1.5 font-semibold">Valid ({totalValidCount})</th>
+                    <th className="text-left px-2 py-1.5 font-semibold">Pending ({totalInvitedPending})</th>
+                    <th className="text-left px-2 py-1.5 font-semibold">Total ({totalInvitedAll})</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="text-[var(--text)]">
                   {loadingInvites ? (
                     <tr>
-                      <td className="px-2 py-2 text-[#9fb0d6]" colSpan={4}>Loading…</td>
+                      <td className="px-2 py-2 text-[var(--muted)]" colSpan={4}>Loading…</td>
                     </tr>
                   ) : invites.length === 0 ? (
                     <tr>
-                      <td className="px-2 py-2 text-[#9fb0d6]" colSpan={4}>No invites yet.</td>
+                      <td className="px-2 py-2 text-[var(--muted)]" colSpan={4}>No invites yet.</td>
                     </tr>
                   ) : (
                     invites.map((u, i) => (
-                      <tr key={`${u.fid ?? "x"}-${i}`} className="border-t border-[#1e263f]">
+                      <tr key={`${u.fid ?? "x"}-${i}`} className="border-t border-[rgba(0,0,0,.08)]">
                         <td className="px-2 py-1.5">
                           {u.fid ?? "—"}
-                          {u.wallet && <span className="text-[#9fb0d6] ml-1 opacity-60">({`${u.wallet.slice(0, 6)}…`})</span>}
+                          {u.wallet && (
+                            <span className="text-[var(--muted)] ml-1">({`${u.wallet.slice(0, 6)}…`})</span>
+                          )}
                         </td>
                         <td className="px-2 py-1.5">
                           {u.status === "valid" && (
-                            <span className="px-2 py-0.5 rounded neu-chip text-[#1db954] text-[10px]" style={{ background: "rgba(29,185,84,.12)" }}>valid</span>
+                            <span className="px-2 py-0.5 rounded neu-chip text-[#137a3f] text-[10px]" style={{ background: "rgba(29,185,84,.12)" }}>
+                              valid
+                            </span>
                           )}
                         </td>
                         <td className="px-2 py-1.5">
                           {u.status !== "valid" && (
-                            <span className="px-2 py-0.5 rounded neu-chip text-[#eab308] text-[10px]" style={{ background: "rgba(234,179,8,.12)" }}>pending</span>
+                            <span className="px-2 py-0.5 rounded neu-chip text-[#6b5306] text-[10px]" style={{ background: "rgba(234,179,8,.12)" }}>
+                              pending
+                            </span>
                           )}
                         </td>
                         <td className="px-2 py-1.5">{/* intentionally blank per-row */}</td>
@@ -281,15 +291,15 @@ export default function Profil() {
 
       {/* Achievements Section */}
       <section className="fin-card fin-card-pad neu space-y-2">
-        <h2 className="font-semibold text-[14px]">Achievements</h2>
+        <h2 className="font-semibold text-[14px] text-[var(--text)]">Achievements</h2>
         {achievements.length === 0 ? (
-          <div className="text-xs text-[#9fb0d6]">No achievements yet…</div>
+          <div className="text-xs text-[var(--muted)]">No achievements yet…</div>
         ) : (
           <div className="flex flex-wrap gap-2">
             {achievements.map((ach) => (
               <div key={ach.name} className="flex items-center space-x-1 neu-chip px-2 py-1 text-xs">
-                <Icon path={ach.icon} className="w-4 h-4 text-yellow-400" />
-                <span>{ach.name}</span>
+                <Icon path={ach.icon} className="w-4 h-4 text-yellow-500" />
+                <span className="text-[var(--text)]">{ach.name}</span>
               </div>
             ))}
           </div>
@@ -298,4 +308,3 @@ export default function Profil() {
     </div>
   );
 }
-
