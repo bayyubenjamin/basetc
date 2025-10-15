@@ -5,6 +5,8 @@ import { createClient } from "@supabase/supabase-js";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+type AnyObj = Record<string, any>;
+
 // base64url -> JSON
 function b64urlToJson<T = any>(b64url: string): T {
   const norm = b64url.replace(/-/g, "+").replace(/_/g, "/");
@@ -14,7 +16,7 @@ function b64urlToJson<T = any>(b64url: string): T {
 }
 
 // ambil kandidat objek {header,payload,signature} dari berbagai bentuk body
-function extractJfsLike(obj: any): any | null {
+function extractJfsLike(obj: AnyObj): AnyObj | null {
   if (!obj || typeof obj !== "object") return null;
   if (obj.header && obj.payload && obj.signature) return obj;
   if (obj.data && obj.data.header && obj.data.payload && obj.data.signature) return obj.data;
@@ -27,7 +29,7 @@ function extractJfsLike(obj: any): any | null {
 }
 
 // ambil bentuk raw JSON (tanpa JFS) yang mungkin nested
-function extractRawLike(obj: any): { event?: string; user?: any; notificationDetails?: any } | null {
+function extractRawLike(obj: AnyObj): AnyObj | null {
   if (!obj || typeof obj !== "object") return null;
   if (obj.event || obj.user || obj.notificationDetails) return obj;
   if (obj.data && (obj.data.event || obj.data.user || obj.data.notificationDetails)) return obj.data;
@@ -52,25 +54,25 @@ export async function POST(req: Request) {
 
     // 1) Ambil raw text (menghindari gagal parse bila content-type/format aneh)
     const text = await req.text();
-    let body: any = {};
-    try { body = JSON.parse(text); } catch { body = text; }
+    let body: AnyObj | string = "";
+    try { body = JSON.parse(text) as AnyObj; } catch { body = text; }
 
     let eventType: string | undefined;
     let fid: number | undefined;
     let details: { url?: string; token?: string } | undefined;
 
     if (typeof body === "string") {
-      // kalau benar-benar string random, gak bisa apa-apa
       console.log("[WEBHOOK] body is plain string, len=", body.length);
     } else {
       // 2) Coba mode JFS dulu
       const jfs = extractJfsLike(body);
       if (jfs) {
         try {
-          const payload = b64urlToJson<any>(jfs.payload);
+          const payload = b64urlToJson<AnyObj>(jfs.payload);
           eventType = payload?.event;
-          fid = payload?.user?.fid ?? payload?.fid;
-          details = payload?.notificationDetails;
+          const payloadUser = payload?.user as AnyObj | undefined;
+          fid = typeof payloadUser?.fid === "number" ? payloadUser!.fid : (payload as AnyObj)?.fid;
+          details = payload?.notificationDetails as AnyObj | undefined;
           console.log("[WEBHOOK:JFS]", eventType, "fid=", fid, "hasNotif=", !!details);
         } catch (e) {
           console.warn("[WEBHOOK:JFS] decode payload gagal:", (e as any)?.message);
@@ -81,12 +83,14 @@ export async function POST(req: Request) {
       if (!eventType) {
         const rawLike = extractRawLike(body);
         if (rawLike) {
-          eventType = rawLike.event;
-          fid = rawLike.user?.fid ?? rawLike.fid;
-          details = rawLike.notificationDetails;
+          eventType = rawLike.event as string | undefined;
+          const rawUser = rawLike.user as AnyObj | undefined;
+          const fidFromUser = typeof rawUser?.fid === "number" ? rawUser!.fid : undefined;
+          const fidFromRoot = (rawLike as AnyObj).fid;
+          fid = typeof fidFromUser === "number" ? fidFromUser : (typeof fidFromRoot === "number" ? fidFromRoot : undefined);
+          details = rawLike.notificationDetails as AnyObj | undefined;
           console.log("[WEBHOOK:RAW]", eventType, "fid=", fid, "hasNotif=", !!details);
         } else {
-          // log bentuk kunci untuk debugging
           console.log("[WEBHOOK] unknown body shape keys=", Object.keys(body));
         }
       }
@@ -102,7 +106,7 @@ export async function POST(req: Request) {
       await supabase
         .from("farcaster_tokens")
         .upsert(
-          { fid, token: details.token, url: details.url, last_epoch_notified: 0, disabled: false },
+          { fid, token: details.token!, url: details.url!, last_epoch_notified: 0, disabled: false },
           { onConflict: "fid,token" }
         );
       console.log("[WEBHOOK] UPSERT OK fid=", fid);
