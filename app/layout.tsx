@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import Ticker from "./components/Ticker";
 import ClientErrorHUD from "./components/ClientErrorHUD";
 import AddMiniAppPrompt from "./components/AddMiniAppPrompt";
+import SilentAddMiniApp from "./components/SilentAddMiniApp";
 
 // Payload Mini App (global)
 const fcPayload = {
@@ -53,6 +54,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Ticker />
         <ClientErrorHUD />
         <AddMiniAppPrompt />
+        <SilentAddMiniApp />   {/* ⬅️ pemicu otomatis tanpa UI */}
         {children}
       </body>
     </html>

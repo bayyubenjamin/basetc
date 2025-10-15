@@ -106,7 +106,7 @@ function MainApp() {
       <AddMiniAppPrompt />
 
       {/* Modal/CTA server-verified: muncul tiap buka sampai benar2 Add */}
-      <AddMiniAppModal />
+      {/* <AddMiniAppModal /> */}
 
       {showClaimPopup && (
         <ClaimPopup
