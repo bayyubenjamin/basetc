@@ -2,7 +2,6 @@
 import "./globals.css";
 import type { Metadata } from "next";
 import Ticker from "./components/Ticker";
-import ClientErrorHUD from "./components/ClientErrorHUD";
 import AddMiniAppPrompt from "./components/AddMiniAppPrompt";
 import SilentAddMiniApp from "./components/SilentAddMiniApp";
 
@@ -52,8 +51,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="min-h-dvh text-zinc-200 antialiased pt-[calc(env(safe-area-inset-top)+36px)]">
         {/* ticker global muncul di semua halaman */}
         <Ticker />
-        <ClientErrorHUD />
-        <AddMiniAppPrompt />
         <SilentAddMiniApp />   {/* ⬅️ pemicu otomatis tanpa UI */}
         {children}
       </body>
