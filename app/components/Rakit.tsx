@@ -37,10 +37,10 @@ const TierImg: Record<"basic"|"pro"|"legend", string> = {
   legend: "/img/vga_legend.png",
 };
 
-/* Small slot preview component (keeps fin-* theme) */
+/* Small slot preview component (neumorphic pressed look, tanpa ubah logic) */
 const NftSlot: FC<{ filled: boolean; tier: "basic" | "pro" | "legend" }> = ({ filled, tier }) => (
   <div
-    className={`rounded-md grid place-items-center border
+    className={`rounded-md grid place-items-center border neu-inner
       ${filled ? "bg-green-500/12 border-green-500/40" : "bg-[#151a2e] border-[#1e263f]"}
       w-12 h-12 md:w-16 md:h-16`}
   >
@@ -300,7 +300,7 @@ export default function Rakit() {
     }
   }
 
-  /* ---------------- UI (fintech-aligned) ---------------- */
+  /* ---------------- UI (fintech-aligned + Neumorphism) ---------------- */
   return (
     <div className="fin-wrap fin-content-pad-bottom">
       {/* Page head */}
@@ -310,7 +310,7 @@ export default function Rakit() {
       </div>
 
       {/* BASIC */}
-      <section className="fin-card fin-card-pad" aria-label="Basic rigs">
+      <section className="fin-card fin-card-pad neu" aria-label="Basic rigs">
         <div className="fin-row">
           <div className="fin-epoch">
             <small>Basic</small>
@@ -341,7 +341,7 @@ export default function Rakit() {
           </div>
           <button
             onClick={(e) => { e.preventDefault(); onMergeBasicToPro(); }}
-            className="mt-3 w-full fin-btn fin-btn-claim !py-2 text-sm transition-transform active:scale-[0.98]"
+            className={`mt-3 w-full fin-btn neu-btn !py-2 text-sm transition-transform active:scale-[0.98] ${(!user || loading) ? "opacity-50 cursor-not-allowed" : ""}`}
             disabled={!user || loading}
             title={!user ? "Connect wallet" : "Merge to Pro"}
           >
@@ -358,7 +358,7 @@ export default function Rakit() {
       </section>
 
       {/* PRO */}
-      <section className="fin-card fin-card-pad" aria-label="Pro rigs">
+      <section className="fin-card fin-card-pad neu" aria-label="Pro rigs">
         <div className="fin-row">
           <div className="fin-epoch">
             <small>Pro</small>
@@ -389,7 +389,7 @@ export default function Rakit() {
           </div>
           <button
             onClick={(e) => { e.preventDefault(); onMergeProToLegend(); }}
-            className="mt-3 w-full fin-btn fin-btn-claim !py-2 text-sm transition-transform active:scale-[0.98]"
+            className={`mt-3 w-full fin-btn neu-btn !py-2 text-sm transition-transform active:scale-[0.98] ${(!user || loading) ? "opacity-50 cursor-not-allowed" : ""}`}
             disabled={!user || loading}
             title={!user ? "Connect wallet" : "Merge to Legend"}
           >
@@ -406,13 +406,13 @@ export default function Rakit() {
       </section>
 
       {/* LEGEND (display only) */}
-      <section className="fin-card fin-card-pad" aria-label="Legend rigs">
+      <section className="fin-card fin-card-pad neu" aria-label="Legend rigs">
         <div className="fin-row">
           <div className="fin-epoch">
             <small>Legend</small>
             <strong>Owned: {String(ownedLegend)}</strong>
           </div>
-        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2">
             <Image src={TierImg.legend} alt="Legend rig" width={44} height={44} />
           </div>
         </div>

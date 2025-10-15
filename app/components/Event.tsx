@@ -40,54 +40,59 @@ const Event: FC = () => {
 
   return (
     <div className="fin-wrap fin-content-pad-bottom">
+      {/* Page Head */}
       <div className="fin-page-head">
         <h1>Events</h1>
         <p>Join special events to earn extra rewards</p>
       </div>
 
-      <div
-        className="flex flex-col items-center justify-center text-center mx-4 mb-4 p-4 bg-gradient-to-br from-blue-900/40 to-purple-800/30 border border-blue-500/30 shadow-lg"
-        style={{ borderRadius: "20px / 12px" }}
-      >
-        <img
-          src="https://ik.imagekit.io/5spt6gb2z/IMG_9023.jpeg"
-          alt="Giveaway Banner"
-          className="w-full max-w-md rounded-xl shadow-md mb-3"
-          style={{ borderRadius: "16px / 10px" }}
-        />
+      {/* Giveaway hero card */}
+      <div className="mx-4 mb-4 p-4 fin-card neu">
+        <div className="flex flex-col items-center text-center">
+          <img
+            src="https://ik.imagekit.io/5spt6gb2z/IMG_9023.jpeg"
+            alt="Giveaway Banner"
+            className="w-full max-w-md rounded-xl shadow-md mb-3 neu-inner"
+          />
 
-        <button
-          onClick={() => setShowPopup(true)}
-          className="inline-block bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2 rounded-lg shadow transition-all duration-150"
-        >
-          SUBMIT GIVEAWAY
-        </button>
-      </div>
-
-      <div className="fin-card fin-card-trans fin-card-pad" style={{ margin: "16px" }}>
-        <div className="flex items-center justify-center gap-2">
-          {(["spin", "staking", "leaderboard"] as EventTab[]).map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`flex-1 text-sm font-semibold rounded-lg py-2 transition-all duration-150 ${
-                activeTab === tab
-                  ? "bg-blue-600 text-white shadow-md"
-                  : "bg-transparent text-neutral-400 hover:bg-blue-600/20"
-              }`}
-            >
-              {tab.charAt(0).toUpperCase() + tab.slice(1)}
-            </button>
-          ))}
+          <button
+            onClick={() => setShowPopup(true)}
+            className="neu-btn inline-block font-semibold px-6 py-2 rounded-lg transition-all duration-150"
+          >
+            SUBMIT GIVEAWAY
+          </button>
         </div>
       </div>
 
-      <section className="fin-card fin-card-trans fin-card-pad" style={{ margin: "16px" }}>
+      {/* Tabs card */}
+      <div className="fin-card fin-card-trans fin-card-pad neu mx-4">
+        <div className="flex items-center justify-center gap-2">
+          {(["spin", "staking", "leaderboard"] as EventTab[]).map((tab) => {
+            const isActive = activeTab === tab;
+            return (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`flex-1 text-sm font-semibold rounded-lg py-2 transition-all duration-150 neu-btn ${
+                  isActive ? "ring-1 ring-white/10" : ""
+                }`}
+                aria-pressed={isActive}
+              >
+                {tab.charAt(0).toUpperCase() + tab.slice(1)}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Content card */}
+      <section className="fin-card fin-card-trans fin-card-pad neu mx-4">
         {renderContent()}
       </section>
 
       <div className="fin-bottom-space" />
 
+      {/* Popup */}
       {showPopup && (
         <div
           className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 px-4"
@@ -107,14 +112,14 @@ const Event: FC = () => {
                 shareSystem(GIVEAWAY_URL);
                 setShowPopup(false);
               }}
-              className="w-full rounded-lg px-4 py-2 font-semibold bg-blue-600 hover:bg-blue-700 text-white"
+              className="w-full rounded-lg px-4 py-2 font-semibold neu-btn"
             >
               Open in Browser
             </button>
 
             <button
               onClick={() => setShowPopup(false)}
-              className="mt-4 w-full rounded-lg px-4 py-2 font-medium text-neutral-300 hover:text-white"
+              className="mt-4 w-full rounded-lg px-4 py-2 font-medium text-neutral-300 hover:text-white neu-btn"
             >
               Close
             </button>
@@ -126,3 +131,4 @@ const Event: FC = () => {
 };
 
 export default Event;
+

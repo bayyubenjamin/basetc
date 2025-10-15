@@ -165,10 +165,10 @@ export default function Profil() {
 
   return (
     <div className="fin-wrap fin-content-pad-bottom">
-      {/* Profile Header */}
-      <section className="fin-card fin-card-pad flex items-center justify-between">
+      {/* Profile Header (neumorphic card + avatar pressed) */}
+      <section className="fin-card fin-card-pad neu flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-full overflow-hidden bg-[#0e1220] flex items-center justify-center border border-[#1b2133]">
+          <div className="w-12 h-12 rounded-full overflow-hidden bg-[#0e1220] flex items-center justify-center border border-[#1b2133] neu-inner">
             {fcUser?.pfpUrl ? <Image src={fcUser.pfpUrl} alt="pfp" width={48} height={48} /> : <span className="text-xs text-neutral-400">PFP</span>}
           </div>
           <div>
@@ -177,18 +177,18 @@ export default function Profil() {
               {address ? shortAddr : "—"} · FID: {fcUser?.fid ?? "—"}
             </p>
             {!!refAddr && (
-              <div className="mt-1 inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-[#1b2133] text-[10px]">
-                <span className="opacity-70">Referred By</span>
+              <div className="mt-1 inline-flex items-center space-x-1 px-2 py-0.5 rounded-md neu-chip text-[10px]">
+                <span className="opacity-80">Referred By</span>
                 <span className="font-medium">{`${refAddr.slice(0, 6)}…`}</span>
               </div>
             )}
           </div>
         </div>
-        {isSupreme && <div className="fin-badge fin-badge-active text:[11px]">Supreme</div>}
+        {isSupreme && <div className="fin-badge fin-badge-active neu-chip text:[11px]">Supreme</div>}
       </section>
 
       {/* Invites Summary */}
-      <section className="fin-card fin-card-pad space-y-3">
+      <section className="fin-card fin-card-pad neu space-y-3">
         <h2 className="font-semibold text-[14px]">Invites</h2>
         <div className="flex justify-between text-sm">
           <div>
@@ -203,24 +203,27 @@ export default function Profil() {
 
         {/* Invite link and actions */}
         <div className="flex flex-col gap-2">
-          <div className="relative">
+          <div className="relative neu-inner rounded-md px-2 py-1">
             <input
               readOnly
               value={inviteLink}
-              className="w-full text-xs bg-[#0f1426] border border-[#1b2133] rounded-md px-2 py-1 text-[#d7e2ff] select-all"
+              className="w-full text-xs bg-transparent outline-none text-[#d7e2ff] select-all"
             />
             <button
               type="button"
               onClick={copyInviteLink}
-              className="absolute right-1 top-1/2 -translate-y-1/2 text-[10px] px-2 py-0.5 rounded bg-[#1e263f] text-[#9fb0d6] hover:text-white"
+              className="absolute right-1 top-1/2 -translate-y-1/2 text-[10px] px-2 py-0.5 rounded neu-btn"
             >
               {copied ? "Copied" : "Copy"}
             </button>
           </div>
-          <button disabled={!inviteLink || shareLoading} onClick={onShareReferral} className="fin-btn fin-btn-claim w-full">
+          <button
+            disabled={!inviteLink || shareLoading}
+            onClick={onShareReferral}
+            className={`fin-btn w-full neu-btn ${(!inviteLink || shareLoading) ? "opacity-50 cursor-not-allowed" : ""}`}
+          >
             {shareLoading ? "Opening…" : "Share to Farcaster"}
           </button>
-          {/* Centered note under share button */}
           <p className="text-[11px] text-[#9fb0d6] opacity-80 text-center">
             Only users who claimed the free rig are counted as valid.
           </p>
@@ -228,7 +231,7 @@ export default function Profil() {
 
         {/* Invited users table */}
         <div className="space-y-2">
-          <div className="overflow-hidden rounded-md border border-[#1e263f]">
+          <div className="overflow-hidden rounded-md neu-inner border border-white/[0.06]">
             <div className="max-h-44 overflow-y-auto">
               <table className="w-full text-xs">
                 <thead className="bg-[#0f1426] text-[#9fb0d6] sticky top-0 z-10">
@@ -257,12 +260,12 @@ export default function Profil() {
                         </td>
                         <td className="px-2 py-1.5">
                           {u.status === "valid" && (
-                            <span className="px-2 py-0.5 rounded bg-[#1db95433] text-[#1db954] text-[10px]">valid</span>
+                            <span className="px-2 py-0.5 rounded neu-chip text-[#1db954] text-[10px]" style={{ background: "rgba(29,185,84,.12)" }}>valid</span>
                           )}
                         </td>
                         <td className="px-2 py-1.5">
                           {u.status !== "valid" && (
-                            <span className="px-2 py-0.5 rounded bg-[#eab30833] text-[#eab308] text-[10px]">pending</span>
+                            <span className="px-2 py-0.5 rounded neu-chip text-[#eab308] text-[10px]" style={{ background: "rgba(234,179,8,.12)" }}>pending</span>
                           )}
                         </td>
                         <td className="px-2 py-1.5">{/* intentionally blank per-row */}</td>
@@ -277,14 +280,14 @@ export default function Profil() {
       </section>
 
       {/* Achievements Section */}
-      <section className="fin-card fin-card-pad space-y-2">
+      <section className="fin-card fin-card-pad neu space-y-2">
         <h2 className="font-semibold text-[14px]">Achievements</h2>
         {achievements.length === 0 ? (
           <div className="text-xs text-[#9fb0d6]">No achievements yet…</div>
         ) : (
           <div className="flex flex-wrap gap-2">
             {achievements.map((ach) => (
-              <div key={ach.name} className="flex items-center space-x-1 bg-[#0f1426] rounded-md px-2 py-1 text-xs border border-[#1e263f]">
+              <div key={ach.name} className="flex items-center space-x-1 neu-chip px-2 py-1 text-xs">
                 <Icon path={ach.icon} className="w-4 h-4 text-yellow-400" />
                 <span>{ach.name}</span>
               </div>
@@ -295,3 +298,4 @@ export default function Profil() {
     </div>
   );
 }
+

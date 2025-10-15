@@ -19,7 +19,7 @@ import {
 } from "../lib/web3Config";
 import { useFarcaster } from "../context/FarcasterProvider";
 
-// Komponen untuk animasi angka berputar acak
+/* ====== Spinning number component (tetap) ====== */
 const SpinningNumbers: FC = () => {
   const [displayValue, setDisplayValue] = useState("0.000000");
 
@@ -48,10 +48,31 @@ const Spin: FC = () => {
   const [finalResult, setFinalResult] = useState<string | null>(null);
 
   // ---------- Reads On-chain ----------
-  const { data: epoch } = useReadContract({ address: spinVaultAddress, abi: spinVaultABI as any, functionName: "epochNow" });
-  const { data: claimed, refetch: refetchClaimed } = useReadContract({ address: spinVaultAddress, abi: spinVaultABI as any, functionName: "claimed", args: epoch !== undefined && address ? [epoch as bigint, address as `0x${string}`] : undefined, query: { enabled: Boolean(address && epoch !== undefined) }});
-  const { data: nonceValue, refetch: refetchNonces } = useReadContract({ address: spinVaultAddress, abi: spinVaultABI as any, functionName: "nonces", args: address ? [address as `0x${string}`] : undefined, query: { enabled: Boolean(address) }});
-  const { data: vaultBalance, refetch: refetchVaultBalance } = useReadContract({ address: baseTcAddress, abi: baseTcABI as any, functionName: "balanceOf", args: [spinVaultAddress] });
+  const { data: epoch } = useReadContract({
+    address: spinVaultAddress,
+    abi: spinVaultABI as any,
+    functionName: "epochNow",
+  });
+  const { data: claimed, refetch: refetchClaimed } = useReadContract({
+    address: spinVaultAddress,
+    abi: spinVaultABI as any,
+    functionName: "claimed",
+    args: epoch !== undefined && address ? [epoch as bigint, address as `0x${string}`] : undefined,
+    query: { enabled: Boolean(address && epoch !== undefined) },
+  });
+  const { data: nonceValue, refetch: refetchNonces } = useReadContract({
+    address: spinVaultAddress,
+    abi: spinVaultABI as any,
+    functionName: "nonces",
+    args: address ? [address as `0x${string}`] : undefined,
+    query: { enabled: Boolean(address) },
+  });
+  const { data: vaultBalance, refetch: refetchVaultBalance } = useReadContract({
+    address: baseTcAddress,
+    abi: baseTcABI as any,
+    functionName: "balanceOf",
+    args: [spinVaultAddress],
+  });
 
   useEffect(() => {
     const t = setInterval(() => {
@@ -60,8 +81,14 @@ const Spin: FC = () => {
     return () => clearInterval(t);
   }, [refetchVaultBalance]);
 
-  const canClaim = useMemo(() => !loading && isConnected && address && claimed === false, [loading, isConnected, address, claimed]);
-  const poolBalanceStr = useMemo(() => (vaultBalance !== undefined ? Number(formatEther(vaultBalance as bigint)).toFixed(4) : "—"), [vaultBalance]);
+  const canClaim = useMemo(
+    () => !loading && isConnected && address && claimed === false,
+    [loading, isConnected, address, claimed]
+  );
+  const poolBalanceStr = useMemo(
+    () => (vaultBalance !== undefined ? Number(formatEther(vaultBalance as bigint)).toFixed(4) : "—"),
+    [vaultBalance]
+  );
 
   // ---------- Action ----------
   const handleSpin = async () => {
@@ -84,39 +111,56 @@ const Spin: FC = () => {
       setStatus("Requesting signature…");
       const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600);
       const sigRes = await fetch("/api/sign-event-action", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ vault: "spin", action: "claim", user: address, fid: fcUser.fid, nonce: currentNonce.toString(), deadline: deadline.toString() }),
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          vault: "spin",
+          action: "claim",
+          user: address,
+          fid: fcUser.fid,
+          nonce: currentNonce.toString(),
+          deadline: deadline.toString(),
+        }),
       });
       const sigData = await sigRes.json();
-      if (!sigRes.ok || !sigData?.signature) throw new Error(sigData?.error || "Failed to get signature.");
+      if (!sigRes.ok || !sigData?.signature)
+        throw new Error(sigData?.error || "Failed to get signature.");
 
       setStatus("Waiting for your confirmation...");
       const txHash = await writeContractAsync({
-        address: spinVaultAddress, abi: spinVaultABI as any, functionName: "claimWithSig",
-        args: [address, currentNonce, deadline, sigData.signature], account: address, chain: base,
+        address: spinVaultAddress,
+        abi: spinVaultABI as any,
+        functionName: "claimWithSig",
+        args: [address, currentNonce, deadline, sigData.signature],
+        account: address,
+        chain: base,
       });
 
       setStatus("Processing transaction on-chain…");
       const receipt = await publicClient!.waitForTransactionReceipt({ hash: txHash });
-      
+
       let wonStr: string | null = null;
       try {
-        const events = (parseEventLogs({ abi: spinVaultABI as any, logs: receipt.logs as any, eventName: "ClaimedSpin" }) || []) as any[];
+        const events =
+          (parseEventLogs({
+            abi: spinVaultABI as any,
+            logs: receipt.logs as any,
+            eventName: "ClaimedSpin",
+          }) || []) as any[];
         const amt: bigint | undefined = events?.[0]?.args?.amount;
         if (typeof amt === "bigint") {
-            wonStr = formatEther(amt);
+          wonStr = formatEther(amt);
         }
       } catch (e) {
         console.error("Error parsing spin event:", e);
         wonStr = "a prize";
       }
-      
+
       setIsSpinning(false);
       setFinalResult(wonStr);
       setStatus(`Spin successful!`);
-      
-      await Promise.all([refetchClaimed(), refetchNonces(), refetchVaultBalance()]);
 
+      await Promise.all([refetchClaimed(), refetchNonces(), refetchVaultBalance()]);
     } catch (e: any) {
       setStatus(`Error: ${e?.shortMessage || e?.message || "Unknown error"}`);
       setIsSpinning(false);
@@ -125,32 +169,37 @@ const Spin: FC = () => {
     }
   };
 
+  /* ====== UI (Neumorphism only, logic tidak diubah) ====== */
   return (
-    <div className="space-y-5 rounded-lg bg-neutral-900/50 p-5 border border-neutral-700 text-center">
+    <div className="fin-card fin-card-trans fin-card-pad neu text-center">
       <h2 className="text-lg font-semibold">Free Spin (every 8 hours)</h2>
       <p className="text-sm text-neutral-400">
         Try your luck to win $BaseTC. Each spin gives you rewards based on your rigs.
       </p>
 
-      <div className="mx-auto max-w-md rounded-lg border border-neutral-700 bg-neutral-800/60 px-4 py-3 text-left">
+      {/* Pool panel (pressed) */}
+      <div className="mx-auto max-w-md mt-4 neu-inner rounded-xl px-4 py-3 text-left">
         <div className="text-xs uppercase tracking-wide text-neutral-400">Spin Pool (real-time)</div>
         <div className="mt-1 text-2xl font-semibold">
           {poolBalanceStr} <span className="text-base text-neutral-400">$BaseTC</span>
         </div>
       </div>
 
-      <div className="py-2 min-h-[120px] flex flex-col justify-center items-center">
+      {/* Spinner / Result / CTA */}
+      <div className="py-4 min-h-[120px] flex flex-col justify-center items-center">
         {isSpinning ? (
           <div className="text-4xl font-bold text-yellow-400">
             <SpinningNumbers />
           </div>
         ) : finalResult ? (
-           <div className="text-2xl font-bold text-yellow-400">You won {finalResult} $BaseTC!</div>
+          <div className="text-2xl font-bold text-yellow-400">You won {finalResult} $BaseTC!</div>
         ) : (
           <button
             onClick={handleSpin}
             disabled={!canClaim}
-            className="px-8 py-4 rounded-full bg-gradient-to-br from-blue-500 to-sky-600 text-white font-bold text-lg shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-105 transition-transform"
+            className={`px-8 py-4 rounded-full fin-btn neu-btn text-lg font-bold disabled:opacity-50 disabled:cursor-not-allowed transition-transform active:scale-[0.98] ${
+              !canClaim ? "" : "hover:translate-y-[-1px]"
+            }`}
           >
             {loading ? "Processing…" : canClaim ? "Spin Now!" : "No spins available"}
           </button>

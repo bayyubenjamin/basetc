@@ -408,7 +408,7 @@ const Market: FC = () => {
   }
 
   /* =============================
-     UI - DIPERBARUI (Buy di bawah + stepper)
+     UI - Neumorphism applied (card + controls + buttons)
    ============================== */
   return (
     <div className="fin-wrap fin-content-pad-bottom px-4 pt-4 space-y-5">
@@ -417,7 +417,8 @@ const Market: FC = () => {
         <p className="text-sm text-neutral-400">Mint rigs and invite to earn</p>
       </header>
 
-      <section className="fin-card p-4">
+      {/* Invite Summary Card */}
+      <section className="fin-card p-4 neu">
         <div className="flex items-center justify-between gap-3">
           <div>
             <h2 className="text-sm font-semibold">Invite Friends</h2>
@@ -426,7 +427,7 @@ const Market: FC = () => {
           <button
             onClick={handleClaimInviteReward}
             disabled={busyInvite || availableClaims <= 0 || !address || inviteStats.loading}
-            className={`fin-btn fin-btn-claim text-xs ${busyInvite || availableClaims <= 0 || !address || inviteStats.loading ? "opacity-50 cursor-not-allowed" : ""}`}
+            className={`fin-btn neu-btn text-xs ${busyInvite || availableClaims <= 0 || !address || inviteStats.loading ? "opacity-50 cursor-not-allowed" : ""}`}
           >
             {busyInvite ? (
               <span className="inline-flex items-center gap-2">
@@ -455,7 +456,7 @@ const Market: FC = () => {
         {!!inviteMsg && <div className="mt-2 text-xs text-blue-400">{inviteMsg}</div>}
       </section>
 
-      {/* Cards */}
+      {/* Product Cards */}
       <section className="space-y-4">
         {NFT_DATA.map((tier) => {
           const id = tierId(tier.id);
@@ -471,9 +472,9 @@ const Market: FC = () => {
           const disabled = loading || !address || !id;
 
           return (
-            <div key={tier.id} className="fin-card p-3">
+            <div key={tier.id} className="fin-card p-3 neu">
               <div className="flex items-center gap-3">
-                <div className="w-16 h-16 rounded-md bg-neutral-800 border border-white/5 flex items-center justify-center overflow-hidden">
+                <div className="w-16 h-16 rounded-md neu-inner border border-white/5 flex items-center justify-center overflow-hidden">
                   <Image src={tier.image} alt={tier.name} width={64} height={64} className="object-contain" />
                 </div>
                 <div className="flex-1">
@@ -481,7 +482,7 @@ const Market: FC = () => {
                   <p className="text-xs text-neutral-400">{tier.description}</p>
                   <p className="text-[11px] text-neutral-500">Est. Hashrate: {tier.hashrateHint}</p>
                 </div>
-                <div className="text-xs text-neutral-400">{priceText}</div>
+                <div className="text-xs text-neutral-300">{priceText}</div>
               </div>
 
               {/* Bottom controls */}
@@ -489,18 +490,18 @@ const Market: FC = () => {
                 <button
                   onClick={onClickCta(tier.id)}
                   disabled={disabled}
-                  className={`mt-3 w-full fin-btn fin-btn-claim py-1.7 text-xs ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
+                  className={`mt-3 w-full fin-btn neu-btn py-1.5 text-xs ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
                 >
                   {ctaText(tier.id)}
                 </button>
               ) : (
                 <div className="mt-3 flex items-center gap-2">
-                  {/* Quantity selector */}
-                  <div className="flex items-center border border-[#1e263f] rounded-md">
+                  {/* Quantity selector (pressed look) */}
+                  <div className="flex items-center neu-inner rounded-md">
                     <button
                       type="button"
                       onClick={() => dec(tier.id)}
-                      className="px-3 py-1 text-sm hover:bg-[#1b2133]"
+                      className="px-3 py-1 text-sm hover:opacity-100 neu-btn"
                     >
                       −
                     </button>
@@ -508,23 +509,22 @@ const Market: FC = () => {
                       value={qty[tier.id]}
                       onChange={(e) => setManual(tier.id, e.target.value)}
                       inputMode="numeric"
-                      className="w-12 text-center bg-[#0f1426] py-1 text-sm outline-none"
+                      className="w-12 text-center bg-transparent py-1 text-sm outline-none"
                     />
                     <button
                       type="button"
                       onClick={() => inc(tier.id)}
-                      className="px-3 py-1 text-sm hover:bg-[#1b2133]"
+                      className="px-3 py-1 text-sm hover:opacity-100 neu-btn"
                     >
                       +
                     </button>
                   </div>
-                  
 
                   <button
                     onClick={onClickCta(tier.id)}
                     disabled={disabled}
                     title={!address ? "Connect wallet first" : undefined}
-                    className={`ml-auto w-full fin-btn fin-btn-claim py-2 text-xs ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
+                    className={`ml-auto w-full fin-btn neu-btn py-2 text-xs ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
                   >
                     {loading ? (
                       <span className="inline-flex items-center gap-2">
@@ -560,3 +560,4 @@ const Market: FC = () => {
 };
 
 export default Market;
+

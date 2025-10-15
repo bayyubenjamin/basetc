@@ -743,8 +743,8 @@ const Monitoring: FC = () => {
         <p>Real-time on-chain monitoring</p>
       </div>
 
-      {/* Console card */}
-      <section className="fin-card fin-card-pad" aria-label="Console">
+      {/* Console card — tambah Neumorphism */}
+      <section className="fin-card fin-card-pad neu" aria-label="Console">
         <div className="fin-row">
           <div className="fin-epoch">
             <small>Epoch</small>
@@ -753,10 +753,10 @@ const Monitoring: FC = () => {
           <span
             className={
               prelaunch && goLiveOn
-                ? "fin-badge fin-badge-pre"
+                ? "fin-badge fin-badge-pre neu-chip"
                 : active
-                ? "fin-badge fin-badge-active"
-                : "fin-badge fin-badge-paused"
+                ? "fin-badge fin-badge-active neu-chip"
+                : "fin-badge fin-badge-paused neu-chip"
             }
           >
             {prelaunch && goLiveOn ? "Prelaunch" : active ? "Active" : "Paused"}
@@ -783,7 +783,6 @@ const Monitoring: FC = () => {
           <div className="fin-bar"><i style={{ width: `${epochProgress.pct}%` }} /></div>
         </div>
 
-
         {/* Realtime $BaseTC meter */}
         <div className="fin-actions">
           <div className="fin-cooldown">
@@ -797,7 +796,7 @@ const Monitoring: FC = () => {
             <button
               onClick={onClaim}
               disabled={!address || busy || !canClaim}
-              className={`fin-btn fin-btn-claim transition-transform active:scale-[0.98] ${(!address || busy || !canClaim) ? "opacity-50 cursor-not-allowed" : ""}`}
+              className={`fin-btn neu-btn transition-transform active:scale-[0.98] ${(!address || busy || !canClaim) ? "opacity-50 cursor-not-allowed" : ""}`}
               title={canClaim ? "Claim rewards" : "No rewards available yet"}
             >
               {busy ? (
@@ -811,7 +810,7 @@ const Monitoring: FC = () => {
             <button
               onClick={onStart}
               disabled={!address || busy || !canToggle || (prelaunch && goLiveOn)}
-              className={`fin-btn fin-btn-start transition-transform active:scale-[0.98] ${(!address || busy || !canToggle || (prelaunch && goLiveOn)) ? "opacity-50 cursor-not-allowed" : ""}`}
+              className={`fin-btn fin-btn-start shadow-neu transition-transform active:scale-[0.98] ${(!address || busy || !canToggle || (prelaunch && goLiveOn)) ? "opacity-50 cursor-not-allowed" : ""}`}
               title={!address ? "Connect wallet" : "Start mining"}
             >
               {busy ? (
@@ -824,25 +823,25 @@ const Monitoring: FC = () => {
           )}
         </div>
 
-        {/* Status - DIMATIKAN dari UI sesuai permintaan (biar popup saja yang dipakai) */}
+        {/* Status - DIMATIKAN dari UI sesuai permintaan */}
         {/* {statusText && <div className="fin-msg whitespace-pre-line">{statusText}</div>} */}
       </section>
 
-      {/* Terminal */}
-      <section className="fin-terminal" ref={terminalRef} aria-label="Terminal">
+      {/* Terminal — tampil 'pressed' */}
+      <section className="fin-terminal neu-inner" ref={terminalRef} aria-label="Terminal">
         <p>&gt; Terminal ready...</p>
         {terminalLogs.map((log, i) => (
           <p key={i}>&gt; {log}</p>
         ))}
       </section>
 
-      {/* Stats */}
-      <section className="fin-stats border-none shadow-none bg-transparent">
-        <div className="fin-stat">
+      {/* Stats — tiap kotak jadi timbul */}
+      <section className="fin-stats border-none bg-transparent">
+        <div className="fin-stat neu">
           <div className="fin-val">{formatNumber(effectiveHashrate)}</div>
           <div className="fin-cap">Effective Hashrate</div>
         </div>
-        <div className="fin-stat">
+        <div className="fin-stat neu">
           <div className="fin-tooltip">
             <div className="fin-val">
               {baseUnitPerEpoch.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -853,7 +852,7 @@ const Monitoring: FC = () => {
           </div>
           <div className="fin-cap">Base Unit / Epoch</div>
         </div>
-        <div className="fin-stat">
+        <div className="fin-stat neu">
           <div className="fin-tooltip">
             <div className="fin-val">{tokenShort}</div>
             <div className="fin-tip">Exact: {tokenExact}</div>
@@ -862,8 +861,8 @@ const Monitoring: FC = () => {
         </div>
       </section>
 
-      {/* Rigs */}
-      <section className="fin-card fin-rigs border-0 shadow-none bg-neutral-800/60">
+      {/* Rigs — panel & item timbul, gambar 'pressed' */}
+      <section className="fin-card fin-rigs neu">
         <div className="fin-rig-head">
           <h2>Your Rigs</h2>
         </div>
@@ -903,8 +902,8 @@ function RigBox({
   const [imgErr, setImgErr] = useState(false);
 
   return (
-    <div className="fin-rig">
-      <div className={`fin-rig-img ${!owned ? "fin-blur" : ""}`}>
+    <div className="fin-rig neu">
+      <div className={`fin-rig-img neu-inner ${!owned ? "fin-blur" : ""}`}>
         {!imgErr ? (
           <Image
             src={placeholder}
@@ -924,3 +923,4 @@ function RigBox({
     </div>
   );
 }
+
