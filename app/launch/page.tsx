@@ -12,8 +12,8 @@ import Market from "../components/Market";
 import Profil from "../components/Profil";
 import Event from "../components/Event";
 import FidInput from "../components/FidInput";
-import AddMiniAppPrompt from "../components/AddMiniAppPrompt";
-import AddMiniAppModal from "../components/AddMiniAppModal";
+// import AddMiniAppPrompt from "../components/AddMiniAppPrompt";   // ⛔️ dihapus
+// import AddMiniAppModal from "../components/AddMiniAppModal";     // ⛔️ dihapus
 import ClaimPopup from "../components/ClaimPopup";
 import { isAddress } from "ethers";
 
@@ -23,6 +23,7 @@ const FID_REF_KEY = "basetc_fid_ref";
 const FID_KEY = "basetc_fid";
 const HAS_VISITED_KEY = "basetc_has_visited";
 
+// ---- helper: cari fidref dari URL, referrer, lalu sessionStorage
 function getFidRefFallback(): string | undefined {
   try {
     const url = new URL(window.location.href);
@@ -46,6 +47,7 @@ function MainApp() {
   const { address } = useAccount();
   const [showClaimPopup, setShowClaimPopup] = useState(false);
 
+  // pop-up Claim milikmu (tetap)
   useEffect(() => {
     const hasVisited = localStorage.getItem(HAS_VISITED_KEY);
     if (!hasVisited) {
@@ -54,6 +56,7 @@ function MainApp() {
     }
   }, []);
 
+  // restore tab awal
   useEffect(() => {
     try {
       const url = new URL(window.location.href);
@@ -73,11 +76,12 @@ function MainApp() {
     window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
   }, [activeTab]);
 
+  // wallet muncul belakangan → ikutkan fid_ref juga
   useEffect(() => {
     const fidStr = localStorage.getItem(FID_KEY);
     if (!address || !fidStr) return;
 
-    const fid_ref = getFidRefFallback();
+    const fid_ref = getFidRefFallback(); // selalu coba resolve terkini
     fetch("/api/user", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -102,12 +106,7 @@ function MainApp() {
 
   return (
     <div className="flex flex-col min-h-screen">
-      {/* Pemicu sheet native; aman dipasang bareng modal */}
-      <AddMiniAppPrompt />
-
-      {/* Modal/CTA server-verified: muncul tiap buka sampai benar2 Add */}
-      {/* <AddMiniAppModal /> */}
-
+      {/* ⛔️ tidak ada UI Add mini app */}
       {showClaimPopup && (
         <ClaimPopup
           onClose={() => setShowClaimPopup(false)}
@@ -124,17 +123,21 @@ function AppInitializer() {
   const { user, ready } = useFarcaster();
   const [resolvedFid, setResolvedFid] = useState<number | null>(null);
 
+  // simpan fidref secepat mungkin saat mount
   useEffect(() => {
     const f = getFidRefFallback();
     if (f) sessionStorage.setItem(FID_REF_KEY, f);
   }, []);
 
+  // ambil fidref dari context embed (cast)
   useEffect(() => {
     async function resolveFidRefFromContext() {
       try {
         const { sdk } = await import("@farcaster/miniapp-sdk");
         const ctx: any = await (sdk as any).context;
-        const embedUrl: string | undefined = ctx?.location?.embed ?? ctx?.location?.url ?? ctx?.embed ?? undefined;
+        const embedUrl: string | undefined =
+          ctx?.location?.embed ?? ctx?.location?.url ?? ctx?.embed ?? undefined;
+
         if (embedUrl) {
           const u = new URL(embedUrl);
           const fr = u.searchParams.get("fidref") ?? u.searchParams.get("ref");
@@ -156,6 +159,7 @@ function AppInitializer() {
     if (user?.fid) {
       finalFid = user.fid;
 
+      // auto-upsert profil + sertakan fid_ref
       fetch("/api/user", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -168,6 +172,7 @@ function AppInitializer() {
         }),
       }).catch((err) => console.error("Context user auto-upsert failed:", err));
     } else {
+      // fallback cari fid dari query atau localStorage
       try {
         const url = new URL(window.location.href);
         const qfid = url.searchParams.get("fid") || localStorage.getItem(FID_KEY);
@@ -179,6 +184,7 @@ function AppInitializer() {
       localStorage.setItem(FID_KEY, String(finalFid));
       setResolvedFid(finalFid);
 
+      // back-compat: ?ref=0xwallet
       try {
         const url = new URL(window.location.href);
         const ref = url.searchParams.get("ref");

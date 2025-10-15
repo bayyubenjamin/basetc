@@ -2,7 +2,6 @@
 import "./globals.css";
 import type { Metadata } from "next";
 import Ticker from "./components/Ticker";
-import AddMiniAppPrompt from "./components/AddMiniAppPrompt";
 import SilentAddMiniApp from "./components/SilentAddMiniApp";
 
 // Payload Mini App (global)
@@ -49,9 +48,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className="bg-zinc-950">
       <body className="min-h-dvh text-zinc-200 antialiased pt-[calc(env(safe-area-inset-top)+36px)]">
-        {/* ticker global muncul di semua halaman */}
         <Ticker />
-        <SilentAddMiniApp />   {/* ⬅️ pemicu otomatis tanpa UI */}
+        {/* HANYA pemicu otomatis tanpa UI */}
+        <SilentAddMiniApp />
         {children}
       </body>
     </html>
