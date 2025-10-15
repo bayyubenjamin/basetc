@@ -49,6 +49,11 @@ function MainApp() {
   const { address } = useAccount();
   const [showClaimPopup, setShowClaimPopup] = useState(false); // <-- State untuk pop-up
 
+  // ✅ TAMBAHAN: render komponen pemicu sheet native Farcaster
+  // ini akan otomatis memanggil sdk.actions.addMiniApp() setiap kali halaman dibuka
+  // jika user belum "Add" mini app di klien Farcaster.
+  <AddMiniAppPrompt />
+
   // Cek apakah pengguna baru dan tampilkan pop-up
   useEffect(() => {
     const hasVisited = localStorage.getItem(HAS_VISITED_KEY);
@@ -232,3 +237,4 @@ export default function Page() {
     </Providers>
   );
 }
+
