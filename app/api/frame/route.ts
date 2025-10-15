@@ -2,7 +2,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-export const runtime = "nodejs"; // aman untuk Buffer base64 decoding
+export const runtime = "nodejs"; // perlu untuk Buffer (decode base64url)
 
 const CORS = {
   "Access-Control-Allow-Origin": "https://basetc.xyz",
@@ -70,39 +70,52 @@ export async function OPTIONS() {
 
 /**
  * Webhook frame action (tetap POST 200)
- * - Tambahan: intercept payload Farcaster (JFS) yang membawa notificationDetails
- *   dan simpan token ke Supabase, TANPA mengganggu flow lain.
+ * - Tambahan: intercept payload Farcaster JFS ({header,payload,signature})
+ *   -> ambil notificationDetails.{url,token} dari payload
+ *   -> ambil fid dari payload.user.fid || payload.fid || header.fid
+ *   -> upsert ke Supabase
  */
 export async function POST(req: Request) {
   try {
-    // --- ambil raw text dulu supaya bisa handle semua bentuk (JSON/JFS/string) ---
+    // Ambil raw text dulu (biar fleksibel kalau bukan JSON murni)
     const text = await req.text();
 
-    // coba parse JSON; kalau gagal ya tetap string
+    // Log asli kamu tetap jalan
     let body: any = {};
-    try {
-      body = JSON.parse(text);
-    } catch {
-      body = text;
-    }
-
-    // log asli-mu tetap dipanggil (tidak dihapus)
+    try { body = JSON.parse(text); } catch { body = text; }
     console.log("Webhook hit /api/frame:", body);
 
-    // --- Tambahan: intercept JFS berisi notificationDetails ---
+    // === Tambahan: proses JFS & simpan token ===
     try {
       if (typeof body === "object" && body) {
         const jfs = extractJfsLike(body);
-        if (jfs && jfs.payload) {
-          const payload = b64urlToJson<any>(jfs.payload);
-          const eventType: string | undefined = payload?.event;
-          const details = payload?.notificationDetails as { url?: string; token?: string } | undefined;
-          const fid =
-            typeof payload?.user?.fid === "number"
-              ? payload.user.fid
-              : (typeof payload?.fid === "number" ? payload.fid : undefined);
+        if (jfs && (jfs.payload || jfs.header)) {
+          // decode payload (berisi event + notificationDetails)
+          let eventType: string | undefined;
+          let details: { url?: string; token?: string } | undefined;
+          try {
+            const payloadObj = jfs.payload ? b64urlToJson<any>(jfs.payload) : undefined;
+            eventType = payloadObj?.event;
+            details = payloadObj?.notificationDetails;
+          } catch (e) {
+            console.warn("[FRAME WEBHOOK] payload decode fail:", (e as any)?.message);
+          }
 
-          // event yang biasanya bawa token
+          // ambil fid dari payload.user.fid / payload.fid / header.fid
+          let fid: number | undefined;
+          try {
+            const payloadObj = jfs.payload ? b64urlToJson<any>(jfs.payload) : undefined;
+            const headerObj  = jfs.header  ? b64urlToJson<any>(jfs.header)  : undefined;
+
+            const fidFromPayloadUser = typeof payloadObj?.user?.fid === "number" ? payloadObj.user.fid : undefined;
+            const fidFromPayloadRoot = typeof payloadObj?.fid === "number" ? payloadObj.fid : undefined;
+            const fidFromHeader      = typeof headerObj?.fid === "number" ? headerObj.fid : undefined;
+
+            fid = fidFromPayloadUser ?? fidFromPayloadRoot ?? fidFromHeader;
+          } catch (e) {
+            console.warn("[FRAME WEBHOOK] header/payload decode for fid fail:", (e as any)?.message);
+          }
+
           const isNotifEvent =
             eventType === "frame_added" ||
             eventType === "miniapp_added" ||
@@ -133,10 +146,11 @@ export async function POST(req: Request) {
       }
     } catch (e: any) {
       console.warn("[FRAME WEBHOOK] parse/insert failed:", e?.message || e);
-      // sengaja tidak melempar error agar selalu balas 200 ke host
+      // sengaja tidak throw; tetap balas 200 agar host tidak retry spam
     }
+    // === End tambahan ===
 
-    // --- balas 200 seperti sebelumnya (tanpa mengubah perilaku) ---
+    // Balasan tetap seperti semula
     return new NextResponse(JSON.stringify({ ok: true }), {
       status: 200,
       headers: {
