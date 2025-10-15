@@ -3,89 +3,155 @@
 import { useEffect, useRef, useState } from "react";
 import { sdk } from "@farcaster/miniapp-sdk";
 
+type UiState = {
+  host: string;
+  hasAddFn: boolean;
+  added: boolean | undefined;
+  triedCount: number;
+  lastError?: string;
+};
+
 export default function AddMiniAppPrompt() {
+  const [ui, setUi] = useState<UiState>({
+    host: "",
+    hasAddFn: false,
+    added: undefined,
+    triedCount: 0,
+  });
   const [fallbackOpen, setFallbackOpen] = useState(false);
-  const triedRef = useRef(false);
-  const openedRef = useRef(false);
+
+  const booted = useRef(false);
+  const opened = useRef(false);
 
   useEffect(() => {
-    // Guard siapin client; jangan panggil .catch pada undefined
+    if (booted.current) return;
+    booted.current = true;
+
+    // Kumpulkan status awal untuk ditampilkan di bar
     try {
-      const maybeReady = (sdk?.actions as any)?.ready;
-      if (typeof maybeReady === "function") {
-        const res = maybeReady();
-        if (res && typeof (res as any).catch === "function") {
-          (res as Promise<void>).catch(() => {});
-        }
-      }
+      const host = typeof window !== "undefined" ? window.location.hostname : "";
+      const addFn = (sdk?.actions as any)?.addMiniApp;
+      const added = (sdk as any)?.context?.client?.added as boolean | undefined;
+      setUi((s) => ({ ...s, host, hasAddFn: typeof addFn === "function", added }));
     } catch {
-      // ignore
+      // biarkan default
     }
 
-    if (triedRef.current) return;
-    triedRef.current = true;
-
-    // ?forceAdd=1 untuk paksa munculin sheet
+    // Otomatis panggil addMiniApp kalau belum Added (atau pakai ?forceAdd=1)
     let force = false;
     try {
       const p = new URLSearchParams(window.location.search);
       force = p.get("forceAdd") === "1";
     } catch {}
 
-    // baca status added kalau ada; kalau undefined, kita tetap coba
-    const added = Boolean((sdk as any)?.context?.client?.added);
-    const shouldOpen = force || !added;
+    const shouldOpen = force || !Boolean((sdk as any)?.context?.client?.added);
     if (!shouldOpen) return;
 
-    const t = setTimeout(() => {
-      void triggerAdd();
-    }, 150);
+    // Retry sederhana: 150ms, 400ms, 900ms
+    const delays = [150, 400, 900];
+    const timers: number[] = [];
 
-    // kalau dalam 800ms tidak kebuka & addMiniApp nggak ada → tampilkan overlay
-    const t2 = setTimeout(() => {
-      if (!openedRef.current) {
-        const hasAdd = typeof ((sdk?.actions as any)?.addMiniApp) === "function";
+    delays.forEach((ms, i) => {
+      const t = window.setTimeout(() => {
+        void triggerAdd(i + 1);
+      }, ms);
+      timers.push(t);
+    });
+
+    // Jika setelah 1200ms masih tidak kebuka dan addFn tidak ada → tampilkan overlay
+    const safety = window.setTimeout(() => {
+      if (!opened.current) {
+        const hasAdd = typeof (sdk?.actions as any)?.addMiniApp === "function";
         if (!hasAdd) setFallbackOpen(true);
       }
-    }, 800);
+    }, 1200);
 
     return () => {
-      clearTimeout(t);
-      clearTimeout(t2);
+      timers.forEach((t) => clearTimeout(t));
+      clearTimeout(safety);
     };
   }, []);
 
-  async function triggerAdd() {
-    try {
-      const add = (sdk?.actions as any)?.addMiniApp as
-        | (() => Promise<void>)
-        | undefined;
+  async function triggerAdd(tryNo = 1) {
+    const add = (sdk?.actions as any)?.addMiniApp as
+      | (() => Promise<void>)
+      | undefined;
 
-      if (typeof add === "function") {
-        await add();           // ⬅️ sheet native Warpcast
-        openedRef.current = true;
-        setFallbackOpen(false);
-      } else {
-        // bukan di Warpcast / SDK lama
-        setFallbackOpen(true);
-      }
-    } catch {
-      // user cancel / domain mismatch / error lain
+    setUi((s) => ({
+      ...s,
+      hasAddFn: typeof add === "function",
+      added: (sdk as any)?.context?.client?.added as boolean | undefined,
+      triedCount: Math.max(s.triedCount, tryNo),
+      lastError: undefined,
+    }));
+
+    if (typeof add !== "function") {
+      // bukan di Warpcast / SDK lama → fallback overlay
+      setFallbackOpen(true);
+      return;
+    }
+
+    try {
+      await add(); // ⬅️ sheet native Warpcast
+      opened.current = true;
+      setFallbackOpen(false);
+    } catch (e: any) {
+      // Bisa karena user cancel / domain mismatch / dll
+      setUi((s) => ({ ...s, lastError: String(e?.message || e) }));
       setFallbackOpen(true);
     }
   }
 
   function handleManual() {
-    void triggerAdd();
+    void triggerAdd(ui.triedCount + 1);
   }
   function handleLater() {
     setFallbackOpen(false);
   }
 
-  // Overlay fallback kalau addMiniApp tidak ada / gagal
-  if (!fallbackOpen) return null;
+  // 🔹 Status bar kecil di atas — selalu tampil
+  const statusBar = (
+    <div
+      style={{
+        position: "fixed",
+        top: 0,
+        left: 0,
+        right: 0,
+        zIndex: 10000,
+        display: "flex",
+        gap: 8,
+        alignItems: "center",
+        padding: "6px 8px",
+        fontSize: 12,
+        background: "#0f172a",
+        color: "#a5f3fc",
+        borderBottom: "1px solid rgba(165,243,252,.4)",
+      }}
+    >
+      <b style={{ color: "#67e8f9" }}>MiniApp Status:</b>
+      <span>host: {ui.host || "-"}</span>
+      <span>| addMiniApp(): {String(ui.hasAddFn)}</span>
+      <span>| added: {String(ui.added)}</span>
+      <span>| tried: {ui.triedCount}</span>
+      {ui.lastError ? <span style={{ color: "#fecaca" }}>| err: {ui.lastError}</span> : null}
+      <button
+        onClick={handleManual}
+        style={{
+          marginLeft: "auto",
+          padding: "4px 8px",
+          background: "#67e8f9",
+          color: "#082f49",
+          borderRadius: 6,
+          fontWeight: 700,
+        }}
+      >
+        Try addMiniApp()
+      </button>
+    </div>
+  );
 
-  return (
+  // 🔸 Overlay fallback (punya app sendiri) — muncul kalau bukan di Warpcast / gagal
+  const overlay = !fallbackOpen ? null : (
     <div className="fixed inset-0 z-[9999] grid place-items-center bg-black/60 p-4">
       <div className="w-full max-w-sm rounded-xl border border-[var(--stroke)] bg-[var(--card)] p-4">
         <h3 className="mb-2 text-lg font-semibold">Add BaseTC Mini App</h3>
@@ -102,6 +168,13 @@ export default function AddMiniAppPrompt() {
         </div>
       </div>
     </div>
+  );
+
+  return (
+    <>
+      {statusBar}
+      {overlay}
+    </>
   );
 }
 
