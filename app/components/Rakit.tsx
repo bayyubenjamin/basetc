@@ -37,20 +37,20 @@ const TierImg: Record<"basic"|"pro"|"legend", string> = {
   legend: "/img/vga_legend.png",
 };
 
-// mapping warna ring per-tier
-const slotRingByTier: Record<"basic" | "pro" | "legend", string> = {
-  basic: "ring-white/60",         // putih tipis
-  pro: "ring-[#67a8ff]/80",       // biru
-  legend: "ring-[#f5d06f]/80",    // gold
+/* === BINGKAI WARNA SESUAI TIER === */
+const slotBorderByTier: Record<"basic"|"pro"|"legend", string> = {
+  basic: "border-white/60",        // putih
+  pro: "border-[#67a8ff]/80",      // biru
+  legend: "border-[#f5d06f]/85",   // gold
 };
 
-/* Slot: sudut sedikit oval + bingkai overlay agar selalu terlihat */
+/* === SLOT: sudut sedikit oval + overlay border (tanpa ring-inset) === */
 const NftSlot: FC<{ filled: boolean; tier: "basic" | "pro" | "legend" }> = ({ filled, tier }) => (
   <div
     className={[
       "relative grid place-items-center w-12 h-12 md:w-16 md:h-16",
-      "rounded-[4px] overflow-hidden",  // sedikit oval (tipis)
-      "neu-inner bg-[#151a2e]",         // pressed look + base
+      "rounded-[6px] overflow-hidden",     // sedikit oval, halus (naik dari 4px)
+      "neu-inner bg-[#151a2e]",            // pressed look + base
     ].join(" ")}
   >
     {filled ? (
@@ -59,20 +59,19 @@ const NftSlot: FC<{ filled: boolean; tier: "basic" | "pro" | "legend" }> = ({ fi
         alt={`${tier} rig`}
         width={64}
         height={64}
-        className="w-full h-full object-cover rounded-[4px]"
+        className="w-full h-full object-cover rounded-[6px]" // gambar ikut radius
       />
     ) : (
       <div className="text-[10px] text-neutral-400">empty</div>
     )}
 
-    {/* Ring overlay (tipis, tidak mengganggu klik) */}
+    {/* Overlay border tipis agar tidak 'kepotong' sudutnya */}
     <span
       aria-hidden="true"
       className={[
-        "pointer-events-none absolute inset-0 rounded-[4px]",
-        "ring-1 ring-inset",                         // ketebalan ring
-        "ring-offset-[1px] ring-offset-[#151a2e]",   // bikin ring lebih terlihat
-        slotRingByTier[tier],
+        "pointer-events-none absolute inset-0 rounded-[6px]",
+        "border",                             // pakai border (bukan ring-inset)
+        slotBorderByTier[tier],
       ].join(" ")}
     />
   </div>
@@ -336,7 +335,7 @@ export default function Rakit() {
             <small>Basic</small>
             <strong>Owned: {String(ownedBasic)}</strong>
           </div>
-          {/* Gambar header kanan dihapus */}
+          {/* header image removed per request */}
         </div>
 
         <div className="mt-3 grid grid-cols-5 gap-2">
@@ -349,7 +348,6 @@ export default function Rakit() {
           ))}
         </div>
 
-        {/* Bottom bar actions (full width) */}
         <div className="mt-4 border-t border-white/10 pt-3">
           <div className="text-sm text-neutral-300">
             Need: <b>{String(needBP)}</b> Basic → Pro
@@ -382,7 +380,7 @@ export default function Rakit() {
             <small>Pro</small>
             <strong>Owned: {String(ownedPro)}</strong>
           </div>
-          {/* Gambar header kanan dihapus */}
+          {/* header image removed per request */}
         </div>
 
         <div className="mt-3 grid grid-cols-5 gap-2">
@@ -395,7 +393,6 @@ export default function Rakit() {
           ))}
         </div>
 
-        {/* Bottom bar actions (full width) */}
         <div className="mt-4 border-t border-white/10 pt-3">
           <div className="text-sm text-neutral-300">
             Need: <b>{String(needPL)}</b> Pro → Legend
@@ -428,7 +425,7 @@ export default function Rakit() {
             <small>Legend</small>
             <strong>Owned: {String(ownedLegend)}</strong>
           </div>
-          {/* Gambar header kanan dihapus */}
+          {/* header image removed per request */}
         </div>
 
         <div className="mt-3 grid grid-cols-5 gap-2">
@@ -442,14 +439,11 @@ export default function Rakit() {
         </div>
       </section>
 
-      {/* legacy inline status */}
       <div className="fin-msg min-h-5 whitespace-pre-line">{status}</div>
       <div className="fin-bottom-space" />
 
-      {/* overlays */}
       <LoadingOverlay show={loading} label={status || "Processing…"} />
       <CenterPopup open={popupOpen} message={status} onOK={() => setPopupOpen(false)} />
     </div>
   );
 }
-
