@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/notify-epoch",
-      "schedule": "0 0 * * *"
+      "schedule": "1 0 * * *"
     }
   ]
 }
