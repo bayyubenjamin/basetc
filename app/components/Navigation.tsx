@@ -1,6 +1,5 @@
-// app/components/Navigation.tsx
+// app/components/Navigation.tsx (icon tanpa putih2)
 "use client";
-
 import type { FC } from "react";
 
 export type TabName = "monitoring" | "rakit" | "market" | "profil" | "event";
@@ -14,7 +13,6 @@ const NAV_ITEMS: NavItem[] = [
   { id: "profil",     label: "Profil",     iconPath: "M12 14a5 5 0 100-10 5 5 0 000 10zm-7 7a7 7 0 0114 0" },
 ];
 
-// warna dari palette light
 const COLORS = {
   active: "var(--accent)",
   inactive: "var(--muted)",
@@ -25,10 +23,8 @@ const COLORS = {
 const ICON_DIM = 16;
 const ICON_BOX = 26;
 
-const Navigation: FC<{
-  activeTab: TabName;
-  setActiveTab: (tab: TabName) => void;
-}> = ({ activeTab, setActiveTab }) => {
+const Navigation: FC<{ activeTab: TabName; setActiveTab: (t: TabName) => void; }>
+= ({ activeTab, setActiveTab }) => {
   return (
     <nav
       className="fin-bottom-nav"
@@ -43,44 +39,15 @@ const Navigation: FC<{
         paddingRight: "max(14px, env(safe-area-inset-right))",
         alignItems: "center",
 
-        // ★ Neumorphism container: gradient + multi shadows
-        background: "linear-gradient(145deg, #ffffff, #eaf1ff)",
+        // container tanpa white glow
+        background: "linear-gradient(145deg,#ffffff,#eaf1ff)",
         border: "1px solid rgba(0,0,0,.06)",
         borderRadius: 28,
-        boxShadow:
-  "4px 4px 10px rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.05)",        backdropFilter: "blur(14px)",
+        boxShadow: "4px 4px 10px rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.05)",
+        backdropFilter: "blur(14px)",
         WebkitBackdropFilter: "blur(14px)",
       }}
     >
-{/* sheen & bottom glow (reduced brightness biar gak bocor) */}
-<div
-  aria-hidden
-  className="pointer-events-none"
-  style={{
-    position: "absolute",
-    inset: 0,
-    borderRadius: 28,
-    background:
-      "linear-gradient(180deg, rgba(255,255,255,.15), rgba(255,255,255,0))", // dari .35 ke .15
-    mixBlendMode: "overlay", // dari soft-light → overlay biar transparan halus
-  }}
-/>
-<div
-  aria-hidden
-  className="pointer-events-none"
-  style={{
-    position: "absolute",
-    left: 24,
-    right: 24,
-    bottom: 6,
-    height: 10,
-    borderRadius: 12,
-    background:
-      "radial-gradient(50% 100% at 50% 100%, rgba(43,123,255,.15), rgba(43,123,255,0))", // kurangi opacity
-    filter: "blur(8px)",
-  }}
-/>
-
       {NAV_ITEMS.map((item) => {
         const isActive = item.id === activeTab;
 
@@ -99,37 +66,26 @@ const Navigation: FC<{
               color: isActive ? COLORS.labelActive : COLORS.labelInactive,
             }}
           >
-            {/* ★ Icon pill dengan efek timbul */}
+            {/* ICON PILL — no white highlight */}
             <span
               className="relative grid place-items-center rounded-full"
               style={{
                 width: ICON_BOX,
                 height: ICON_BOX,
                 background: isActive
-                  ? "linear-gradient(145deg, rgba(43,123,255,.22), rgba(43,123,255,.12))"
-                  : "linear-gradient(145deg, #f9fbff, #e9f0ff)",
+                  ? "rgba(43,123,255,.14)"          // biru transparan
+                  : "rgba(10,30,60,.05)",           // netral transparan
+                border: isActive
+                  ? "1px solid rgba(43,123,255,.30)"
+                  : "1px solid rgba(0,0,0,.06)",
                 boxShadow: isActive
-  ? "4px 4px 8px rgba(43,123,255,.25), inset 0 0 0 1px rgba(43,123,255,.3)"
-  : "4px 4px 8px rgba(0,0,0,.2), inset 0 0 0 1px rgba(0,0,0,.05)",
+                  ? "4px 4px 8px rgba(43,123,255,.25), inset 0 0 0 1px rgba(43,123,255,.20)"
+                  : "4px 4px 8px rgba(0,0,0,.18), inset 0 0 0 1px rgba(0,0,0,.04)",
                 color: isActive ? COLORS.active : COLORS.inactive,
-                transition: "transform .12s ease, box-shadow .12s ease",
+                transition: "transform .12s ease, box-shadow .12s ease, background .12s ease",
               }}
             >
-              {/* highlight kecil di atas */}
-              <i
-                aria-hidden
-                style={{
-                  position: "absolute",
-                  top: 2,
-                  left: 2,
-                  right: 2,
-                  height: 10,
-                  borderRadius: 999,
-                  background:
-                    "linear-gradient(180deg, rgba(255,255,255,.9), rgba(255,255,255,0))",
-                  pointerEvents: "none",
-                }}
-              />
+              {/* ⛔️ highlight putih DIHAPUS */}
               <svg
                 viewBox="0 0 24 24"
                 fill="none"
@@ -144,7 +100,6 @@ const Navigation: FC<{
               </svg>
             </span>
 
-            {/* Label + underline glow saat aktif */}
             <span
               className="fin-nav-label"
               style={{
@@ -153,42 +108,23 @@ const Navigation: FC<{
                 fontSize: 12,
                 fontWeight: 700,
                 color: isActive ? COLORS.labelActive : COLORS.labelInactive,
-                textShadow: "0 1px 0 rgba(255,255,255,.55)",
+                // textShadow putih dihapus supaya gak ada bloom
                 letterSpacing: 0.1,
               }}
             >
               {item.label}
               {isActive && (
-                <>
-                  <i
-                    aria-hidden
-                    className="block mx-auto mt-[4px] rounded-full"
-                    style={{
-                      width: 22,
-                      height: 2,
-                      background:
-                        "linear-gradient(90deg, rgba(43,123,255,0), rgba(43,123,255,0.95), rgba(43,123,255,0))",
-                      boxShadow:
-                        "0 0 10px rgba(43,123,255,0.35), 0 6px 12px rgba(43,123,255,0.20)",
-                    }}
-                  />
-                  {/* glow lembut di bawah label */}
-                  <i
-                    aria-hidden
-                    style={{
-                      position: "absolute",
-                      left: "50%",
-                      transform: "translateX(-50%)",
-                      bottom: -2,
-                      width: 26,
-                      height: 8,
-                      borderRadius: 999,
-                      background:
-                        "radial-gradient(50% 80% at 50% 50%, rgba(43,123,255,.25), rgba(43,123,255,0))",
-                      filter: "blur(4px)",
-                    }}
-                  />
-                </>
+                <i
+                  aria-hidden
+                  className="block mx-auto mt-[4px] rounded-full"
+                  style={{
+                    width: 22,
+                    height: 2,
+                    background:
+                      "linear-gradient(90deg, rgba(43,123,255,0), rgba(43,123,255,0.95), rgba(43,123,255,0))",
+                    boxShadow: "0 0 10px rgba(43,123,255,0.28)",
+                  }}
+                />
               )}
             </span>
           </button>
