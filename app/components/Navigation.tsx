@@ -53,34 +53,34 @@ const Navigation: FC<{
         WebkitBackdropFilter: "blur(14px)",
       }}
     >
-      {/* sheen & bottom glow (layer dekoratif) */}
-      <div
-        aria-hidden
-        className="pointer-events-none"
-        style={{
-          position: "absolute",
-          inset: 0,
-          borderRadius: 28,
-          background:
-            "linear-gradient(180deg, rgba(255,255,255,.35), rgba(255,255,255,0))",
-          mixBlendMode: "soft-light",
-        }}
-      />
-      <div
-        aria-hidden
-        className="pointer-events-none"
-        style={{
-          position: "absolute",
-          left: 24,
-          right: 24,
-          bottom: 6,
-          height: 12,
-          borderRadius: 12,
-          background:
-            "radial-gradient(50% 100% at 50% 100%, rgba(43,123,255,.22), rgba(43,123,255,0))",
-          filter: "blur(6px)",
-        }}
-      />
+{/* sheen & bottom glow (reduced brightness biar gak bocor) */}
+<div
+  aria-hidden
+  className="pointer-events-none"
+  style={{
+    position: "absolute",
+    inset: 0,
+    borderRadius: 28,
+    background:
+      "linear-gradient(180deg, rgba(255,255,255,.15), rgba(255,255,255,0))", // dari .35 ke .15
+    mixBlendMode: "overlay", // dari soft-light → overlay biar transparan halus
+  }}
+/>
+<div
+  aria-hidden
+  className="pointer-events-none"
+  style={{
+    position: "absolute",
+    left: 24,
+    right: 24,
+    bottom: 6,
+    height: 10,
+    borderRadius: 12,
+    background:
+      "radial-gradient(50% 100% at 50% 100%, rgba(43,123,255,.15), rgba(43,123,255,0))", // kurangi opacity
+    filter: "blur(8px)",
+  }}
+/>
 
       {NAV_ITEMS.map((item) => {
         const isActive = item.id === activeTab;
