@@ -1,10 +1,8 @@
 // app/api/webhook/route.ts
 import { NextResponse } from "next/server";
-import {
-  parseWebhookEvent,
-  verifyAppKeyWithNeynar,
-} from "@farcaster/miniapp-node";
+import { parseWebhookEvent, verifyAppKeyWithNeynar } from "@farcaster/miniapp-node";
 
+export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
@@ -12,23 +10,29 @@ export async function POST(req: Request) {
     const json = await req.json();
     const evt = await parseWebhookEvent(json, verifyAppKeyWithNeynar);
 
-    // Simpan token & url saat miniapp_added / notifications_enabled
-    if (
-      (evt.event === "miniapp_added" || evt.event === "notifications_enabled") &&
-      evt.notificationDetails
-    ) {
-      const { token, url } = evt.notificationDetails;
-      const fid = evt.fid; // simpan index: fid + client + token
-      // TODO: upsert ke DB kamu (Supabase table: notifications(fid, token, url, client))
+    // Coerce supaya TS nggak salah narrow discriminated union
+    const event = (evt as any)?.event as string | undefined;
+    const details = (evt as any)?.notificationDetails as
+      | { url: string; token: string }
+      | undefined;
+
+    // Simpan token saat add/enable
+    if ((event === "miniapp_added" || event === "notifications_enabled") && details) {
+      const { token, url } = details;
+      const fid = (evt as any)?.fid as number | undefined;
+      // TODO: upsert ke DB (fid, token, url, client)
+      return NextResponse.json({ ok: true });
     }
 
     // Hapus token saat remove/disable
-    if (evt.event === "miniapp_removed" || evt.event === "notifications_disabled") {
-      const fid = evt.fid;
-      // TODO: delete dari DB by fid/client
+    if (event === "miniapp_removed" || event === "notifications_disabled") {
+      const fid = (evt as any)?.fid as number | undefined;
+      // TODO: delete by fid/client
+      return NextResponse.json({ ok: true });
     }
 
-    return NextResponse.json({ ok: true });
+    // Event lain: acknowledge saja
+    return NextResponse.json({ ok: true, ignored: event ?? "unknown" });
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 400 });
   }
