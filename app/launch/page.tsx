@@ -47,7 +47,7 @@ function getFidRefFallback(): string | undefined {
 function MainApp() {
   const [activeTab, setActiveTab] = useState<TabName>(DEFAULT_TAB);
   const { address } = useAccount();
-  const [showClaimPopup, setShowClaimPopup] = useState(false); // <-- State untuk pop-up
+  const [showClaimPopup, setShowClaimPopup] = useState(false);
 
   // Cek apakah pengguna baru dan tampilkan pop-up
   useEffect(() => {
@@ -91,7 +91,7 @@ function MainApp() {
     }).catch((err) => console.error("Wallet mapping upsert failed:", err));
   }, [address]);
 
-  const content = useMemo(() => {
+const content = useMemo(() => {
     switch (activeTab) {
       case "rakit": return <Rakit />;
       case "market": return <Market />;
@@ -108,7 +108,7 @@ function MainApp() {
 
   return (
     <div className="flex flex-col min-h-screen">
-      {/* Memicu sheet native Farcaster kalau user belum Add */}
+      {/* ⬇️ BARIS PENTING: komponen pemicu sheet native Farcaster HARUS di dalam return */}
       <AddMiniAppPrompt />
 
       {showClaimPopup && (
