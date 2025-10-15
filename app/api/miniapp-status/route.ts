@@ -1,6 +1,6 @@
 // app/api/miniapp-status/route.ts
 import { NextResponse } from "next/server";
-import { createAdminClient } from "../../../lib/supabaseAdmin";
+import { createAdminClient } from "../../lib/supabaseAdmin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

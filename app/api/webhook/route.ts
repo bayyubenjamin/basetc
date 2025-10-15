@@ -1,6 +1,6 @@
 // app/api/webhook/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { createAdminClient } from "../../../lib/supabaseAdmin";
+import { createAdminClient } from "../../lib/supabaseAdmin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
