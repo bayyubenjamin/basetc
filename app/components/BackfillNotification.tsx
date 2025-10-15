@@ -1,13 +1,8 @@
+// app/components/BackfillNotification.tsx
 "use client";
 import { useEffect, useState } from "react";
 import { sdk } from "@farcaster/miniapp-sdk";
 
-/**
- * Backfill otomatis:
- * - Jika client context sudah punya notificationDetails (artinya user dulu sudah enable),
- *   kirim fid+url+token ke server agar tercatat di Supabase.
- * - Jika belum ada, tampilkan nudge kecil agar user Enable Notifications.
- */
 export default function BackfillNotification() {
   const [done, setDone] = useState(false);
   const [needsNudge, setNeedsNudge] = useState(false);
@@ -16,20 +11,30 @@ export default function BackfillNotification() {
     (async () => {
       try {
         const ctx = await sdk.context;
-        const fid = Number(ctx?.user?.fid || 0);
-        const nd  = ctx?.client?.notificationDetails; // url + token jika sudah enable:contentReference[oaicite:2]{index=2}
+
+        // Hindari masalah typing: beberapa versi SDK tidak expose 'client' di type.
+        const anyCtx = ctx as any;
+        const fid = Number(anyCtx?.user?.fid || 0);
+
+        // Coba dua bentuk yang umum ditemui:
+        // - anyCtx.client.notificationDetails
+        // - anyCtx.notificationDetails
+        const nd =
+          anyCtx?.client?.notificationDetails ??
+          anyCtx?.notificationDetails ??
+          null;
 
         if (fid > 0 && nd?.url && nd?.token) {
-          // kirim ke server untuk di-upsert
+          // Backfill ke server agar tercatat di Supabase
           await fetch("/api/notifications/upsert", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ fid, url: nd.url, token: nd.token }),
+            body: JSON.stringify({ fid, url: String(nd.url), token: String(nd.token) }),
           });
           setDone(true);
           setNeedsNudge(false);
         } else {
-          // tidak ada token di context => user belum enable notif
+          // Tidak ada token di context -> user belum enable notif
           setNeedsNudge(true);
         }
       } catch {
