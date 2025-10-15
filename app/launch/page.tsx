@@ -229,6 +229,7 @@ export default function Page() {
   return (
     <Providers>
       <FarcasterProvider>
+        <AddMiniAppPrompt />
         <Suspense fallback={<div className="flex items-center justify-center min-h-screen bg-neutral-950 text-neutral-400">Loading App...</div>}>
           <AppInitializer />
         </Suspense>
