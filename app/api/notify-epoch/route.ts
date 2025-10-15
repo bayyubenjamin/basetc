@@ -47,11 +47,11 @@ export async function GET() {
 
     // 1) Epoch sekarang dari kontrak
     const publicClient = createPublicClient({ chain: base, transport: http() });
-    const epochNowBn = await publicClient.readContract({
-      address: gameCoreAddress,
-      abi: gameCoreABI,
-      functionName: "epochNow",
-    });
+    const epochNowBn = await (publicClient as any).readContract({
+  address: gameCoreAddress,
+  abi: gameCoreABI,
+  functionName: "epochNow",
+});
     const currentEpoch = Number(epochNowBn);
 
     // 2) Ambil token yang perlu dikirim
