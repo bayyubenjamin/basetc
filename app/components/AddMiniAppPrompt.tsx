@@ -11,15 +11,25 @@ export default function AddMiniAppPrompt() {
     if (!dismissed) setOpen(true); // tampilkan sekali bagi user baru
   }, []);
 
-  async function handleAdd() {
-    try {
-      await sdk.actions.addMiniApp(); // memicu pop-up Add Mini App
+async function handleAdd() {
+  try {
+    // Guard + cast: kompilasi mulus meskipun tipe TS SDK lama belum punya addMiniApp
+    const add = (sdk.actions as any)?.addMiniApp as (() => Promise<void>) | undefined;
+
+    if (typeof add === "function") {
+      // @ts-expect-error: method tersedia di SDK baru; kita panggil aman via guard
+      await add();
       localStorage.setItem("basetc:add-miniapp-dismissed", "1");
       setOpen(false);
-    } catch (e) {
-      console.error("User menolak / domain tidak cocok manifest:", e);
+    } else {
+      // Fallback bila SDK lama: beri info UI agar user menambahkan dari Apps screen
+      alert("Untuk menambahkan BaseTC ke Farcaster, buka Apps screen lalu Add. " +
+            "Upgrade SDK agar tombol ini bekerja otomatis.");
     }
+  } catch (e) {
+    console.error("User menolak / domain tidak cocok manifest:", e);
   }
+}
 
   function handleLater() {
     localStorage.setItem("basetc:add-miniapp-dismissed", "1");
