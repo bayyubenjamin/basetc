@@ -58,6 +58,9 @@ export async function GET(req: Request) {
     const force =
       u.searchParams.get("force") === "1" ||
       u.searchParams.get("force")?.toLowerCase() === "true";
+    const debug =
+      u.searchParams.get("debug") === "1" ||
+      u.searchParams.get("debug")?.toLowerCase() === "true";
 
     // 1) Read current epoch from contract (TS bypass on viem read)
     const publicClient = createPublicClient({ chain: base, transport: http() });
@@ -68,9 +71,9 @@ export async function GET(req: Request) {
     });
     const currentEpoch = Number(epochNowBn);
 
-    // Optional: overrides via query (fallback to English defaults)
+    // Defaults (English) + optional overrides
     const defaultTitle = `Epoch ${currentEpoch} started`;
-    const defaultBody  = `Claim your daily reward for epoch ${currentEpoch}.`;
+    const defaultBody = `Claim your daily reward for epoch ${currentEpoch}.`;
     const defaultTarget = "https://basetc.xyz/launch";
 
     const title = u.searchParams.get("title") || defaultTitle;
@@ -89,14 +92,23 @@ export async function GET(req: Request) {
 
     const rows = (data || []) as TokenRow[];
     if (rows.length === 0) {
-      return json({ ok: true, epoch: currentEpoch, message: "No users need notification", results: [] });
+      return json({
+        ok: true,
+        epoch: currentEpoch,
+        force,
+        title,
+        body,
+        targetUrl,
+        message: "No users need notification",
+        results: [],
+      });
     }
 
     // 3) Group by Farcaster notification server URL
     const byUrl: Record<string, TokenRow[]> = {};
     for (const r of rows) (byUrl[r.url] ??= []).push(r);
 
-    // Use unique ID in force mode to avoid idempotency; otherwise idempotent per epoch
+    // Use unique ID in force mode; otherwise idempotent per epoch
     const notificationId = force
       ? `epoch-test-${Date.now()}`
       : `epoch-reminder-${currentEpoch}`;
@@ -108,15 +120,35 @@ export async function GET(req: Request) {
       invalid: number;
       rateLimited: number;
       sampleFids?: number[];
+      // debug fields (when ?debug=1)
+      batches?: Array<{
+        status: number;
+        ok: boolean;
+        // fids tried in this batch (for visibility)
+        fids: number[];
+        // the server response as received (truncated)
+        raw?: any;
+      }>;
     }> = [];
 
     // 4) Send per URL, batch of 100
     for (const [serverUrl, list] of Object.entries(byUrl)) {
-      let succ = 0, inv = 0, rl = 0, sent = 0;
+      let succ = 0,
+        inv = 0,
+        rl = 0,
+        sent = 0;
+
+      const debugBatches: Array<{
+        status: number;
+        ok: boolean;
+        fids: number[];
+        raw?: any;
+      }> = [];
 
       for (let i = 0; i < list.length; i += 100) {
         const chunk = list.slice(i, i + 100);
-        const tokens = chunk.map(c => c.token);
+        const tokens = chunk.map((c) => c.token);
+        const fids = chunk.map((c) => c.fid);
         sent += tokens.length;
 
         const resp = await fetch(serverUrl, {
@@ -125,18 +157,54 @@ export async function GET(req: Request) {
           body: JSON.stringify({ notificationId, title, body, targetUrl, tokens }),
         });
 
-        const jr = await resp.json().catch(() => ({} as any));
-        const successfulTokens: string[] = jr.successfulTokens || [];
-        const invalidTokens: string[] = jr.invalidTokens || [];
-        const rateLimitedTokens: string[] = jr.rateLimitedTokens || [];
+        // If non-200, try to capture text (some hosts may not return JSON on error)
+        let jr: any;
+        if (!resp.ok) {
+          const txt = await resp.text().catch(() => "");
+          try {
+            jr = JSON.parse(txt);
+          } catch {
+            jr = { nonJson: txt };
+          }
+        } else {
+          jr = await resp.json().catch(() => ({} as any));
+        }
+
+        const successfulTokens: string[] = jr?.successfulTokens || [];
+        const invalidTokens: string[] = jr?.invalidTokens || [];
+        const rateLimitedTokens: string[] = jr?.rateLimitedTokens || [];
 
         succ += successfulTokens.length;
-        inv  += invalidTokens.length;
-        rl   += rateLimitedTokens.length;
+        inv += invalidTokens.length;
+        rl += rateLimitedTokens.length;
 
-        // 5) Update DB: on success, mark epoch (skip on force mode to keep QA clean)
+        if (debug) {
+          // keep raw (but trim big arrays to avoid huge payloads)
+          const trimmed = {
+            ...jr,
+            successfulTokens: Array.isArray(jr?.successfulTokens)
+              ? jr.successfulTokens.slice(0, 10)
+              : jr?.successfulTokens,
+            invalidTokens: Array.isArray(jr?.invalidTokens)
+              ? jr.invalidTokens.slice(0, 10)
+              : jr?.invalidTokens,
+            rateLimitedTokens: Array.isArray(jr?.rateLimitedTokens)
+              ? jr.rateLimitedTokens.slice(0, 10)
+              : jr?.rateLimitedTokens,
+          };
+          debugBatches.push({
+            status: resp.status,
+            ok: resp.ok,
+            fids,
+            raw: trimmed,
+          });
+        }
+
+        // 5) Update DB: on success, mark epoch (skip in force mode to keep QA clean)
         if (!force && successfulTokens.length > 0) {
-          const fidsOk = chunk.filter(c => successfulTokens.includes(c.token)).map(c => c.fid);
+          const fidsOk = chunk
+            .filter((c) => successfulTokens.includes(c.token))
+            .map((c) => c.fid);
           if (fidsOk.length > 0) {
             await supabase
               .from("farcaster_tokens")
@@ -147,7 +215,9 @@ export async function GET(req: Request) {
 
         // 6) Disable invalid tokens
         if (invalidTokens.length > 0) {
-          const fidsBad = chunk.filter(c => invalidTokens.includes(c.token)).map(c => c.fid);
+          const fidsBad = chunk
+            .filter((c) => invalidTokens.includes(c.token))
+            .map((c) => c.fid);
           if (fidsBad.length > 0) {
             await supabase
               .from("farcaster_tokens")
@@ -157,14 +227,17 @@ export async function GET(req: Request) {
         }
       }
 
-      results.push({
+      const resultItem: any = {
         url: serverUrl,
         sent,
         succeeded: succ,
         invalid: inv,
         rateLimited: rl,
-        sampleFids: (byUrl[serverUrl] || []).slice(0, 5).map(r => r.fid),
-      });
+        sampleFids: (byUrl[serverUrl] || []).slice(0, 5).map((r) => r.fid),
+      };
+      if (debug) resultItem.batches = debugBatches;
+
+      results.push(resultItem);
     }
 
     return json({ ok: true, epoch: currentEpoch, force, title, body, targetUrl, results });
