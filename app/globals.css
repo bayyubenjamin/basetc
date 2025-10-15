@@ -271,3 +271,19 @@ html::after{
 
 /* Hard override: matikan sisa bg gelap kalau ada */
 .bg-black, .bg-zinc-950, .bg-neutral-950, .bg-slate-950 { background-color: transparent !important; }
+
+/* ==== HAPUS SHADOW PUTIH DI SEMUA CARD / NEU ELEMENT ==== */
+.fin-card,
+.neu,
+.neu-inner {
+  box-shadow:
+    4px 4px 10px rgba(0, 0, 0, 0.25),
+    -4px -4px 10px rgba(255, 255, 255, 0) !important; /* putih dihapus */
+}
+
+/* khusus modal biar lebih clean */
+.fin-card-trans,
+.fin-card.fin-card-trans {
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.25) !important; /* hanya bayangan hitam halus */
+}
