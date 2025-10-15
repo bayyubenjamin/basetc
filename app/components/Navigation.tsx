@@ -48,8 +48,7 @@ const Navigation: FC<{
         border: "1px solid rgba(0,0,0,.06)",
         borderRadius: 28,
         boxShadow:
-          "12px 12px 24px rgba(0,0,0,.20), -10px -10px 20px rgba(255,255,255,.85), inset 0 1px 0 rgba(255,255,255,.65)",
-        backdropFilter: "blur(14px)",
+  "4px 4px 10px rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.05)",        backdropFilter: "blur(14px)",
         WebkitBackdropFilter: "blur(14px)",
       }}
     >
@@ -110,8 +109,8 @@ const Navigation: FC<{
                   ? "linear-gradient(145deg, rgba(43,123,255,.22), rgba(43,123,255,.12))"
                   : "linear-gradient(145deg, #f9fbff, #e9f0ff)",
                 boxShadow: isActive
-                  ? "6px 6px 12px rgba(43,123,255,.22), -6px -6px 12px rgba(255,255,255,.9), inset 0 0 0 1px rgba(43,123,255,.35)"
-                  : "6px 6px 12px rgba(0,0,0,.10), -6px -6px 12px rgba(255,255,255,.9), inset 0 0 0 1px rgba(0,0,0,.04)",
+  ? "4px 4px 8px rgba(43,123,255,.25), inset 0 0 0 1px rgba(43,123,255,.3)"
+  : "4px 4px 8px rgba(0,0,0,.2), inset 0 0 0 1px rgba(0,0,0,.05)",
                 color: isActive ? COLORS.active : COLORS.inactive,
                 transition: "transform .12s ease, box-shadow .12s ease",
               }}
