@@ -3,12 +3,23 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createPublicClient, http } from "viem";
 import { base } from "viem/chains";
-// --- SESUAIKAN ini ---
-const gameCoreAddress = process.env.GAME_CORE_ADDRESS as `0x${string}`;
-import gameCoreABI from "@/lib/abi/GameCore.json";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+// --- ENV WAJIB: GAME_CORE_ADDRESS (0x...) ---
+const gameCoreAddress = process.env.GAME_CORE_ADDRESS as `0x${string}` | undefined;
+
+// Minimal ABI hanya untuk epochNow(): uint256
+const gameCoreABI = [
+  {
+    type: "function",
+    name: "epochNow",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+] as const;
 
 type Row = {
   fid: number;
@@ -30,30 +41,35 @@ function json(body: any, status = 200) {
 
 export async function GET() {
   try {
+    if (!gameCoreAddress) {
+      return json({ ok: false, error: "Missing env GAME_CORE_ADDRESS" }, 500);
+    }
+
     // 1) Epoch sekarang dari kontrak
     const publicClient = createPublicClient({ chain: base, transport: http() });
     const epochNowBn = await publicClient.readContract({
       address: gameCoreAddress,
-      abi: gameCoreABI as any,
+      abi: gameCoreABI,
       functionName: "epochNow",
     });
     const currentEpoch = Number(epochNowBn);
 
-    // 2) Ambil token yang perlu dikirim (last_epoch_notified < currentEpoch)
+    // 2) Ambil token yang perlu dikirim
     const supabase = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
     const { data, error } = await supabase
       .from("farcaster_tokens")
       .select("fid, token, url, last_epoch_notified, disabled")
       .eq("disabled", false)
       .lt("last_epoch_notified", currentEpoch);
-    if (error) throw error;
 
+    if (error) throw error;
     const rows = (data || []) as Row[];
+
     if (rows.length === 0) {
       return json({ ok: true, epoch: currentEpoch, message: "No users need notification", results: [] });
     }
 
-    // 3) Kelompok per server URL; batch per 100 token
+    // 3) Kelompok per URL server notifikasi
     const byUrl: Record<string, Row[]> = {};
     for (const r of rows) (byUrl[r.url] ??= []).push(r);
 
@@ -85,38 +101,26 @@ export async function GET() {
           body: JSON.stringify({ notificationId, title, body, targetUrl, tokens }),
         });
 
-        const jsonResp = await resp.json().catch(() => ({} as any));
-        const successfulTokens: string[] = jsonResp.successfulTokens || [];
-        const invalidTokens: string[] = jsonResp.invalidTokens || [];
-        const rateLimitedTokens: string[] = jsonResp.rateLimitedTokens || [];
+        const jr = await resp.json().catch(() => ({} as any));
+        const successfulTokens: string[] = jr.successfulTokens || [];
+        const invalidTokens: string[] = jr.invalidTokens || [];
+        const rateLimitedTokens: string[] = jr.rateLimitedTokens || [];
 
         succ += successfulTokens.length;
         inv  += invalidTokens.length;
         rl   += rateLimitedTokens.length;
 
-        // 4) Update DB: yang sukses -> last_epoch_notified = currentEpoch
+        // 4) Update DB sesuai hasil batch
         if (successfulTokens.length > 0) {
-          const fidsOk = chunk
-            .filter(c => successfulTokens.includes(c.token))
-            .map(c => c.fid);
+          const fidsOk = chunk.filter(c => successfulTokens.includes(c.token)).map(c => c.fid);
           if (fidsOk.length > 0) {
-            await supabase
-              .from("farcaster_tokens")
-              .update({ last_epoch_notified: currentEpoch })
-              .in("fid", fidsOk);
+            await supabase.from("farcaster_tokens").update({ last_epoch_notified: currentEpoch }).in("fid", fidsOk);
           }
         }
-
-        // 5) Token invalid -> disabled = true
         if (invalidTokens.length > 0) {
-          const fidsBad = chunk
-            .filter(c => invalidTokens.includes(c.token))
-            .map(c => c.fid);
+          const fidsBad = chunk.filter(c => invalidTokens.includes(c.token)).map(c => c.fid);
           if (fidsBad.length > 0) {
-            await supabase
-              .from("farcaster_tokens")
-              .update({ disabled: true })
-              .in("fid", fidsBad);
+            await supabase.from("farcaster_tokens").update({ disabled: true }).in("fid", fidsBad);
           }
         }
       }
