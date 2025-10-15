@@ -2,7 +2,7 @@
 import "./globals.css";
 import type { Metadata } from "next";
 import Ticker from "./components/Ticker";
-import AddMiniAppPrompt from "./components/AddMiniAppPrompt"; // ⬅️ tambahkan import ini
+import ClientErrorHUD from "./components/ClientErrorHUD";
 import AddMiniAppPrompt from "./components/AddMiniAppPrompt";
 
 // Payload Mini App (global)
