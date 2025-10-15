@@ -110,19 +110,19 @@ const content = useMemo(() => {
     <div className="flex flex-col min-h-screen">
       {/* ⬇️ BARIS PENTING: komponen pemicu sheet native Farcaster HARUS di dalam return */}
       <AddMiniAppPrompt />
-
+{/* Modal/CTA server-verified: muncul tiap buka sampai benar2 Add */}
+    <AddMiniAppModal />
+    
       {showClaimPopup && (
-        <ClaimPopup
-          onClose={() => setShowClaimPopup(false)}
-          onClaim={handleClaimNow}
-        />
-      )}
-      <main className="flex-1 pb-24">{content}</main>
-      <Navigation activeTab={activeTab} setActiveTab={setActiveTab} />
-    </div>
-  );
-}
-
+      <ClaimPopup
+        onClose={() => setShowClaimPopup(false)}
+        onClaim={handleClaimNow}
+      />
+    )}
+    <main className="flex-1 pb-24">{content}</main>
+    <Navigation activeTab={activeTab} setActiveTab={setActiveTab} />
+  </div>
+);
 
 function AppInitializer() {
   const { user, ready } = useFarcaster();
