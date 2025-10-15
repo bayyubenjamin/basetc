@@ -39,19 +39,19 @@ const TierImg: Record<"basic"|"pro"|"legend", string> = {
 
 /* Slot: sudut sedikit oval + bingkai tipis per-tier (Basic=putih, Pro=biru, Legend=gold) */
 const slotBorderByTier: Record<"basic"|"pro"|"legend", string> = {
-  basic: "border-white/55",
-  pro: "border-[#67a8ff]/70",
-  legend: "border-[#f5d06f]/80",
+  basic: "border-white/60",            // putih
+  pro: "border-[#6aa8ff]/70",          // biru
+  legend: "border-[#f5d06f]/80",       // emas
 };
 
 const NftSlot: FC<{ filled: boolean; tier: "basic" | "pro" | "legend" }> = ({ filled, tier }) => (
   <div
     className={[
       "grid place-items-center w-12 h-12 md:w-16 md:h-16",
-      "rounded-[12px] overflow-hidden",           // oval & potong isi
-      "neu-inner",                                 // tetap pressed look
-      "bg-[#151a2e]",                              // dasar slot
-      "border", slotBorderByTier[tier],            // bingkai tipis per-tier
+      "rounded-[8px] overflow-hidden",     // sedikit oval (lebih halus dari sebelumnya)
+      "neu-inner bg-[#151a2e]",            // pressed look + base
+      "border border-[1px]", slotBorderByTier[tier], // bingkai tipis berwarna
+      "p-[2px]",                           // beri ruang agar border terlihat jelas
     ].join(" ")}
   >
     {filled ? (
@@ -60,7 +60,7 @@ const NftSlot: FC<{ filled: boolean; tier: "basic" | "pro" | "legend" }> = ({ fi
         alt={`${tier} rig`}
         width={64}
         height={64}
-        className="w-full h-full object-cover rounded-[12px]"  // sudut gambar ikut oval
+        className="w-full h-full object-contain rounded-[6px]" // sudut gambar ikut sedikit oval
       />
     ) : (
       <div className="text-[10px] text-neutral-400">empty</div>
@@ -326,7 +326,7 @@ export default function Rakit() {
             <small>Basic</small>
             <strong>Owned: {String(ownedBasic)}</strong>
           </div>
-          {/* Gambar header di kanan DIHAPUS sesuai request */}
+          {/* (gambar header kanan dihapus sesuai permintaan) */}
         </div>
 
         <div className="mt-3 grid grid-cols-5 gap-2">
@@ -372,7 +372,7 @@ export default function Rakit() {
             <small>Pro</small>
             <strong>Owned: {String(ownedPro)}</strong>
           </div>
-          {/* Gambar header di kanan DIHAPUS sesuai request */}
+          {/* (gambar header kanan dihapus) */}
         </div>
 
         <div className="mt-3 grid grid-cols-5 gap-2">
@@ -385,7 +385,6 @@ export default function Rakit() {
           ))}
         </div>
 
-        {/* Bottom bar actions (full width) */}
         <div className="mt-4 border-t border-white/10 pt-3">
           <div className="text-sm text-neutral-300">
             Need: <b>{String(needPL)}</b> Pro → Legend
@@ -411,14 +410,14 @@ export default function Rakit() {
         </div>
       </section>
 
-      {/* LEGEND (display only) */}
+      {/* LEGEND */}
       <section className="fin-card fin-card-pad neu" aria-label="Legend rigs">
         <div className="fin-row">
           <div className="fin-epoch">
             <small>Legend</small>
             <strong>Owned: {String(ownedLegend)}</strong>
           </div>
-          {/* Gambar header di kanan DIHAPUS sesuai request */}
+          {/* (gambar header kanan dihapus) */}
         </div>
 
         <div className="mt-3 grid grid-cols-5 gap-2">
@@ -432,7 +431,7 @@ export default function Rakit() {
         </div>
       </section>
 
-      {/* legacy inline status (still kept for compatibility) */}
+      {/* legacy inline status */}
       <div className="fin-msg min-h-5 whitespace-pre-line">{status}</div>
       <div className="fin-bottom-space" />
 
