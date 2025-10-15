@@ -1,7 +1,7 @@
 // app/api/notify-epoch/route.ts
 import { NextResponse } from "next/server";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
-import { createPublicClient, http, getContract, type Abi } from "viem";
+import { createPublicClient, http, type Abi } from "viem";
 import { base } from "viem/chains";
 import { gameCoreAddress, gameCoreABI } from "../../lib/web3Config";
 
@@ -15,7 +15,7 @@ type SendResp = {
 
 export async function GET() {
   try {
-    // 1) Supabase
+    // 1) Supabase (service role)
     const supabaseUrl = process.env.SUPABASE_URL;
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     if (!supabaseUrl || !serviceKey) {
@@ -26,54 +26,48 @@ export async function GET() {
     }
     const supabase = createSupabaseClient(supabaseUrl, serviceKey);
 
-    // 2) Epoch dari GameCore (fix typing)
+    // 2) Ambil epoch dari GameCore (pakai readContract dengan casting aman)
     const publicClient = createPublicClient({ chain: base, transport: http() });
 
-    // Opsi A: getContract dengan ABI bertipe 'Abi'
-    const gameCore = getContract({
+    // Hindari masalah typing viem: cast parameter via 'any' + pastikan args: [].
+    const epochNowBn = await (publicClient as any).readContract({
       address: gameCoreAddress as `0x${string}`,
-      abi: gameCoreABI as Abi,
-      client: { public: publicClient },
+      abi: gameCoreABI as unknown as Abi,
+      functionName: "epochNow",
+      args: [] as const,
     });
-    const epochNowBn = await gameCore.read["epochNow"]();
     const currentEpoch = Number(epochNowBn);
 
-    // (Opsi B alternatif bila mau pakai readContract langsung)
-    // const epochNowBn = await publicClient.readContract({
-    //   address: gameCoreAddress as `0x${string}`,
-    //   abi: gameCoreABI as Abi,
-    //   functionName: "epochNow",
-    //   args: [] as const,
-    // });
-    // const currentEpoch = Number(epochNowBn);
-
-    // 3) Ambil tokens aktif yg belum dinotifikasi utk epoch ini
+    // 3) Ambil tokens aktif yang belum dinotifikasi untuk epoch ini
     const { data: tokens, error: qErr } = await supabase
       .from("farcaster_tokens")
-      .select("fid, token, url, last_epoch_notified")
-      .eq("disabled", false);
+      .select("fid, token, url, last_epoch_notified, disabled");
 
     if (qErr) throw qErr;
-    if (!tokens || tokens.length === 0) {
+
+    const candidates =
+      (tokens ?? []).filter(
+        (t) => !t.disabled && (t.last_epoch_notified ?? 0) < currentEpoch,
+      );
+
+    if (candidates.length === 0) {
       return new NextResponse(
-        JSON.stringify({ ok: true, epoch: currentEpoch, message: "No active tokens" }),
+        JSON.stringify({
+          ok: true,
+          epoch: currentEpoch,
+          message: "No users need notification",
+        }),
         { status: 200 },
       );
     }
 
-    const grouped: Record<string, typeof tokens> = {};
-    for (const row of tokens) {
-      if ((row.last_epoch_notified ?? 0) >= currentEpoch) continue;
+    // 4) Kelompokkan per server notifikasi Farcaster (url)
+    const grouped: Record<string, typeof candidates> = {};
+    for (const row of candidates) {
       (grouped[row.url] ??= []).push(row);
     }
-    if (Object.keys(grouped).length === 0) {
-      return new NextResponse(
-        JSON.stringify({ ok: true, epoch: currentEpoch, message: "All users already notified" }),
-        { status: 200 },
-      );
-    }
 
-    // 4) Kirim batch (≤100 token/request)
+    // 5) Kirim batch (≤100 token/request)
     const results: Array<{
       url: string;
       sent: number;
@@ -82,7 +76,7 @@ export async function GET() {
       rateLimited: number;
     }> = [];
 
-    const notificationId = `epoch-reminder-${currentEpoch}`;
+    const notificationId = `epoch-reminder-${currentEpoch}`; // idempotent
     const title = `Epoch ${currentEpoch} started`;
     const body = `The previous epoch has ended. Remember to claim your rewards!`;
     const targetUrl = `https://basetc.xyz/launch`;
