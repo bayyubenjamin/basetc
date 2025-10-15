@@ -37,43 +37,40 @@ const TierImg: Record<"basic"|"pro"|"legend", string> = {
   legend: "/img/vga_legend.png",
 };
 
-/* === BINGKAI WARNA SESUAI TIER === */
+/* Warna bingkai per tier */
 const slotBorderByTier: Record<"basic"|"pro"|"legend", string> = {
-  basic: "border-white/60",        // putih
-  pro: "border-[#67a8ff]/80",      // biru
-  legend: "border-[#f5d06f]/85",   // gold
+  basic: "border-white/60",
+  pro: "border-[#67a8ff]/80",
+  legend: "border-[#f5d06f]/85",
 };
 
-/* === SLOT: sudut sedikit oval + overlay border (tanpa ring-inset) === */
+/* === SLOT ===
+   - Border di CONTAINER + padding 1px → tidak “nabrak”
+   - Sudut sedikit oval (8px di container, 7px di isi)
+*/
 const NftSlot: FC<{ filled: boolean; tier: "basic" | "pro" | "legend" }> = ({ filled, tier }) => (
   <div
     className={[
       "relative grid place-items-center w-12 h-12 md:w-16 md:h-16",
-      "rounded-[6px] overflow-hidden",     // sedikit oval, halus (naik dari 4px)
-      "neu-inner bg-[#151a2e]",            // pressed look + base
+      "rounded-[8px]",
+      "border", slotBorderByTier[tier],
+      "p-[1px]", // jarak kecil antara border & isi
+      "bg-transparent",
     ].join(" ")}
   >
-    {filled ? (
-      <Image
-        src={TierImg[tier]}
-        alt={`${tier} rig`}
-        width={64}
-        height={64}
-        className="w-full h-full object-cover rounded-[6px]" // gambar ikut radius
-      />
-    ) : (
-      <div className="text-[10px] text-neutral-400">empty</div>
-    )}
-
-    {/* Overlay border tipis agar tidak 'kepotong' sudutnya */}
-    <span
-      aria-hidden="true"
-      className={[
-        "pointer-events-none absolute inset-0 rounded-[6px]",
-        "border",                             // pakai border (bukan ring-inset)
-        slotBorderByTier[tier],
-      ].join(" ")}
-    />
+    <div className="w-full h-full rounded-[7px] overflow-hidden neu-inner bg-[#151a2e] grid place-items-center">
+      {filled ? (
+        <Image
+          src={TierImg[tier]}
+          alt={`${tier} rig`}
+          width={64}
+          height={64}
+          className="w-full h-full object-cover rounded-[7px]"
+        />
+      ) : (
+        <div className="text-[10px] text-neutral-400">empty</div>
+      )}
+    </div>
   </div>
 );
 
@@ -245,6 +242,21 @@ export default function Rakit() {
     setPopupOpen(true);
   }
 
+  // --- error prettyfier (hanya ubah teks popup; tidak mengubah logic lain) ---
+  function prettyErr(e: any): string {
+    const msg = String(e?.shortMessage || e?.message || e || "");
+    if (/ERC20:\s*transfer amount exceeds balance/i.test(msg)) {
+      return "Your USDC balance is not enough.";
+    }
+    if (/insufficient funds/i.test(msg)) {
+      return "Insufficient ETH for gas.";
+    }
+    if (/user rejected|denied transaction|rejected the request/i.test(msg)) {
+      return "Transaction rejected.";
+    }
+    return msg || "Something went wrong.";
+  }
+
   async function ensureApprove(amount: bigint) {
     if (!user || !feeToken) throw new Error("Fee token not set / wallet not connected.");
     if (allowance >= amount) return;
@@ -294,7 +306,7 @@ export default function Rakit() {
 
       finishSuccess("Merge to Pro successful!. Please go to Monitoring and start mining to sync your RigNFT.");
     } catch (e: any) {
-      finishError(e?.shortMessage || e?.message || "Merge failed");
+      finishError(prettyErr(e)); // <— hanya ubah teks popup
     }
   }
 
@@ -315,14 +327,13 @@ export default function Rakit() {
 
       finishSuccess("Merge to Legend successful!. Please go to Monitoring and start mining to sync your RigNFT.");
     } catch (e: any) {
-      finishError(e?.shortMessage || e?.message || "Merge failed");
+      finishError(prettyErr(e)); // <— hanya ubah teks popup
     }
   }
 
   /* ---------------- UI (fintech-aligned + Neumorphism) ---------------- */
   return (
     <div className="fin-wrap fin-content-pad-bottom">
-      {/* Page head */}
       <div className="fin-page-head">
         <h1>Build Rig</h1>
         <p>Upgrade &amp; merge your rigs</p>
@@ -335,16 +346,11 @@ export default function Rakit() {
             <small>Basic</small>
             <strong>Owned: {String(ownedBasic)}</strong>
           </div>
-          {/* header image removed per request */}
         </div>
 
         <div className="mt-3 grid grid-cols-5 gap-2">
           {Array.from({ length: Math.max(1, caps.b) }).map((_, i) => (
-            <NftSlot
-              key={`b-${i}`}
-              filled={i < Math.min(Number(ownedBasic), caps.b)}
-              tier="basic"
-            />
+            <NftSlot key={`b-${i}`} filled={i < Math.min(Number(ownedBasic), caps.b)} tier="basic" />
           ))}
         </div>
 
@@ -366,9 +372,7 @@ export default function Rakit() {
                 <span className="h-3 w-3 rounded-full border-2 border-white/30 border-t-transparent animate-spin" />
                 Processing…
               </span>
-            ) : (
-              "Merge to Pro"
-            )}
+            ) : ("Merge to Pro")}
           </button>
         </div>
       </section>
@@ -380,16 +384,11 @@ export default function Rakit() {
             <small>Pro</small>
             <strong>Owned: {String(ownedPro)}</strong>
           </div>
-          {/* header image removed per request */}
         </div>
 
         <div className="mt-3 grid grid-cols-5 gap-2">
           {Array.from({ length: Math.max(1, caps.p) }).map((_, i) => (
-            <NftSlot
-              key={`p-${i}`}
-              filled={i < Math.min(Number(ownedPro), caps.p)}
-              tier="pro"
-            />
+            <NftSlot key={`p-${i}`} filled={i < Math.min(Number(ownedPro), caps.p)} tier="pro" />
           ))}
         </div>
 
@@ -411,30 +410,23 @@ export default function Rakit() {
                 <span className="h-3 w-3 rounded-full border-2 border-white/30 border-t-transparent animate-spin" />
                 Processing…
               </span>
-            ) : (
-              "Merge to Legend"
-            )}
+            ) : ("Merge to Legend")}
           </button>
         </div>
       </section>
 
-      {/* LEGEND (display only) */}
+      {/* LEGEND */}
       <section className="fin-card fin-card-pad neu" aria-label="Legend rigs">
         <div className="fin-row">
           <div className="fin-epoch">
             <small>Legend</small>
             <strong>Owned: {String(ownedLegend)}</strong>
           </div>
-          {/* header image removed per request */}
         </div>
 
         <div className="mt-3 grid grid-cols-5 gap-2">
           {Array.from({ length: Math.max(1, caps.l) }).map((_, i) => (
-            <NftSlot
-              key={`l-${i}`}
-              filled={i < Math.min(Number(ownedLegend), caps.l)}
-              tier="legend"
-            />
+            <NftSlot key={`l-${i}`} filled={i < Math.min(Number(ownedLegend), caps.l)} tier="legend" />
           ))}
         </div>
       </section>
