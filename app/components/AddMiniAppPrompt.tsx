@@ -7,29 +7,37 @@ export default function AddMiniAppPrompt() {
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
-    const dismissed = localStorage.getItem("basetc:add-miniapp-dismissed");
-    if (!dismissed) setOpen(true); // tampilkan sekali bagi user baru
+    // beri sinyal siap ke klien
+    sdk.actions.ready?.().catch(() => {});
+
+    // hanya tampilkan kalau berjalan di Farcaster client (punya context client)
+    const isMiniApp = Boolean((sdk as any)?.context?.client);
+    const dismissed = typeof window !== "undefined"
+      ? localStorage.getItem("basetc:add-miniapp-dismissed")
+      : "1";
+
+    if (isMiniApp && !dismissed) setOpen(true);
   }, []);
 
-async function handleAdd() {
-  try {
-    // Guard + cast: kompilasi mulus meskipun tipe TS SDK lama belum punya addMiniApp
-    const add = (sdk.actions as any)?.addMiniApp as (() => Promise<void>) | undefined;
+  async function handleAdd() {
+    try {
+      const add = (sdk.actions as any)?.addMiniApp as (() => Promise<void>) | undefined;
 
-    if (typeof add === "function") {
-      // @ts-expect-error: method tersedia di SDK baru; kita panggil aman via guard
-      await add();
-      localStorage.setItem("basetc:add-miniapp-dismissed", "1");
-      setOpen(false);
-    } else {
-      // Fallback bila SDK lama: beri info UI agar user menambahkan dari Apps screen
-      alert("Untuk menambahkan BaseTC ke Farcaster, buka Apps screen lalu Add. " +
-            "Upgrade SDK agar tombol ini bekerja otomatis.");
+      if (typeof add === "function") {
+        // @ts-expect-error: tersedia di SDK baru; kita panggil via guard
+        await add();
+        localStorage.setItem("basetc:add-miniapp-dismissed", "1");
+        setOpen(false);
+      } else {
+        alert(
+          "Untuk menambahkan BaseTC ke Farcaster, buka Apps screen lalu Add. " +
+          "Upgrade SDK agar tombol ini bekerja otomatis."
+        );
+      }
+    } catch (e) {
+      console.error("User menolak / domain tidak cocok manifest:", e);
     }
-  } catch (e) {
-    console.error("User menolak / domain tidak cocok manifest:", e);
   }
-}
 
   function handleLater() {
     localStorage.setItem("basetc:add-miniapp-dismissed", "1");
