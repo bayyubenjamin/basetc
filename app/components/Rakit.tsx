@@ -49,7 +49,7 @@ const NftSlot: FC<{ filled: boolean; tier: "basic" | "pro" | "legend" }> = ({ fi
   <div
     className={[
       "relative grid place-items-center w-12 h-12 md:w-16 md:h-16",
-      "rounded-[6px] overflow-hidden",     // sedikit oval (lebih tipis)
+      "rounded-[4px] overflow-hidden",     // sedikit oval (lebih tipis)
       "neu-inner bg-[#151a2e]",            // pressed look + base
     ].join(" ")}
   >
