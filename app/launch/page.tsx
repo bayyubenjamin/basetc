@@ -12,6 +12,7 @@ import Market from "../components/Market";
 import Profil from "../components/Profil";
 import Event from "../components/Event";
 import FidInput from "../components/FidInput";
+import BackfillNotification from "../components/BackfillNotification";
 import ClaimPopup from "../components/ClaimPopup"; // <-- Impor komponen baru
 import { isAddress } from "ethers";
 
@@ -227,6 +228,7 @@ export default function Page() {
         <Suspense fallback={<div className="flex items-center justify-center min-h-screen bg-neutral-950 text-neutral-400">Loading App...</div>}>
           <AppInitializer />
         </Suspense>
+        <BackfillNotification />
       </FarcasterProvider>
     </Providers>
   );
