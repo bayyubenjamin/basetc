@@ -1,21 +1,21 @@
 // app/api/notify-epoch/route.ts
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { createPublicClient, http, getContract } from "viem";
+import { createPublicClient, http } from "viem";
 import { base } from "viem/chains";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 // ==== ENV ====
-// Kontrak GameCore di Base (punya fungsi view epochNow(): uint256)
+// Alamat kontrak GameCore (punya fungsi view epochNow())
 const gameCoreAddress = process.env.CONTRACT_GAMECORE as `0x${string}` | undefined;
 
-// Supabase server-side (gunakan SERVICE_ROLE_KEY, jangan anon)
+// Supabase server-side (SERVICE ROLE KEY!)
 const SUPABASE_URL = process.env.SUPABASE_URL!;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
-// ==== ABI minimal hanya untuk epochNow ====
+// ==== Minimal ABI: hanya epochNow() ====
 const gameCoreABI = [
   {
     type: "function",
@@ -26,7 +26,7 @@ const gameCoreABI = [
   },
 ] as const;
 
-// ==== Types sederhana untuk baris tabel ====
+// ==== Types untuk tabel ====
 type TokenRow = {
   fid: number;
   token: string;
@@ -48,24 +48,21 @@ function json(body: any, status = 200) {
 
 export async function GET() {
   try {
-    if (!gameCoreAddress) {
-      return json({ ok: false, error: "Missing env CONTRACT_GAMECORE" }, 500);
-    }
+    if (!gameCoreAddress) return json({ ok: false, error: "Missing env CONTRACT_GAMECORE" }, 500);
     if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
       return json({ ok: false, error: "Missing Supabase server env" }, 500);
     }
 
-    // 1) Baca epoch sekarang dari kontrak
+    // 1) Ambil epoch sekarang dari kontrak (bypass typing viem dengan cast `as any`)
     const publicClient = createPublicClient({ chain: base, transport: http() });
-    const gameCore = getContract({
+    const epochNowBn = await (publicClient as any).readContract({
       address: gameCoreAddress,
       abi: gameCoreABI,
-      client: { public: publicClient as any }, // bypass typing viem agar tidak error build
+      functionName: "epochNow",
     });
-    const epochNowBn = await gameCore.read.epochNow();
     const currentEpoch = Number(epochNowBn);
 
-    // 2) Ambil token yang perlu dikirimi (last_epoch_notified < currentEpoch & aktif)
+    // 2) Ambil token yang butuh dikirimi (aktif & belum dinotifikasi utk epoch ini)
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     const { data, error } = await supabase
       .from("farcaster_tokens")
@@ -76,13 +73,11 @@ export async function GET() {
     if (error) throw error;
 
     const rows = (data || []) as TokenRow[];
-
     if (rows.length === 0) {
-      // Tetap JSON agar bisa | jq .
       return json({ ok: true, epoch: currentEpoch, message: "No users need notification", results: [] });
     }
 
-    // 3) Kelompokkan per server URL (Farcaster notification endpoint)
+    // 3) Kelompok per URL server notifikasi (Farcaster)
     const byUrl: Record<string, TokenRow[]> = {};
     for (const r of rows) (byUrl[r.url] ??= []).push(r);
 
@@ -112,13 +107,7 @@ export async function GET() {
         const resp = await fetch(serverUrl, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            notificationId,
-            title,
-            body,
-            targetUrl,
-            tokens,
-          }),
+          body: JSON.stringify({ notificationId, title, body, targetUrl, tokens }),
         });
 
         const jr = await resp.json().catch(() => ({} as any));
@@ -160,7 +149,7 @@ export async function GET() {
       });
     }
 
-    // 7) Balikkan ringkasan
+    // 7) Balas JSON rapi (bisa | jq .)
     return json({ ok: true, epoch: currentEpoch, results });
   } catch (e: any) {
     console.error("[notify-epoch] error:", e?.message || e);
