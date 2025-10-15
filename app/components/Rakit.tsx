@@ -37,11 +37,11 @@ const TierImg: Record<"basic"|"pro"|"legend", string> = {
   legend: "/img/vga_legend.png",
 };
 
-/* Ring warna per-tier (Basic=putih, Pro=biru, Legend=emas) */
-const slotRingByTier: Record<"basic"|"pro"|"legend", string> = {
-  basic: "ring-white/70",
-  pro: "ring-[#6aa8ff]/80",
-  legend: "ring-[#f5d06f]/90",
+// mapping warna ring per-tier
+const slotRingByTier: Record<"basic" | "pro" | "legend", string> = {
+  basic: "ring-white/60",         // putih tipis
+  pro: "ring-[#67a8ff]/80",       // biru
+  legend: "ring-[#f5d06f]/80",    // gold
 };
 
 /* Slot: sudut sedikit oval + bingkai overlay agar selalu terlihat */
@@ -49,8 +49,8 @@ const NftSlot: FC<{ filled: boolean; tier: "basic" | "pro" | "legend" }> = ({ fi
   <div
     className={[
       "relative grid place-items-center w-12 h-12 md:w-16 md:h-16",
-      "rounded-[4px] overflow-hidden",     // sedikit oval (lebih tipis)
-      "neu-inner bg-[#151a2e]",            // pressed look + base
+      "rounded-[4px] overflow-hidden",  // sedikit oval (tipis)
+      "neu-inner bg-[#151a2e]",         // pressed look + base
     ].join(" ")}
   >
     {filled ? (
@@ -59,16 +59,21 @@ const NftSlot: FC<{ filled: boolean; tier: "basic" | "pro" | "legend" }> = ({ fi
         alt={`${tier} rig`}
         width={64}
         height={64}
-        className="w-full h-full object-cover rounded-[4px]" // sudut gambar ikut sedikit oval
+        className="w-full h-full object-cover rounded-[4px]"
       />
     ) : (
       <div className="text-[10px] text-neutral-400">empty</div>
     )}
 
-    {/* Overlay ring untuk bingkai tipis berwarna (tidak bentrok dengan neu-inner) */}
+    {/* Ring overlay (tipis, tidak mengganggu klik) */}
     <span
       aria-hidden="true"
-      className={`pointer-events-none absolute inset-0 rounded-[4px] ring-1 ${slotRingByTier[tier]}`}
+      className={[
+        "pointer-events-none absolute inset-0 rounded-[4px]",
+        "ring-1 ring-inset",                         // ketebalan ring
+        "ring-offset-[1px] ring-offset-[#151a2e]",   // bikin ring lebih terlihat
+        slotRingByTier[tier],
+      ].join(" ")}
     />
   </div>
 );
