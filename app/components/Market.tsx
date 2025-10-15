@@ -93,7 +93,7 @@ const CenterPopup: FC<{
     <>
       <div className="fixed inset-0 z-[1100] bg-black/60 backdrop-blur-sm" />
       <div className="fixed inset-0 z-[1200] grid place-items-center p-4">
-        <div className="w-full max-w-sm rounded-2xl bg-neutral-900 text-white shadow-2xl border border-white/10">
+        <div className="w-full max-w-sm rounded-2xl bg-white/90 text-[var(--text)] shadow-2xl border border-[color:rgba(0,0,0,.06)] backdrop-blur-md">
           <div className="p-5">
             <div className="text-center text-sm leading-relaxed whitespace-pre-line">
               {message || "Done."}
@@ -101,7 +101,7 @@ const CenterPopup: FC<{
             <div className="mt-5 flex justify-center">
               <button
                 onClick={onOK}
-                className="px-4 py-2 rounded-md bg-blue-600 text-white text-sm hover:bg-blue-500 active:scale-[0.99]"
+                className="px-4 py-2 rounded-md bg-[var(--accent)] text-white text-sm hover:opacity-90 active:scale-[0.99]"
               >
                 OK
               </button>
@@ -119,8 +119,8 @@ const LoadingOverlay: FC<{ show: boolean; label?: string }> = ({ show, label }) 
     <>
       <div className="fixed inset-0 z-[1000] bg-black/40 backdrop-blur-[1px]" />
       <div className="fixed inset-0 z-[1010] grid place-items-center">
-        <div className="flex items-center gap-3 rounded-xl bg-neutral-900 text-white border border-white/10 px-4 py-3 shadow-xl">
-          <div className="h-5 w-5 rounded-full border-2 border-white/30 border-t-transparent animate-spin" />
+        <div className="flex items-center gap-3 rounded-xl bg-white/90 text-[var(--text)] border border-[color:rgba(0,0,0,.06)] px-4 py-3 shadow-xl backdrop-blur-md">
+          <div className="h-5 w-5 rounded-full border-2 border-[rgba(0,0,0,.2)] border-t-transparent animate-spin" />
           <span className="text-sm whitespace-pre-line">{label ?? "Processing…"}</span>
         </div>
       </div>
@@ -408,16 +408,16 @@ const Market: FC = () => {
   }
 
   /* =============================
-     UI - Neumorphism applied (card + controls + buttons)
+     UI - Neumorphism + kontras teks
    ============================== */
   return (
     <div className="fin-wrap fin-content-pad-bottom px-1.5 pt-1.5 space-y-5">
       <header className="space-y-1">
-        <h1 className="text-xl font-semibold">Market</h1>
-        <p className="text-sm text-neutral-400">Mint rigs and invite to earn</p>
+        <h1 className="text-xl font-semibold text-[var(--text)]">Market</h1>
+        <p className="text-sm text-[var(--muted)] font-semibold">Mint rigs and invite to earn</p>
       </header>
 
-      {/* Invite Summary Card (DILEBARKAN) */}
+      {/* Invite Summary Card */}
       <section
         className="fin-card p-4 neu"
         style={{
@@ -427,8 +427,8 @@ const Market: FC = () => {
       >
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h2 className="text-sm font-semibold">Invite Friends</h2>
-            <p className="text-xs text-neutral-400">Valid invites unlock free Basic rig claims.</p>
+            <h2 className="text-sm font-semibold text-[var(--text)]">Invite Friends</h2>
+            <p className="text-xs text-[var(--muted)] font-semibold">Valid invites unlock free Basic rig claims.</p>
           </div>
           <button
             onClick={handleClaimInviteReward}
@@ -445,27 +445,29 @@ const Market: FC = () => {
             )}
           </button>
         </div>
-        <div className="mt-2 text-xs text-neutral-400">
+        <div className="mt-2 text-xs text-[var(--muted)] font-semibold">
           {inviteStats.loading ? (
             "Loading invites..."
           ) : (
             <>
-              Invites: <b>{totalInvites}</b> • Claimed: <b>{claimedRewards}</b> • Max now: <b>{maxClaims}</b>
+              Invites: <b className="text-[var(--text)]">{totalInvites}</b> • Claimed:{" "}
+              <b className="text-[var(--text)]">{claimedRewards}</b> • Max now:{" "}
+              <b className="text-[var(--text)]">{maxClaims}</b>
             </>
           )}
         </div>
         {availableClaims <= 0 && !inviteStats.loading && (
-          <div className="text-xs text-neutral-400">
-            Need <b>{needMoreInv}</b> more valid invite(s) for the next claim.
+          <div className="text-xs text-[var(--muted)] font-semibold">
+            Need <b className="text-[var(--text)]">{needMoreInv}</b> more valid invite(s) for the next claim.
           </div>
         )}
-        {!!inviteMsg && <div className="mt-2 text-xs text-blue-400">{inviteMsg}</div>}
+        {!!inviteMsg && <div className="mt-2 text-xs text-[var(--accent)]">{inviteMsg}</div>}
       </section>
 
-      {/* Product Cards (DILEBARKAN) */}
+      {/* Product Cards */}
       <section className="space-y-4">
         {NFT_DATA.map((tier) => {
-          const id = tierId(tier.id);
+          const id = tier.id === "basic" ? (BASIC as bigint) : tier.id === "pro" ? (PRO as bigint) : (LEGEND as bigint);
           const p = priceOf(id);
           const priceText =
             tier.id === "basic" && isBasicFreeForMe
@@ -491,11 +493,11 @@ const Market: FC = () => {
                   <Image src={tier.image} alt={tier.name} width={64} height={64} className="object-contain" />
                 </div>
                 <div className="flex-1">
-                  <h3 className="text-sm font-semibold">{tier.name}</h3>
-                  <p className="text-xs text-neutral-400">{tier.description}</p>
-                  <p className="text-[11px] text-neutral-500">Est. Hashrate: {tier.hashrateHint}</p>
+                  <h3 className="text-sm font-semibold text-[var(--text)]">{tier.name}</h3>
+                  <p className="text-xs text-[var(--muted)] font-semibold">{tier.description}</p>
+                  <p className="text-[11px] text-[var(--muted)]">Est. Hashrate: <b className="text-[var(--text)]">{tier.hashrateHint}</b></p>
                 </div>
-                <div className="text-xs text-neutral-300">{priceText}</div>
+                <div className="text-xs font-bold text-[var(--text)]">{priceText}</div>
               </div>
 
               {/* Bottom controls */}
@@ -509,12 +511,13 @@ const Market: FC = () => {
                 </button>
               ) : (
                 <div className="mt-3 flex items-center gap-2">
-                  {/* Quantity selector (pressed look) */}
+                  {/* Quantity selector */}
                   <div className="flex items-center neu-inner rounded-md">
                     <button
                       type="button"
                       onClick={() => dec(tier.id)}
-                      className="px-3 py-1 text-sm hover:opacity-100 neu-btn"
+                      className="px-3 py-1 text-sm hover:opacity-100 text-white neu-btn"
+                      title="Decrease"
                     >
                       −
                     </button>
@@ -522,12 +525,13 @@ const Market: FC = () => {
                       value={qty[tier.id]}
                       onChange={(e) => setManual(tier.id, e.target.value)}
                       inputMode="numeric"
-                      className="w-12 text-center bg-transparent py-1 text-sm outline-none"
+                      className="w-12 text-center bg-transparent py-1 text-sm outline-none text-[var(--text)]"
                     />
                     <button
                       type="button"
                       onClick={() => inc(tier.id)}
-                      className="px-3 py-1 text-sm hover:opacity-100 neu-btn"
+                      className="px-3 py-1 text-sm hover:opacity-100 text-white neu-btn"
+                      title="Increase"
                     >
                       +
                     </button>
@@ -556,11 +560,11 @@ const Market: FC = () => {
       </section>
 
       {/* Legend supply note */}
-      <p className="text-center text-[12px] text-yellow-400 font-semibold uppercase tracking-wide mt-2 drop-shadow-[0_0_4px_rgba(255,255,0,0.3)]">
+      <p className="text-center text-[12px] text-yellow-600 font-semibold uppercase tracking-wide mt-2 drop-shadow-[0_0_4px_rgba(255,255,0,0.25)]">
         ⚠️ Legend supply is limited to 3000 only — 1500 for sale + 1500 via merge.
       </p>
 
-      {!!message && <p className="text-center text-xs text-neutral-400 whitespace-pre-line">{message}</p>}
+      {!!message && <p className="text-center text-xs text-[var(--muted)] whitespace-pre-line font-semibold">{message}</p>}
       <div className="fin-bottom-space" />
       <LoadingOverlay show={loading} label={message || "Processing…"} />
       <CenterPopup
@@ -573,4 +577,3 @@ const Market: FC = () => {
 };
 
 export default Market;
-
