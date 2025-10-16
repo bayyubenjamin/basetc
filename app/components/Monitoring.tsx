@@ -476,7 +476,7 @@ const Monitoring: FC = () => {
   const [loggedHash, setLoggedHash] = useState<string | null>(null);
   useEffect(() => {
     if (txHash && txHash !== loggedHash) {
-      addLog(`Tx sent: ${txHash}`);
+      addLog(`🔗 Tx sent: ${txHash}`);
       setLoggedHash(txHash);
       setStatusText("Waiting for confirmation…");
       setLoading(false);
@@ -526,6 +526,17 @@ const Monitoring: FC = () => {
   }, [isSuccess]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Errors
+  // (tambahan: tip singkat jika klaim gagal)
+  const prettyTip = (msg?: string) => {
+    const m = (msg || "").toLowerCase();
+    if (!m) return "";
+    if (m.includes("expired")) return "💡 Tip: signature expired — sign ulang.";
+    if (m.includes("nonce")) return "💡 Tip: bad nonce — refresh nonce lalu coba lagi.";
+    if (m.includes("allowance")) return "💡 Tip: allowance kurang — approve/permit dulu.";
+    if (m.includes("balance")) return "💡 Tip: saldo tidak cukup.";
+    return "";
+  };
+
   useEffect(() => {
     if (!writeError) return;
     const shortMsg =
@@ -534,19 +545,27 @@ const Monitoring: FC = () => {
       "Transaction failed to send";
     setStatusText(shortMsg);
     addLog(`Error (write): ${shortMsg}`);
+    if (lastAction === "claim") {
+      addLog(`🚫 Claim rejected — ${shortMsg}`);
+      const tip = prettyTip(shortMsg);
+      if (tip) addLog(tip);
+    }
     setLoading(false);
     setLoggedHash(null);
     setLastAction(null);
-  }, [writeError]);
+  }, [writeError]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!receiptError) return;
     setStatusText("Transaction reverted. Check the explorer for details.");
     addLog("Error: Transaction reverted at execution.");
+    if (lastAction === "claim") {
+      addLog("🚫 Claim rejected — reverted on-chain");
+    }
     setLoading(false);
     setLoggedHash(null);
     setLastAction(null);
-  }, [receiptError]);
+  }, [receiptError]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ======================
      Events: Claimed (ground truth amount)
@@ -563,7 +582,7 @@ const Monitoring: FC = () => {
       if (!mine || !mine.args) return;
 
       const amt = Number(formatUnits(mine.args.amount ?? 0n, 18));
-      addLog(`Claim success for epoch #${String(mine.args.e)}: +${amt.toFixed(6)} $BaseTC`);
+      addLog(`⬆ CLAIM +${amt.toFixed(6)} $BaseTC (epoch #${String(mine.args.e)})`);
 
       setStatusText(`Claimed: +${amt.toFixed(6)} $BaseTC`);
       setPopupMsg(`Claim successful!\nYou received +${amt.toFixed(6)} $BaseTC.`);
@@ -587,6 +606,7 @@ const Monitoring: FC = () => {
       setLoading(true);
       setStatusText("Requesting relayer signature (START) …");
       setLastAction("start");
+      addLog("⏩ Start requested…");
 
       const nonce =
         (await (refetchNonce?.() || Promise.resolve({ data: userNonce.data })))?.data ??
@@ -652,6 +672,7 @@ const Monitoring: FC = () => {
       setLoading(true);
       setStatusText("Requesting relayer signature (CLAIM) …");
       setLastAction("claim");
+      addLog("⬆ Claim requested…");
       await trySend();
     } catch (e: any) {
       const m = (e?.message || "").toLowerCase();
@@ -665,6 +686,9 @@ const Monitoring: FC = () => {
           const em = e2?.message || "Failed to claim (retry)";
           setStatusText(em);
           addLog(`Error (retry): ${em}`);
+          addLog(`🚫 Claim rejected — ${em}`);
+          const tip = prettyTip(em);
+          if (tip) addLog(tip);
           setLoading(false);
           setLastAction(null);
         }
@@ -673,6 +697,9 @@ const Monitoring: FC = () => {
       const em = e?.message || "Failed to claim";
       setStatusText(em);
       addLog(`Error: ${em}`);
+      addLog(`🚫 Claim rejected — ${em}`);
+      const tip = prettyTip(em);
+      if (tip) addLog(tip);
       setLoading(false);
       setLastAction(null);
     }
@@ -716,12 +743,23 @@ const Monitoring: FC = () => {
     const t = Math.floor(Date.now() / 1000);
     if (t - lastBeatTs >= 5) {
       setLastBeatTs(t);
-      const perEpochFromRigs = baseUnitPerEpoch;
+      // Log ringkas "Mining now"
       addLog(
-        `Mining… pending (on-chain) ${pendingAmt.toFixed(6)} $BaseTC | est ${liveMiningNow.toFixed(6)} | rigs used: B${usedBasic}/P${usedPro}/L${usedLegend} | per-epoch ${perEpochFromRigs.toFixed(2)} | left ${leftMMSS}`
+        `⛏ Mining now: ${liveMiningNow.toFixed(6)} $BaseTC | +${perSecRate.toFixed(6)}/s | left ${leftMMSS} | rigs B${usedBasic}/P${usedPro}/L${usedLegend}`
       );
     }
-  }, [now, active, liveMiningNow, pendingAmt, usedBasic, usedPro, usedLegend, baseUnitPerEpoch, leftMMSS, lastBeatTs]);
+  }, [now, active, liveMiningNow, perSecRate, usedBasic, usedPro, usedLegend, leftMMSS, lastBeatTs]);
+
+  // Log periodik saat paused (biar gak sepi)
+  const [lastPausedLogTs, setLastPausedLogTs] = useState<number>(0);
+  useEffect(() => {
+    if (active) return;
+    const t = Math.floor(Date.now() / 1000);
+    if (t - lastPausedLogTs >= 60) {
+      setLastPausedLogTs(t);
+      addLog("⏸️ Mining paused — press Start");
+    }
+  }, [now, active, lastPausedLogTs]);
 
   /* ======================
      Persentase Minted (TEKS SAJA, TANPA BAR)
@@ -733,85 +771,37 @@ const Monitoring: FC = () => {
     return Math.max(0, Math.min(100, pct));
   }, [active, liveMiningNow, baseUnitPerEpoch]);
 
-  /* ======================
-     Terminal logs enrichment (no UI/logic changes)
-     ====================== */
-  // Milestone progress (25/50/75/100)
-  const [lastMilestone, setLastMilestone] = useState(0);
+  // FULL progress notifier (sekali saja per sesi aktif)
+  const [hasLoggedFull, setHasLoggedFull] = useState(false);
   useEffect(() => {
-    if (!active || !baseUnitPerEpoch) return;
-    const pct = Math.floor(miningPct);
-    const hit = [25, 50, 75, 100].find((m) => lastMilestone < m && pct >= m);
-    if (hit) {
-      if (hit === 100) {
-        addLog(`⚡ FULL — Please claim your $BaseTC`);
-      } else {
-        addLog(`★ ${hit}% mined — ${liveMiningNow.toFixed(2)} / ${baseUnitPerEpoch.toFixed(2)} $BaseTC`);
-      }
-      setLastMilestone(hit);
+    if (!active) { setHasLoggedFull(false); return; }
+    if (!hasLoggedFull && miningPct >= 100) {
+      addLog("⚡ FULL — Please claim your $BaseTC");
+      setHasLoggedFull(true);
     }
-  }, [miningPct, active, liveMiningNow, baseUnitPerEpoch, lastMilestone]);
+  }, [active, miningPct, hasLoggedFull]);
 
-  // Epoch roll summary
-  const prevEpochRef = useRef<bigint | undefined>();
+  // Start/Stop notifier via perubahan miningActive
+  const prevActiveRef = useRef<boolean | undefined>(undefined);
   useEffect(() => {
-    if (eNowBn === undefined) return;
-    if (prevEpochRef.current !== undefined && prevEpochRef.current !== eNowBn) {
-      addLog(`⟳ EPOCH ${String(prevEpochRef.current)} → ${String(eNowBn)} | carried pending ${pendingAmt.toFixed(6)} $BaseTC`);
-      setLastMilestone(0);
+    const prev = prevActiveRef.current;
+    if (prev === undefined) { prevActiveRef.current = active; return; }
+    if (!prev && active) {
+      addLog(`▶️ Mining started @ epoch #${typeof eNowBn !== "undefined" ? String(eNowBn) : "—"} | rate ${perSecRate.toFixed(6)}/s | per-epoch ${baseUnitPerEpoch.toFixed(2)}`);
+    } else if (prev && !active) {
+      addLog(`⏹ Mining stopped @ epoch #${typeof eNowBn !== "undefined" ? String(eNowBn) : "—"}`);
     }
-    prevEpochRef.current = eNowBn;
-  }, [eNowBn, pendingAmt]);
+    prevActiveRef.current = active;
+  }, [active, eNowBn, perSecRate, baseUnitPerEpoch]);
 
-  // Cooldown ready (once)
+  // CTA: cooldown selesai (hanya saat tidak prelaunch & belum aktif)
   const [wasToggleReady, setWasToggleReady] = useState(false);
   useEffect(() => {
-    if (canToggle && !wasToggleReady && !(prelaunch && goLiveOn)) {
-      addLog(`✅ Cooldown finished — you can start/stop mining now`);
+    if (canToggle && !wasToggleReady && !(prelaunch && goLiveOn) && !active) {
+      addLog("✅ Start now — cooldown finished");
     }
     setWasToggleReady(canToggle);
-  }, [canToggle, wasToggleReady, prelaunch, goLiveOn]);
-
-  // Idle rigs notice (debounced)
-  const idleKey = `${idleBasic}-${idlePro}-${idleLegend}`;
-  const idleTimer = useRef<number | null>(null);
-  useEffect(() => {
-    if (idleTimer.current) clearTimeout(idleTimer.current as any);
-    idleTimer.current = window.setTimeout(() => {
-      const totalIdle = Number(idleBasic) + Number(idlePro) + Number(idleLegend);
-      if (totalIdle > 0) {
-        addLog(`🧱 Idle rigs: B${Number(idleBasic)} P${Number(idlePro)} L${Number(idleLegend)} — unlock slot / merge to maximize HR`);
-      }
-    }, 1500);
-    return () => {
-      if (idleTimer.current) clearTimeout(idleTimer.current as any);
-    };
-  }, [idleKey]);
-
-  // Health check: active but zero rate
-  useEffect(() => {
-    if (active && perSecRate <= 0) {
-      addLog(`⚠ Mining active but rate=0 — check rigs / slots / params`);
-    }
-  }, [active, perSecRate]);
-
-  // ETA +1 $BaseTC (log once per active session)
-  const etaLogged = useRef(false);
-  useEffect(() => {
-    if (!active) {
-      etaLogged.current = false;
-      return;
-    }
-    if (!etaLogged.current && perSecRate > 0) {
-      const secs = 1 / perSecRate;
-      if (Number.isFinite(secs) && secs > 0) {
-        const h = Math.floor(secs / 3600);
-        const m = Math.floor((secs % 3600) / 60);
-        addLog(`⏱ ETA +1 $BaseTC ≈ ${h}h ${m}m | rate ${perSecRate.toFixed(6)}/s`);
-        etaLogged.current = true;
-      }
-    }
-  }, [active, perSecRate]);
+  }, [canToggle, wasToggleReady, prelaunch, goLiveOn, active]);
 
   /* ======================
      UI
