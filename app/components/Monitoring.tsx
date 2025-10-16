@@ -861,19 +861,19 @@ const Monitoring: FC = () => {
 
         {/* Log area (scrollable) */}
         <div
-          ref={terminalRef}
-          style={{
-            height: 150,
-            background: "#0e1324",
-            color: "#92ffaf",
-            padding: 12,
-            fontFamily:
-              'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
-            fontSize: 12,
-            lineHeight: 1.5,
-            overflow: "auto",
-          }}
-        >
+  ref={terminalRef}
+  style={{
+    height: 150,
+    background: "#ffffff",     // ← putih
+    color: "#0a1833",          // ← teks gelap (selaras tema)
+    padding: 12,
+    fontFamily:
+      'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+    fontSize: 12,
+    lineHeight: 1.5,
+    overflow: "auto",
+  }}
+>
           <p style={{ margin: "2px 0" }}>&gt; Terminal ready...</p>
           {terminalLogs.map((log, i) => (
             <p key={i} style={{ margin: "2px 0" }}>
