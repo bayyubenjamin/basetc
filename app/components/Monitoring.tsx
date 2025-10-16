@@ -724,6 +724,22 @@ const Monitoring: FC = () => {
   }, [now, active, liveMiningNow, pendingAmt, usedBasic, usedPro, usedLegend, baseUnitPerEpoch, leftMMSS, lastBeatTs]);
 
   /* ======================
+     NEW: Persentase mining di bawah "Mining now"
+     (UI-only, tidak mengubah logic kontrak)
+     ====================== */
+  const miningPct = useMemo(() => {
+    if (!active) return 0;
+    if (!baseUnitPerEpoch || baseUnitPerEpoch <= 0) return 0;
+    const pct = (liveMiningNow / baseUnitPerEpoch) * 100;
+    return Math.max(0, Math.min(100, pct));
+  }, [active, liveMiningNow, baseUnitPerEpoch]);
+
+  const miningPctLabel = useMemo(() => {
+    if (miningPct >= 100) return "FULL — Please claim your $BaseTC";
+    return `${miningPct.toFixed(1)}% mined`;
+  }, [miningPct]);
+
+  /* ======================
      UI
      ====================== */
   return (
@@ -764,13 +780,41 @@ const Monitoring: FC = () => {
           <div className="fin-bar"><i style={{ width: `${epochProgress.pct}%` }} /></div>
         </div>
 
-        {/* Realtime $BaseTC meter */}
+        {/* Realtime $BaseTC meter + Percentage bar (baru) */}
         <div className="fin-actions">
           <div className="fin-cooldown">
             <span className="opacity-80">Mining now:</span>{" "}
             <b>
               {liveMiningNow.toLocaleString("en-US", { minimumFractionDigits: 6, maximumFractionDigits: 6 })} $BaseTC
             </b>
+
+            {/* === Persentase bawah "Mining now" === */}
+            <div className="mt-2">
+              <div className="flex items-center justify-between text-[11px] font-semibold text-white/90">
+                <span className={miningPct >= 100 ? "text-emerald-300" : "text-white/80"}>
+                  {miningPctLabel}
+                </span>
+                {/* Opsional: tampilkan angka persis */}
+                <span className="opacity-60">{miningPct.toFixed(1)}%</span>
+              </div>
+              <div className="mt-1 h-2 w-full rounded-full bg-white/10 overflow-hidden shadow-inner">
+                <div
+                  className="h-full rounded-full animate-pulse"
+                  style={{
+                    width: `${miningPct}%`,
+                    background:
+                      miningPct >= 100
+                        ? "linear-gradient(90deg,#22c55e 0%,#16a34a 100%)"
+                        : "linear-gradient(90deg,var(--accent) 0%,#22c55e 60%,#f59e0b 100%)",
+                    boxShadow:
+                      miningPct >= 100
+                        ? "0 0 16px rgba(34,197,94,.45)"
+                        : "0 0 12px rgba(43,123,255,.35)",
+                  }}
+                />
+              </div>
+            </div>
+            {/* === END Persentase === */}
           </div>
 
           {active ? (
@@ -861,19 +905,19 @@ const Monitoring: FC = () => {
 
         {/* Log area (scrollable) */}
         <div
-  ref={terminalRef}
-  style={{
-    height: 150,
-    background: "#ffffff",     // ← putih
-    color: "#0a1833",          // ← teks gelap (selaras tema)
-    padding: 12,
-    fontFamily:
-      'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
-    fontSize: 12,
-    lineHeight: 1.5,
-    overflow: "auto",
-  }}
->
+          ref={terminalRef}
+          style={{
+            height: 150,
+            background: "#ffffff",
+            color: "#0a1833",
+            padding: 12,
+            fontFamily:
+              'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+            fontSize: 12,
+            lineHeight: 1.5,
+            overflow: "auto",
+          }}
+        >
           <p style={{ margin: "2px 0" }}>&gt; Terminal ready...</p>
           {terminalLogs.map((log, i) => (
             <p key={i} style={{ margin: "2px 0" }}>
