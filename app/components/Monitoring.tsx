@@ -741,7 +741,7 @@ const Monitoring: FC = () => {
   useEffect(() => {
     if (!active) return;
     const t = Math.floor(Date.now() / 1000);
-    if (t - lastBeatTs >= 5) {
+    if (t - lastBeatTs >= 2) {
       setLastBeatTs(t);
       // Log ringkas "Mining now"
       addLog(
