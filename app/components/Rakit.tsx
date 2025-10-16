@@ -255,24 +255,24 @@ export default function Rakit() {
   }
 
   async function ensureApprove(amount: bigint) {
-  if (!user || !feeToken) throw new Error("Fee token not set / wallet not connected.");
+    if (!user || !feeToken) throw new Error("Fee token not set / wallet not connected.");
 
-  const maxAllowance = parseUnits("100", feeDecimals);
-  if (allowance >= amount) return;
+    const maxAllowance = parseUnits("100", feeDecimals);
+    if (allowance >= amount) return;
 
-  beginProcessing(`Approving ${formatUnits(maxAllowance, feeDecimals)} ${feeSymbol}…`);
-  const tx = await writeContractAsync({
-    address: feeToken,
-    abi: erc20Abi,
-    functionName: "approve",
-    args: [gameCoreAddress as `0x${string}`, maxAllowance], // set approve besar sekalian
-    account: user,
-    chain: base,
-  });
-  setStatus(`Waiting for approval confirmation…`);
-  await publicClient!.waitForTransactionReceipt({ hash: tx });
-  setStatus(`Approval confirmed.`);
-}
+    beginProcessing(`Approving ${formatUnits(maxAllowance, feeDecimals)} ${feeSymbol}…`);
+    const tx = await writeContractAsync({
+      address: feeToken,
+      abi: erc20Abi,
+      functionName: "approve",
+      args: [gameCoreAddress as `0x${string}`, maxAllowance], // set approve besar sekalian
+      account: user,
+      chain: base,
+    });
+    setStatus(`Waiting for approval confirmation…`);
+    await publicClient!.waitForTransactionReceipt({ hash: tx });
+    setStatus(`Approval confirmed.`);
+  }
 
   async function runMerge(kind: "BASIC_TO_PRO" | "PRO_TO_LEGEND") {
     setStatus(`Requesting server merge (${kind})…`);
@@ -343,8 +343,14 @@ export default function Rakit() {
       <section className="fin-card fin-card-pad neu" aria-label="Basic rigs">
         <div className="fin-row">
           <div className="fin-epoch">
-            <small className="text-[var(--muted)] font-semibold">Basic</small>
-            <strong className="text-[var(--text)]">Owned: {String(ownedBasic)}</strong>
+            {/* Nama NFT tebal + uppercase */}
+            <strong className="text-[var(--text)] uppercase font-extrabold tracking-wide">BASIC</strong>
+            {/* Owned kecil + tampilkan Used */}
+            <small className="text-xs text-[var(--muted)] font-semibold">
+              Owned: <span className="text-[var(--text)]">{String(ownedBasic)}</span>
+              <span className="mx-1">•</span>
+              Used: <span className="text-[var(--text)]">{String(bUsed)}</span>
+            </small>
           </div>
         </div>
 
@@ -381,8 +387,12 @@ export default function Rakit() {
       <section className="fin-card fin-card-pad neu" aria-label="Pro rigs">
         <div className="fin-row">
           <div className="fin-epoch">
-            <small className="text-[var(--muted)] font-semibold">Pro</small>
-            <strong className="text-[var(--text)]">Owned: {String(ownedPro)}</strong>
+            <strong className="text-[var(--text)] uppercase font-extrabold tracking-wide">PRO</strong>
+            <small className="text-xs text-[var(--muted)] font-semibold">
+              Owned: <span className="text-[var(--text)]">{String(ownedPro)}</span>
+              <span className="mx-1">•</span>
+              Used: <span className="text-[var(--text)]">{String(pUsed)}</span>
+            </small>
           </div>
         </div>
 
@@ -419,8 +429,12 @@ export default function Rakit() {
       <section className="fin-card fin-card-pad neu" aria-label="Legend rigs">
         <div className="fin-row">
           <div className="fin-epoch">
-            <small className="text-[var(--muted)] font-semibold">Legend</small>
-            <strong className="text-[var(--text)]">Owned: {String(ownedLegend)}</strong>
+            <strong className="text-[var(--text)] uppercase font-extrabold tracking-wide">LEGEND</strong>
+            <small className="text-xs text-[var(--muted)] font-semibold">
+              Owned: <span className="text-[var(--text)]">{String(ownedLegend)}</span>
+              <span className="mx-1">•</span>
+              Used: <span className="text-[var(--text)]">{String(lUsed)}</span>
+            </small>
           </div>
         </div>
 
