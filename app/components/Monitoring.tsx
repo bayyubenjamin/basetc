@@ -734,6 +734,86 @@ const Monitoring: FC = () => {
   }, [active, liveMiningNow, baseUnitPerEpoch]);
 
   /* ======================
+     Terminal logs enrichment (no UI/logic changes)
+     ====================== */
+  // Milestone progress (25/50/75/100)
+  const [lastMilestone, setLastMilestone] = useState(0);
+  useEffect(() => {
+    if (!active || !baseUnitPerEpoch) return;
+    const pct = Math.floor(miningPct);
+    const hit = [25, 50, 75, 100].find((m) => lastMilestone < m && pct >= m);
+    if (hit) {
+      if (hit === 100) {
+        addLog(`⚡ FULL — Please claim your $BaseTC`);
+      } else {
+        addLog(`★ ${hit}% mined — ${liveMiningNow.toFixed(2)} / ${baseUnitPerEpoch.toFixed(2)} $BaseTC`);
+      }
+      setLastMilestone(hit);
+    }
+  }, [miningPct, active, liveMiningNow, baseUnitPerEpoch, lastMilestone]);
+
+  // Epoch roll summary
+  const prevEpochRef = useRef<bigint | undefined>();
+  useEffect(() => {
+    if (eNowBn === undefined) return;
+    if (prevEpochRef.current !== undefined && prevEpochRef.current !== eNowBn) {
+      addLog(`⟳ EPOCH ${String(prevEpochRef.current)} → ${String(eNowBn)} | carried pending ${pendingAmt.toFixed(6)} $BaseTC`);
+      setLastMilestone(0);
+    }
+    prevEpochRef.current = eNowBn;
+  }, [eNowBn, pendingAmt]);
+
+  // Cooldown ready (once)
+  const [wasToggleReady, setWasToggleReady] = useState(false);
+  useEffect(() => {
+    if (canToggle && !wasToggleReady && !(prelaunch && goLiveOn)) {
+      addLog(`✅ Cooldown finished — you can start/stop mining now`);
+    }
+    setWasToggleReady(canToggle);
+  }, [canToggle, wasToggleReady, prelaunch, goLiveOn]);
+
+  // Idle rigs notice (debounced)
+  const idleKey = `${idleBasic}-${idlePro}-${idleLegend}`;
+  const idleTimer = useRef<number | null>(null);
+  useEffect(() => {
+    if (idleTimer.current) clearTimeout(idleTimer.current as any);
+    idleTimer.current = window.setTimeout(() => {
+      const totalIdle = Number(idleBasic) + Number(idlePro) + Number(idleLegend);
+      if (totalIdle > 0) {
+        addLog(`🧱 Idle rigs: B${Number(idleBasic)} P${Number(idlePro)} L${Number(idleLegend)} — unlock slot / merge to maximize HR`);
+      }
+    }, 1500);
+    return () => {
+      if (idleTimer.current) clearTimeout(idleTimer.current as any);
+    };
+  }, [idleKey]);
+
+  // Health check: active but zero rate
+  useEffect(() => {
+    if (active && perSecRate <= 0) {
+      addLog(`⚠ Mining active but rate=0 — check rigs / slots / params`);
+    }
+  }, [active, perSecRate]);
+
+  // ETA +1 $BaseTC (log once per active session)
+  const etaLogged = useRef(false);
+  useEffect(() => {
+    if (!active) {
+      etaLogged.current = false;
+      return;
+    }
+    if (!etaLogged.current && perSecRate > 0) {
+      const secs = 1 / perSecRate;
+      if (Number.isFinite(secs) && secs > 0) {
+        const h = Math.floor(secs / 3600);
+        const m = Math.floor((secs % 3600) / 60);
+        addLog(`⏱ ETA +1 $BaseTC ≈ ${h}h ${m}m | rate ${perSecRate.toFixed(6)}/s`);
+        etaLogged.current = true;
+      }
+    }
+  }, [active, perSecRate]);
+
+  /* ======================
      UI
      ====================== */
   return (
