@@ -255,21 +255,24 @@ export default function Rakit() {
   }
 
   async function ensureApprove(amount: bigint) {
-    if (!user || !feeToken) throw new Error("Fee token not set / wallet not connected.");
-    if (allowance >= amount) return;
-    beginProcessing(`Approving ${formatUnits(amount, feeDecimals)} ${feeSymbol}…`);
-    const tx = await writeContractAsync({
-      address: feeToken,
-      abi: erc20Abi,
-      functionName: "approve",
-      args: [gameCoreAddress as `0x${string}`, amount],
-      account: user,
-      chain: base,
-    });
-    setStatus(`Waiting for approval confirmation…`);
-    await publicClient!.waitForTransactionReceipt({ hash: tx });
-    setStatus(`Approval confirmed.`);
-  }
+  if (!user || !feeToken) throw new Error("Fee token not set / wallet not connected.");
+
+  const maxAllowance = ethers.parseUnits("100", feeDecimals);
+  if (allowance >= amount) return;
+
+  beginProcessing(`Approving ${formatUnits(maxAllowance, feeDecimals)} ${feeSymbol}…`);
+  const tx = await writeContractAsync({
+    address: feeToken,
+    abi: erc20Abi,
+    functionName: "approve",
+    args: [gameCoreAddress as `0x${string}`, maxAllowance], // set approve besar sekalian
+    account: user,
+    chain: base,
+  });
+  setStatus(`Waiting for approval confirmation…`);
+  await publicClient!.waitForTransactionReceipt({ hash: tx });
+  setStatus(`Approval confirmed.`);
+}
 
   async function runMerge(kind: "BASIC_TO_PRO" | "PRO_TO_LEGEND") {
     setStatus(`Requesting server merge (${kind})…`);
