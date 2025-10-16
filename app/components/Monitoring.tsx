@@ -788,7 +788,7 @@ const Monitoring: FC = () => {
                 className="text-[13px] font-bold"
                 style={{ color: "#000" }}
               >
-                persentase Minted:{" "}
+                Minted:{" "}
                 {miningPct >= 100
                   ? "FULL — Please claim your $BaseTC"
                   : `${miningPct.toFixed(1)}%`}
