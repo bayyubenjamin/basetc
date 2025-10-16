@@ -293,7 +293,7 @@ const Monitoring: FC = () => {
     abi: gameCoreABI as any,
     functionName: "getBaseUnit",
     args: address ? [address] : undefined,
-    query: { enabled: Boolean(address), refetchInterval: 10_000 }, // <-- refresh berkala
+    query: { enabled: Boolean(address), refetchInterval: 10_000 },
   });
 
   const pendingRw = useReadContract({
@@ -367,16 +367,13 @@ const Monitoring: FC = () => {
           const hours = Math.floor((timeLeft % (3600 * 24)) / 3600);
           const minutes = Math.floor((timeLeft % 3600) / 60);
           const seconds = timeLeft % 60;
-          setPrelaunchTimeLeft(
-            `${days}d ${hours}h ${minutes}m ${seconds}s`
-          );
+          setPrelaunchTimeLeft(`${days}d ${hours}h ${minutes}m ${seconds}s`);
         }
       }, 1000);
 
       return () => clearInterval(interval);
     }
   }, [prelaunch, goLiveOn, sTime, eLen]);
-
 
   const _hrLegacy = useMemo(() => {
     const v = hashrate.data as bigint | undefined;
@@ -572,7 +569,6 @@ const Monitoring: FC = () => {
       setPopupMsg(`Claim successful!\nYou received +${amt.toFixed(6)} $BaseTC.`);
       setPopupOpen(true);
 
-      // Refresh reads tanpa reload halaman
       await refreshAll("State updated after claim.");
       setLastAction(null);
     },
@@ -611,7 +607,6 @@ const Monitoring: FC = () => {
         chainId: BASE_CHAIN_ID,
       });
 
-      // Baseline snapshot before receipt
       const freshPending = (await (refetchPending?.() || Promise.resolve({ data: pendingRw.data })))?.data as bigint | undefined;
       const pendingStart = freshPending ? Number(formatUnits(freshPending, 18)) : 0;
       setLiveBaseStart(pendingStart);
@@ -650,7 +645,7 @@ const Monitoring: FC = () => {
         chainId: BASE_CHAIN_ID,
       });
 
-      setLoading(false); // wagmi busy takes over
+      setLoading(false);
     };
 
     try {
@@ -684,7 +679,7 @@ const Monitoring: FC = () => {
   };
 
   /* ======================
-     Realtime meter + heartbeat (uses on-chain polling)
+     Realtime meter + heartbeat
      ====================== */
   const perSecRate = useMemo(() => {
     if (!eLen || !baseUnitPerEpoch) return 0;
@@ -692,7 +687,6 @@ const Monitoring: FC = () => {
     return seconds > 0 ? baseUnitPerEpoch / seconds : 0;
   }, [eLen, baseUnitPerEpoch]);
 
-  // recalibrate baseline when active toggles
   useEffect(() => {
     if (!active) return;
     const p = pendingAmt;
@@ -700,7 +694,6 @@ const Monitoring: FC = () => {
     setLiveStartTs(Math.floor(Date.now() / 1000));
   }, [active]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // strictly real-time value = max(pending on-chain, baseline + rate*elapsed)
   const liveMiningNow = useMemo(() => {
     if (!active) return 0;
     if (!perSecRate) return pendingAmt;
@@ -709,7 +702,6 @@ const Monitoring: FC = () => {
     return Math.max(est, pendingAmt);
   }, [active, perSecRate, now, liveStartTs, liveBaseStart, pendingAmt]);
 
-  // Poll on-chain every 5s while active to keep numbers honest
   useEffect(() => {
     if (!active) return;
     const id = setInterval(async () => {
@@ -718,14 +710,13 @@ const Monitoring: FC = () => {
     return () => clearInterval(id);
   }, [active]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Heartbeat logs every ~5s while active
   const [lastBeatTs, setLastBeatTs] = useState<number>(0);
   useEffect(() => {
     if (!active) return;
     const t = Math.floor(Date.now() / 1000);
     if (t - lastBeatTs >= 5) {
       setLastBeatTs(t);
-      const perEpochFromRigs = baseUnitPerEpoch; // already per-user, contract-derived
+      const perEpochFromRigs = baseUnitPerEpoch;
       addLog(
         `Mining… pending (on-chain) ${pendingAmt.toFixed(6)} $BaseTC | est ${liveMiningNow.toFixed(6)} | rigs used: B${usedBasic}/P${usedPro}/L${usedLegend} | per-epoch ${perEpochFromRigs.toFixed(2)} | left ${leftMMSS}`
       );
@@ -743,7 +734,7 @@ const Monitoring: FC = () => {
         <p>Real-time on-chain monitoring</p>
       </div>
 
-      {/* Console card — tambah Neumorphism */}
+      {/* Console card */}
       <section className="fin-card fin-card-pad neu" aria-label="Console">
         <div className="fin-row">
           <div className="fin-epoch">
@@ -765,19 +756,9 @@ const Monitoring: FC = () => {
 
         <div className="fin-progress">
           <div className="fin-progress-head">
+            <span>{prelaunch && goLiveOn ? "Mining starts in" : "Epoch progress"}</span>
             <span>
-              {prelaunch && goLiveOn
-                ? "Mining starts in"
-                : "Epoch progress"}
-            </span>
-            <span>
-              {prelaunch && goLiveOn ? (
-                <b>{prelaunchTimeLeft}</b>
-              ) : (
-                <>
-                  Next in <b>{leftMMSS}</b>
-                </>
-              )}
+              {prelaunch && goLiveOn ? <b>{prelaunchTimeLeft}</b> : <>Next in <b>{leftMMSS}</b></>}
             </span>
           </div>
           <div className="fin-bar"><i style={{ width: `${epochProgress.pct}%` }} /></div>
@@ -822,20 +803,87 @@ const Monitoring: FC = () => {
             </button>
           )}
         </div>
-
-        {/* Status - DIMATIKAN dari UI sesuai permintaan */}
-        {/* {statusText && <div className="fin-msg whitespace-pre-line">{statusText}</div>} */}
       </section>
 
-      {/* Terminal — tampil 'pressed' */}
-      <section className="fin-terminal neu-inner" ref={terminalRef} aria-label="Terminal">
-        <p>&gt; Terminal ready...</p>
-        {terminalLogs.map((log, i) => (
-          <p key={i}>&gt; {log}</p>
-        ))}
+      {/* ===== Mac-like Terminal ===== */}
+      <section
+        aria-label="Terminal"
+        className="neu"
+        style={{
+          margin: "10px 16px 0",
+          borderRadius: 14,
+          overflow: "hidden",
+          border: "1px solid rgba(0,0,0,0.06)",
+          background: "rgba(255,255,255,0.9)",
+          boxShadow: "0 10px 24px rgba(0,0,0,0.20)",
+        }}
+      >
+        {/* Title bar with traffic lights */}
+        <div
+          style={{
+            height: 28,
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            padding: "0 10px",
+            background: "linear-gradient(180deg,#f6f8ff,#eaf1ff)",
+            borderBottom: "1px solid rgba(0,0,0,0.06)",
+          }}
+        >
+          <span
+            aria-hidden
+            style={{
+              width: 12, height: 12, borderRadius: 999,
+              background: "#ff5f56", border: "1px solid #e04940",
+              boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.6)",
+            }}
+          />
+          <span
+            aria-hidden
+            style={{
+              width: 12, height: 12, borderRadius: 999,
+              background: "#ffbd2e", border: "1px solid #e0a922",
+              boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.6)",
+            }}
+          />
+          <span
+            aria-hidden
+            style={{
+              width: 12, height: 12, borderRadius: 999,
+              background: "#28c840", border: "1px solid #1ea233",
+              boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.6)",
+            }}
+          />
+          <div style={{ marginLeft: 8, fontSize: 12, color: "var(--muted)", fontWeight: 600 }}>
+            Terminal
+          </div>
+        </div>
+
+        {/* Log area (scrollable) */}
+        <div
+          ref={terminalRef}
+          style={{
+            height: 150,
+            background: "#0e1324",
+            color: "#92ffaf",
+            padding: 12,
+            fontFamily:
+              'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+            fontSize: 12,
+            lineHeight: 1.5,
+            overflow: "auto",
+          }}
+        >
+          <p style={{ margin: "2px 0" }}>&gt; Terminal ready...</p>
+          {terminalLogs.map((log, i) => (
+            <p key={i} style={{ margin: "2px 0" }}>
+              &gt; {log}
+            </p>
+          ))}
+        </div>
       </section>
 
-      {/* Stats — tiap kotak jadi timbul */}
+      {/* Stats */}
       <section className="fin-stats border-none bg-transparent">
         <div className="fin-stat neu">
           <div className="fin-val">{formatNumber(effectiveHashrate)}</div>
@@ -861,7 +909,7 @@ const Monitoring: FC = () => {
         </div>
       </section>
 
-      {/* Rigs — panel & item timbul, gambar 'pressed' */}
+      {/* Rigs */}
       <section className="fin-card fin-rigs neu">
         <div className="fin-rig-head">
           <h2>Your Rigs</h2>
@@ -923,4 +971,3 @@ function RigBox({
     </div>
   );
 }
-
