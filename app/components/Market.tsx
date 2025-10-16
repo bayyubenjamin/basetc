@@ -27,16 +27,15 @@ function maxClaimsFrom(totalInvites: number): number {
   if (n < 1) return 0;
   return 1 + Math.floor((n - 1) / 2); // 1 pertama, lalu tiap 2 invite
 }
-
 function invitesNeededForNext(totalInvites: number, claimed: number): number {
   const nowMax = maxClaimsFrom(totalInvites);
   if (claimed < nowMax) return 0;
-  const nextThreshold = 1 + 2 * nowMax; // 1, 3, 5, 7, 9, 11, ...
+  const nextThreshold = 1 + 2 * nowMax; // 1, 3, 5, 7, ...
   return Math.max(0, nextThreshold - totalInvites);
 }
 
 /* =============================
-   Minimal ERC20 ABI (approval path) - DIPERTAHANKAN
+   Minimal ERC20 ABI (approval path) - DIPERTAHANKAN + balanceOf
    ============================= */
 const erc20ABI = [
   { type: "function", name: "symbol", stateMutability: "view", inputs: [], outputs: [{ type: "string" }] },
@@ -61,6 +60,13 @@ const erc20ABI = [
     ],
     outputs: [{ type: "bool" }],
   },
+  {
+    type: "function",
+    name: "balanceOf",
+    stateMutability: "view",
+    inputs: [{ name: "account", type: "address" }],
+    outputs: [{ type: "uint256" }],
+  },
 ] as const;
 
 /* =============================
@@ -83,11 +89,7 @@ const NFT_DATA: NFTTier[] = [
 /* =============================
    Lightweight Popup & Loading Overlay - DIPERTAHANKAN
    ============================= */
-const CenterPopup: FC<{
-  open: boolean;
-  message: string;
-  onOK: () => void;
-}> = ({ open, message, onOK }) => {
+const CenterPopup: FC<{ open: boolean; message: string; onOK: () => void; }> = ({ open, message, onOK }) => {
   if (!open) return null;
   return (
     <>
@@ -112,7 +114,6 @@ const CenterPopup: FC<{
     </>
   );
 };
-
 const LoadingOverlay: FC<{ show: boolean; label?: string }> = ({ show, label }) => {
   if (!show) return null;
   return (
@@ -139,23 +140,16 @@ const Market: FC = () => {
   const publicClient = usePublicClient();
   const { writeContractAsync } = useWriteContract();
 
-  // --- START PERUBAHAN: qty & max per tier ---
+  // qty & limit per tier (DIPERTAHANKAN)
   const MAX_PER_TIER: Record<TierID, number> = { basic: 10, pro: 5, legend: 3 };
   const [qty, setQty] = useState<Record<TierID, number>>({ basic: 1, pro: 1, legend: 1 });
   const clamp = (t: TierID, v: number) => Math.min(MAX_PER_TIER[t], Math.max(1, Math.floor(v || 1)));
   const dec = (t: TierID) => setQty((q) => ({ ...q, [t]: clamp(t, q[t] - 1) }));
   const inc = (t: TierID) => setQty((q) => ({ ...q, [t]: clamp(t, q[t] + 1) }));
   const setManual = (t: TierID, v: string) => setQty((q) => ({ ...q, [t]: clamp(t, Number(v)) }));
-  // --- AKHIR PERUBAHAN ---
 
-  // --- START PERUBAHAN ---
-  // State untuk menyimpan data referral dari API
-  const [inviteStats, setInviteStats] = useState({
-    totalInvites: 0,
-    claimedRewards: 0,
-    loading: true,
-  });
-
+  // referral stats (DIPERTAHANKAN)
+  const [inviteStats, setInviteStats] = useState({ totalInvites: 0, claimedRewards: 0, loading: true });
   const fetchInviteStats = useCallback(async () => {
     if (!address) {
       setInviteStats({ totalInvites: 0, claimedRewards: 0, loading: false });
@@ -174,19 +168,17 @@ const Market: FC = () => {
       } else {
         throw new Error(data.error || "Failed to fetch invite stats");
       }
-    } catch (err) {
-      console.error("fetchInviteStats error:", err);
+    } catch {
       setInviteStats({ totalInvites: 0, claimedRewards: 0, loading: false });
     }
   }, [address]);
-
   useEffect(() => { fetchInviteStats(); }, [fetchInviteStats]);
-  // --- AKHIR PERUBAHAN ---
 
   /* ---------- Rig IDs & Kontrak (DIPERTAHANKAN) ---------- */
   const { data: BASIC } = useReadContract({ address: rigNftAddress, abi: rigNftABI as any, functionName: "BASIC" });
   const { data: PRO } = useReadContract({ address: rigNftAddress, abi: rigNftABI as any, functionName: "PRO" });
   const { data: LEGEND } = useReadContract({ address: rigNftAddress, abi: rigNftABI as any, functionName: "LEGEND" });
+
   const legendBal = useReadContract({
     address: rigNftAddress,
     abi: rigNftABI as any,
@@ -195,20 +187,34 @@ const Market: FC = () => {
     query: { enabled: Boolean(address && LEGEND !== undefined) },
   });
   const ownedLegend = (legendBal.data as bigint | undefined) ?? 0n;
+
   const { data: modeVal } = useReadContract({ address: rigSaleAddress, abi: rigSaleABI as any, functionName: "currentMode" });
   const { data: tokenAddr } = useReadContract({ address: rigSaleAddress, abi: rigSaleABI as any, functionName: "paymentToken" });
   const mode = Number(modeVal ?? 0);
-  const { data: tokenDecimalsRaw } = useReadContract({ address: tokenAddr as Address, abi: erc20ABI as any, functionName: "decimals", query: { enabled: Boolean(tokenAddr && mode === 1) } });
-  const { data: tokenSymbolRaw } = useReadContract({ address: tokenAddr as Address, abi: erc20ABI as any, functionName: "symbol", query: { enabled: Boolean(tokenAddr && mode === 1) } });
+
+  const { data: tokenDecimalsRaw } = useReadContract({
+    address: tokenAddr as Address,
+    abi: erc20ABI as any,
+    functionName: "decimals",
+    query: { enabled: Boolean(tokenAddr && mode === 1) },
+  });
+  const { data: tokenSymbolRaw } = useReadContract({
+    address: tokenAddr as Address,
+    abi: erc20ABI as any,
+    functionName: "symbol",
+    query: { enabled: Boolean(tokenAddr && mode === 1) },
+  });
   const tokenDecimals: number = (tokenDecimalsRaw as number | undefined) ?? 18;
   const tokenSymbol: string = (tokenSymbolRaw as string | undefined) ?? "TOKEN";
+
   const { data: priceBasic } = useReadContract({ address: rigSaleAddress, abi: rigSaleABI as any, functionName: "priceOf", args: [BASIC], query: { enabled: Boolean(BASIC) } });
   const { data: pricePro } = useReadContract({ address: rigSaleAddress, abi: rigSaleABI as any, functionName: "priceOf", args: [PRO], query: { enabled: Boolean(PRO) } });
   const { data: priceLegend } = useReadContract({ address: rigSaleAddress, abi: rigSaleABI as any, functionName: "priceOf", args: [LEGEND], query: { enabled: Boolean(LEGEND) } });
   const priceOf = (id?: unknown) => (id === BASIC ? priceBasic : id === PRO ? pricePro : id === LEGEND ? priceLegend : undefined);
+
   const { data: freeOpen } = useReadContract({ address: rigSaleAddress, abi: rigSaleABI as any, functionName: "freeMintOpen" });
   const { data: freeId } = useReadContract({ address: rigSaleAddress, abi: rigSaleABI as any, functionName: "freeMintId" });
-  
+
   const [fid, setFid] = useState<bigint | null>(null);
   const [inviter, setInviter] = useState<Address>("0x0000000000000000000000000000000000000000");
   useEffect(() => {
@@ -226,6 +232,7 @@ const Market: FC = () => {
     query: { enabled: Boolean(fid !== null) },
   });
   const isBasicFreeForMe = Boolean(freeOpen && BASIC !== undefined && freeId === BASIC && !freeUsed);
+
   const { data: allowance = 0n } = useReadContract({
     address: tokenAddr as Address,
     abi: erc20ABI as any,
@@ -238,6 +245,17 @@ const Market: FC = () => {
   function beginProcessing(label: string) { setMessage(label); setLoading(true); setPopupOpen(false); }
   function finishSuccess(label: string) { setMessage(label); setLoading(false); setPopupOpen(true); }
   function finishError(label: string) { setMessage(label); setLoading(false); setPopupOpen(true); }
+
+  // Sederhanakan pesan error bawaan viem/wagmi → bahasa user
+  function simplifyError(e: any): string {
+    const raw = (e?.shortMessage || e?.message || "").toLowerCase();
+    if (raw.includes("transfer amount exceeds balance")) return "USDC tidak cukup.";
+    if (raw.includes("insufficient funds for")) return "ETH tidak cukup untuk membayar.";
+    if (raw.includes("insufficient allowance") || raw.includes("transfer amount exceeds allowance"))
+      return "Allowance ke kontrak kurang. Coba klik Buy lagi untuk Approve.";
+    if (raw.includes("user rejected")) return "Transaksi dibatalkan.";
+    return "Gagal. Coba lagi.";
+  }
 
   /* =============================
      Actions — DIPERTAHANKAN & DIPERBAIKI
@@ -272,43 +290,43 @@ const Market: FC = () => {
 
       setMessage("Finalizing: Validating referral…");
       const fid_ref = getFidRefFallback();
-
       await fetch("/api/user", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          fid: Number(fid),
-          validate_referral_now: true,
-          fid_ref: fid_ref,
-        }),
+        body: JSON.stringify({ fid: Number(fid), validate_referral_now: true, fid_ref }),
       });
 
-      finishSuccess("Claim successful! Referral counted.");
+      finishSuccess("Claim berhasil! Referral dihitung.");
       refetchFreeUsed?.();
       fetchInviteStats();
     } catch (e: any) {
-      finishError(e?.shortMessage || e?.message || "Transaction failed");
+      finishError(simplifyError(e));
     }
   };
 
-  // --- PERUBAHAN: handleBuy pakai qty + limit per tier ---
+  // --- PERUBAHAN: handleBuy pakai qty + limit + pre-check saldo & pesan sederhana ---
   const handleBuy = async (id: bigint, tier: TierID) => {
     try {
-      if (!address) return finishError("Please connect your wallet.");
+      if (!address) return finishError("Hubungkan wallet dulu.");
       const unitPrice = priceOf(id) as bigint | undefined;
-      if (!unitPrice || unitPrice === 0n) return finishError("Item is not for sale.");
+      if (!unitPrice || unitPrice === 0n) return finishError("Item tidak dijual.");
 
       const q = BigInt(clamp(tier, qty[tier]));
 
-      // per-wallet limit legend
+      // limit legend per wallet
       if (tier === "legend" && ownedLegend + q > 3n) {
-        return finishError("Per-wallet limit is 3 Legend rigs.");
+        return finishError("Batas per wallet: 3 Legend.");
       }
 
       const totalPrice = unitPrice * q;
 
       if (mode === 0) {
-        beginProcessing("Sending transaction (ETH) …");
+        // Pre-check saldo ETH biar tidak muncul error teknis
+        const ethBal = await publicClient!.getBalance({ address });
+        if (ethBal < totalPrice) {
+          return finishError(`ETH tidak cukup. Butuh ${formatEther(totalPrice)} ETH.`);
+        }
+        beginProcessing("Mengirim transaksi (ETH) …");
         const txHash = await writeContractAsync({
           address: rigSaleAddress,
           abi: rigSaleABI as any,
@@ -318,11 +336,23 @@ const Market: FC = () => {
           account: address,
           chain: base,
         });
-        setMessage("Waiting for confirmation…");
+        setMessage("Menunggu konfirmasi…");
         await publicClient?.waitForTransactionReceipt({ hash: txHash });
       } else if (mode === 1 && tokenAddr) {
+        // Pre-check saldo USDC
+        const erc20Bal: bigint = await publicClient!.readContract({
+          address: tokenAddr as Address,
+          abi: erc20ABI,
+          functionName: "balanceOf",
+          args: [address],
+        });
+        if (erc20Bal < totalPrice) {
+          return finishError(`USDC tidak cukup. Butuh ${formatUnits(totalPrice, tokenDecimals)} ${tokenSymbol}.`);
+        }
+
+        // Approve jika allowance kurang
         if ((allowance as bigint) < totalPrice) {
-          beginProcessing("Approving spending limit…");
+          beginProcessing("Approve kontrak dulu…");
           const approveHash = await writeContractAsync({
             address: tokenAddr as Address,
             abi: erc20ABI,
@@ -331,10 +361,11 @@ const Market: FC = () => {
             account: address,
             chain: base,
           });
-          setMessage("Waiting for approval confirmation…");
+          setMessage("Menunggu approve…");
           await publicClient?.waitForTransactionReceipt({ hash: approveHash });
         }
-        beginProcessing("Sending transaction (ERC20) …");
+
+        beginProcessing("Mengirim transaksi (USDC) …");
         const buyHash = await writeContractAsync({
           address: rigSaleAddress,
           abi: rigSaleABI as any,
@@ -343,18 +374,17 @@ const Market: FC = () => {
           account: address,
           chain: base,
         });
-        setMessage("Waiting for confirmation…");
+        setMessage("Menunggu konfirmasi…");
         await publicClient?.waitForTransactionReceipt({ hash: buyHash });
       } else {
-        return finishError("Unsupported payment mode.");
+        return finishError("Mode pembayaran tidak didukung.");
       }
 
-      finishSuccess("Purchase successful! Please go to Monitoring and start mining to sync your RigNFT.");
+      finishSuccess("Pembelian berhasil! Buka Monitoring lalu Start mining untuk sinkronisasi RigNFT.");
     } catch (e: any) {
-      finishError(e?.shortMessage || e?.message || "Transaction failed");
+      finishError(simplifyError(e));
     }
   };
-  // --- AKHIR PERUBAHAN ---
 
   const tierId = (t: TierID) => (t === "basic" ? (BASIC as bigint) : t === "pro" ? (PRO as bigint) : (LEGEND as bigint));
   const onClickCta = (t: TierID) => {
@@ -382,10 +412,10 @@ const Market: FC = () => {
 
       setInviteMsg("");
       if (availableClaims <= 0) {
-        return setInviteMsg(`Need ${needMoreInv} more valid invite(s) for the next claim.`);
+        return setInviteMsg(`Perlu ${needMoreInv} invite valid lagi untuk claim berikutnya.`);
       }
       setBusyInvite(true);
-      beginProcessing("Relayer is processing your reward claim…");
+      beginProcessing("Relayer memproses klaim…");
 
       const res = await fetch("/api/referral", {
         method: "POST",
@@ -395,11 +425,11 @@ const Market: FC = () => {
       const json = await res.json();
       if (!json?.ok) throw new Error(json?.error || "Claim failed. Check server logs.");
 
-      setInviteMsg(`Reward claimed! Relayer tx: ${json.txHash?.slice?.(0, 8) ?? ""}…`);
-      finishSuccess("Invite reward claimed successfully.");
+      setInviteMsg(`Reward diklaim! Tx: ${json.txHash?.slice?.(0, 8) ?? ""}…`);
+      finishSuccess("Klaim reward berhasil.");
       await fetchInviteStats();
     } catch (e: any) {
-      const err = e?.shortMessage || e?.message || "Claim failed.";
+      const err = simplifyError(e);
       setInviteMsg(err);
       finishError(err);
     } finally {
@@ -458,7 +488,7 @@ const Market: FC = () => {
         </div>
         {availableClaims <= 0 && !inviteStats.loading && (
           <div className="text-xs text-[var(--muted)] font-semibold">
-            Need <b className="text-[var(--text)]">{needMoreInv}</b> more valid invite(s) for the next claim.
+            Perlu <b className="text-[var(--text)]">{needMoreInv}</b> invite valid lagi untuk claim berikutnya.
           </div>
         )}
         {!!inviteMsg && <div className="mt-2 text-xs text-[var(--accent)]">{inviteMsg}</div>}
@@ -513,28 +543,14 @@ const Market: FC = () => {
                 <div className="mt-3 flex items-center gap-2">
                   {/* Quantity selector */}
                   <div className="flex items-center neu-inner rounded-md">
-                    <button
-                      type="button"
-                      onClick={() => dec(tier.id)}
-                      className="px-3 py-1 text-sm hover:opacity-100 text-white neu-btn"
-                      title="Decrease"
-                    >
-                      −
-                    </button>
+                    <button type="button" onClick={() => dec(tier.id)} className="px-3 py-1 text-sm hover:opacity-100 text-white neu-btn" title="Decrease">−</button>
                     <input
                       value={qty[tier.id]}
                       onChange={(e) => setManual(tier.id, e.target.value)}
                       inputMode="numeric"
                       className="w-12 text-center bg-transparent py-1 text-sm outline-none text-[var(--text)]"
                     />
-                    <button
-                      type="button"
-                      onClick={() => inc(tier.id)}
-                      className="px-3 py-1 text-sm hover:opacity-100 text-white neu-btn"
-                      title="Increase"
-                    >
-                      +
-                    </button>
+                    <button type="button" onClick={() => inc(tier.id)} className="px-3 py-1 text-sm hover:opacity-100 text-white neu-btn" title="Increase">+</button>
                   </div>
 
                   <button
@@ -567,11 +583,7 @@ const Market: FC = () => {
       {!!message && <p className="text-center text-xs text-[var(--muted)] whitespace-pre-line font-semibold">{message}</p>}
       <div className="fin-bottom-space" />
       <LoadingOverlay show={loading} label={message || "Processing…"} />
-      <CenterPopup
-        open={popupOpen}
-        message={message}
-        onOK={() => setPopupOpen(false)}
-      />
+      <CenterPopup open={popupOpen} message={message} onOK={() => setPopupOpen(false)} />
     </div>
   );
 };
