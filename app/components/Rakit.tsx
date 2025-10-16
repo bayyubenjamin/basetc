@@ -10,7 +10,7 @@ import {
   usePublicClient,
 } from "wagmi";
 import { base } from "viem/chains";
-import { formatUnits } from "viem";
+import { formatUnits, parseUnits } from "viem";
 import {
   rigNftAddress,
   rigNftABI,
@@ -257,7 +257,7 @@ export default function Rakit() {
   async function ensureApprove(amount: bigint) {
   if (!user || !feeToken) throw new Error("Fee token not set / wallet not connected.");
 
-  const maxAllowance = ethers.parseUnits("100", feeDecimals);
+  const maxAllowance = parseUnits("100", feeDecimals);
   if (allowance >= amount) return;
 
   beginProcessing(`Approving ${formatUnits(maxAllowance, feeDecimals)} ${feeSymbol}…`);
