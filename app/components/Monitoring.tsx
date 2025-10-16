@@ -518,7 +518,7 @@ const Monitoring: FC = () => {
   useEffect(() => {
     if (!isSuccess) return;
     setStatusText("Transaction confirmed.");
-    addLog("Success: Transaction confirmed.");
+    addLog("✅Success: Transaction confirmed.");
     setLoading(false);
     refreshAll(lastAction === "start" ? "Mining session started." : "State updated after tx.");
     setLastAction(null);
