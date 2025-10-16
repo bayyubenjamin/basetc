@@ -321,11 +321,17 @@ const Market: FC = () => {
       const totalPrice = unitPrice * q;
 
       if (mode === 0) {
-        // Pre-check saldo ETH biar tidak muncul error teknis
-        const ethBal = await publicClient!.getBalance({ address });
-        if (ethBal < totalPrice) {
-          return finishError(`ETH tidak cukup. Butuh ${formatEther(totalPrice)} ETH.`);
-        }
+        // Pre-check saldo USDC (cast biar lolos tipe viem)
+const erc20Bal = (await (publicClient as any).readContract({
+  address: tokenAddr as Address,
+  abi: erc20ABI,
+  functionName: "balanceOf",
+  args: [address],
+})) as bigint;
+
+if (erc20Bal < totalPrice) {
+  return finishError(`USDC tidak cukup. Butuh ${formatUnits(totalPrice, tokenDecimals)} ${tokenSymbol}.`);
+}
         beginProcessing("Mengirim transaksi (ETH) …");
         const txHash = await writeContractAsync({
           address: rigSaleAddress,
