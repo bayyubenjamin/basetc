@@ -232,7 +232,6 @@ const Monitoring: FC = () => {
     address: gameCoreAddress as `0x${string}`,
     abi: gameCoreABI as any,
     functionName: "epochNow",
-    // keep UI fresh
     query: { refetchInterval: 10_000 },
   });
   const epochLength = useReadContract({
@@ -287,7 +286,7 @@ const Monitoring: FC = () => {
     query: { enabled: Boolean(address) },
   });
 
-  // ✅ Pastikan Base Unit / Epoch muncul & selalu kebaca dari kontrak
+  // ✅ Base Unit / Epoch
   const baseUnit = useReadContract({
     address: gameCoreAddress as `0x${string}`,
     abi: gameCoreABI as any,
@@ -360,7 +359,6 @@ const Monitoring: FC = () => {
         if (timeLeft <= 0) {
           setPrelaunchTimeLeft("Live!");
           clearInterval(interval);
-          // Auto-refresh data when countdown finishes
           refreshAll("Pre-launch ended. Refreshing state.");
         } else {
           const days = Math.floor(timeLeft / (3600 * 24));
@@ -380,7 +378,7 @@ const Monitoring: FC = () => {
     return v ? Number(v) : 0;
   }, [hashrate.data]);
 
-  // Safe formatter untuk Base Unit / Epoch (18 desimal)
+  // Base Unit / Epoch (18 desimal)
   const baseUnitPerEpoch = useMemo(() => {
     const v = baseUnit.data as bigint | undefined;
     if (!v) return 0;
@@ -444,7 +442,7 @@ const Monitoring: FC = () => {
     const h = Math.floor(s / 3600);
     const m = Math.floor((s % 3600) / 60);
     const r = s % 60;
-    if (h > 0) return `${h}h ${m.toString().padStart(2, "0")}m ${r.toString().padStart(2, "0")}s`;
+    if (h > 0) return `${h}h ${m.toString().padStart(2, "0")}m ${r.toString().padStart(2, "0")}`;
     return `${m}:${r.toString().padStart(2, "0")}`;
   }, [epochProgress.leftSec]);
 
@@ -472,7 +470,6 @@ const Monitoring: FC = () => {
 
   const busy = Boolean(writePending || receiptLoading);
 
-  // Stop manual overlay once tx is broadcast
   const [loggedHash, setLoggedHash] = useState<string | null>(null);
   useEffect(() => {
     if (txHash && txHash !== loggedHash) {
@@ -483,7 +480,6 @@ const Monitoring: FC = () => {
     }
   }, [txHash, loggedHash]);
 
-  // Waiting receipt logs
   const [wasWaiting, setWasWaiting] = useState(false);
   useEffect(() => {
     if (receiptLoading && !wasWaiting) {
@@ -494,7 +490,6 @@ const Monitoring: FC = () => {
     if (!receiptLoading && wasWaiting) setWasWaiting(false);
   }, [receiptLoading, wasWaiting]);
 
-  // Helper: refetch all & reset baseline to real chain values
   const refreshAll = async (note?: string) => {
     await Promise.allSettled([
       refetchEpochNow?.(),
@@ -514,7 +509,6 @@ const Monitoring: FC = () => {
     if (note) addLog(note);
   };
 
-  // Success
   useEffect(() => {
     if (!isSuccess) return;
     setStatusText("Transaction confirmed.");
@@ -525,7 +519,6 @@ const Monitoring: FC = () => {
     setLoggedHash(null);
   }, [isSuccess]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Errors
   useEffect(() => {
     if (!writeError) return;
     const shortMsg =
@@ -549,7 +542,7 @@ const Monitoring: FC = () => {
   }, [receiptError]);
 
   /* ======================
-     Events: Claimed (ground truth amount)
+     Events: Claimed
      ====================== */
   useWatchContractEvent({
     address: gameCoreAddress as `0x${string}`,
@@ -573,110 +566,6 @@ const Monitoring: FC = () => {
       setLastAction(null);
     },
   });
-
-  /* ======================
-     Actions (WithSig)
-     ====================== */
-  const onStart = async () => {
-    if (!address) { setStatusText("Please connect your wallet."); return; }
-    if (chainId && chainId !== BASE_CHAIN_ID) { setStatusText("Please switch to Base Sepolia."); return; }
-    if (prelaunch && goLiveOn) { setStatusText("Prelaunch is active. Wait for epoch 1."); return; }
-    if (!canToggle) { setStatusText("In cooldown. Please try again later."); return; }
-
-    try {
-      setLoading(true);
-      setStatusText("Requesting relayer signature (START) …");
-      setLastAction("start");
-
-      const nonce =
-        (await (refetchNonce?.() || Promise.resolve({ data: userNonce.data })))?.data ??
-        (userNonce.data as bigint | undefined) ?? 0n;
-      const deadline = BigInt(Math.floor(Date.now() / 1000) + 60 * 60);
-      const { signature } = await getRelayerSig({ user: address as `0x${string}`, action: "start", nonce, deadline });
-
-      setStatusText("Sending startMiningWithSig …");
-      addLog("Sending startMiningWithSig …");
-
-      writeContract({
-        address: gameCoreAddress as `0x${string}`,
-        abi: gameCoreABI as any,
-        functionName: "startMiningWithSig",
-        args: [address, nonce, deadline, signature],
-        account: address as `0x${string}`,
-        chain: base,
-        chainId: BASE_CHAIN_ID,
-      });
-
-      const freshPending = (await (refetchPending?.() || Promise.resolve({ data: pendingRw.data })))?.data as bigint | undefined;
-      const pendingStart = freshPending ? Number(formatUnits(freshPending, 18)) : 0;
-      setLiveBaseStart(pendingStart);
-      setLiveStartTs(Math.floor(Date.now() / 1000));
-    } catch (e: any) {
-      const m = e?.message || "Failed to start";
-      setStatusText(m);
-      addLog(`Error: ${m}`);
-      setLoading(false);
-      setLastAction(null);
-    }
-  };
-
-  const onClaim = async () => {
-    if (!address) { setStatusText("Please connect your wallet."); return; }
-    if (chainId && chainId !== BASE_CHAIN_ID) { setStatusText("Please switch to Base Sepolia."); return; }
-    if (!canClaim) { setStatusText("No pending rewards to claim."); return; }
-
-    const trySend = async () => {
-      const freshNonce =
-        (await (refetchNonce?.() || Promise.resolve({ data: userNonce.data })))?.data ??
-        (userNonce.data as bigint | undefined) ?? 0n;
-      const deadline = BigInt(Math.floor(Date.now() / 1000) + 60 * 60);
-      const { signature } = await getRelayerSig({ user: address as `0x${string}`, action: "claim", nonce: freshNonce, deadline });
-
-      setStatusText("Sending claimWithSig …");
-      addLog("Sending claimWithSig …");
-
-      writeContract({
-        address: gameCoreAddress as `0x${string}`,
-        abi: gameCoreABI as any,
-        functionName: "claimWithSig",
-        args: [address, freshNonce, deadline, signature],
-        account: address as `0x${string}`,
-        chain: base,
-        chainId: BASE_CHAIN_ID,
-      });
-
-      setLoading(false);
-    };
-
-    try {
-      setLoading(true);
-      setStatusText("Requesting relayer signature (CLAIM) …");
-      setLastAction("claim");
-      await trySend();
-    } catch (e: any) {
-      const m = (e?.message || "").toLowerCase();
-      const shouldRetry = m.includes("expired") || m.includes("deadline") || m.includes("bad_nonce") || m.includes("bad nonce") || m.includes("nonce");
-      if (shouldRetry) {
-        try {
-          addLog("Retrying claim with refreshed nonce/deadline …");
-          setStatusText("Retrying claim …");
-          await trySend();
-        } catch (e2: any) {
-          const em = e2?.message || "Failed to claim (retry)";
-          setStatusText(em);
-          addLog(`Error (retry): ${em}`);
-          setLoading(false);
-          setLastAction(null);
-        }
-        return;
-      }
-      const em = e?.message || "Failed to claim";
-      setStatusText(em);
-      addLog(`Error: ${em}`);
-      setLoading(false);
-      setLastAction(null);
-    }
-  };
 
   /* ======================
      Realtime meter + heartbeat
@@ -724,20 +613,29 @@ const Monitoring: FC = () => {
   }, [now, active, liveMiningNow, pendingAmt, usedBasic, usedPro, usedLegend, baseUnitPerEpoch, leftMMSS, lastBeatTs]);
 
   /* ======================
-     NEW: Persentase mining di bawah "Mining now"
-     (UI-only, tidak mengubah logic kontrak)
+     NEW: Persentase mining (STABIL & teks hitam)
+     - Perhitungan tetap sama seperti sebelumnya.
+     - Tampilan (display) hanya di-update saat pending/baseUnit/active berubah,
+       sehingga tidak ikut bergerak setiap detik seperti angka "Mining now".
      ====================== */
-  const miningPct = useMemo(() => {
-    if (!active) return 0;
-    if (!baseUnitPerEpoch || baseUnitPerEpoch <= 0) return 0;
-    const pct = (liveMiningNow / baseUnitPerEpoch) * 100;
-    return Math.max(0, Math.min(100, pct));
-  }, [active, liveMiningNow, baseUnitPerEpoch]);
+  const [displayMiningPct, setDisplayMiningPct] = useState(0);
+
+  useEffect(() => {
+    if (!active || !baseUnitPerEpoch || baseUnitPerEpoch <= 0) {
+      setDisplayMiningPct(0);
+      return;
+    }
+    const pct = Math.max(0, Math.min(100, (liveMiningNow / baseUnitPerEpoch) * 100));
+    setDisplayMiningPct(pct);
+    // ⚠️ DEPENDENCY DIPBATASI agar tidak ikut tick per detik:
+    // hanya refresh saat pending berubah (on-chain), base unit berubah, atau status aktif berubah.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingAmt, baseUnitPerEpoch, active]);
 
   const miningPctLabel = useMemo(() => {
-    if (miningPct >= 100) return "FULL — Please claim your $BaseTC";
-    return `${miningPct.toFixed(1)}% mined`;
-  }, [miningPct]);
+    if (displayMiningPct >= 100) return "Full — please claim your $BaseTC";
+    return `${displayMiningPct.toFixed(1)}% mined`;
+  }, [displayMiningPct]);
 
   /* ======================
      UI
@@ -780,7 +678,7 @@ const Monitoring: FC = () => {
           <div className="fin-bar"><i style={{ width: `${epochProgress.pct}%` }} /></div>
         </div>
 
-        {/* Realtime $BaseTC meter + Percentage bar (baru) */}
+        {/* Realtime $BaseTC meter + Percentage bar (stabil) */}
         <div className="fin-actions">
           <div className="fin-cooldown">
             <span className="opacity-80">Mining now:</span>{" "}
@@ -788,28 +686,23 @@ const Monitoring: FC = () => {
               {liveMiningNow.toLocaleString("en-US", { minimumFractionDigits: 6, maximumFractionDigits: 6 })} $BaseTC
             </b>
 
-            {/* === Persentase bawah "Mining now" === */}
+            {/* === Persentase (teks hitam, tidak ikut gerak per detik) === */}
             <div className="mt-2">
-              <div className="flex items-center justify-between text-[11px] font-semibold text-white/90">
-                <span className={miningPct >= 100 ? "text-emerald-300" : "text-white/80"}>
+              <div className="flex items-center justify-between text-[11px] font-semibold text-black">
+                <span className={displayMiningPct >= 100 ? "text-black" : "text-black"}>
                   {miningPctLabel}
                 </span>
-                {/* Opsional: tampilkan angka persis */}
-                <span className="opacity-60">{miningPct.toFixed(1)}%</span>
+                <span className="text-black/70">{displayMiningPct.toFixed(1)}%</span>
               </div>
-              <div className="mt-1 h-2 w-full rounded-full bg-white/10 overflow-hidden shadow-inner">
+              <div className="mt-1 h-2 w-full rounded-full bg-black/10 overflow-hidden">
                 <div
-                  className="h-full rounded-full animate-pulse"
+                  className="h-full rounded-full" // ← hilangkan animate agar bar tidak ‘berdenyut’
                   style={{
-                    width: `${miningPct}%`,
+                    width: `${displayMiningPct}%`,
                     background:
-                      miningPct >= 100
+                      displayMiningPct >= 100
                         ? "linear-gradient(90deg,#22c55e 0%,#16a34a 100%)"
                         : "linear-gradient(90deg,var(--accent) 0%,#22c55e 60%,#f59e0b 100%)",
-                    boxShadow:
-                      miningPct >= 100
-                        ? "0 0 16px rgba(34,197,94,.45)"
-                        : "0 0 12px rgba(43,123,255,.35)",
                   }}
                 />
               </div>
@@ -862,7 +755,7 @@ const Monitoring: FC = () => {
           boxShadow: "0 10px 24px rgba(0,0,0,0.20)",
         }}
       >
-        {/* Title bar with traffic lights */}
+        {/* Title bar */}
         <div
           style={{
             height: 28,
@@ -874,36 +767,15 @@ const Monitoring: FC = () => {
             borderBottom: "1px solid rgba(0,0,0,0.06)",
           }}
         >
-          <span
-            aria-hidden
-            style={{
-              width: 12, height: 12, borderRadius: 999,
-              background: "#ff5f56", border: "1px solid #e04940",
-              boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.6)",
-            }}
-          />
-          <span
-            aria-hidden
-            style={{
-              width: 12, height: 12, borderRadius: 999,
-              background: "#ffbd2e", border: "1px solid #e0a922",
-              boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.6)",
-            }}
-          />
-          <span
-            aria-hidden
-            style={{
-              width: 12, height: 12, borderRadius: 999,
-              background: "#28c840", border: "1px solid #1ea233",
-              boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.6)",
-            }}
-          />
+          <span aria-hidden style={{ width: 12, height: 12, borderRadius: 999, background: "#ff5f56", border: "1px solid #e04940", boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.6)" }} />
+          <span aria-hidden style={{ width: 12, height: 12, borderRadius: 999, background: "#ffbd2e", border: "1px solid #e0a922", boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.6)" }} />
+          <span aria-hidden style={{ width: 12, height: 12, borderRadius: 999, background: "#28c840", border: "1px solid #1ea233", boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.6)" }} />
           <div style={{ marginLeft: 8, fontSize: 12, color: "var(--muted)", fontWeight: 600 }}>
             Terminal
           </div>
         </div>
 
-        {/* Log area (scrollable) */}
+        {/* Log area */}
         <div
           ref={terminalRef}
           style={{
