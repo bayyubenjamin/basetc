@@ -774,6 +774,13 @@ const Monitoring: FC = () => {
           <div className="fin-bar"><i style={{ width: `${epochProgress.pct}%` }} /></div>
         </div>
 
+        {/* Divider antara Epoch/Progress dan Mining now */}
+        <div
+          aria-hidden
+          className="my-3 -mx-4"
+          style={{ height: 1, background: "var(--stroke)" }}
+        />
+
         {/* Realtime $BaseTC meter + Persentase Minted (text only) */}
         <div className="fin-actions">
           <div className="fin-cooldown">
