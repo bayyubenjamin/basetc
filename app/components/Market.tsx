@@ -149,7 +149,6 @@ const Market: FC = () => {
   // --- AKHIR PERUBAHAN ---
 
   // --- START PERUBAHAN ---
-  // State untuk menyimpan data referral dari API
   const [inviteStats, setInviteStats] = useState({
     totalInvites: 0,
     claimedRewards: 0,
@@ -415,7 +414,7 @@ const Market: FC = () => {
 
   /* =============================
      UI - Neumorphism + kontras teks
-   ============================== */
+   ============================= */
   return (
     <div className="fin-wrap fin-content-pad-bottom px-1.5 pt-1.5 space-y-5">
       <header className="space-y-1">
@@ -486,9 +485,10 @@ const Market: FC = () => {
           const disabled = loading || !address || !id;
 
           return (
+            // Card container (relative untuk posisi stiker)
             <div
               key={tier.id}
-              className="fin-card p-3 neu relative"  {/* <- relative supaya stiker bisa absolute */}
+              className="fin-card p-3 neu relative"
               style={{
                 marginLeft: "max(10px, env(safe-area-inset-left))",
                 marginRight: "max(10px, env(safe-area-inset-right))",
