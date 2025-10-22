@@ -410,7 +410,7 @@ const Market: FC = () => {
      Helper kecil: label diskon per tier (UI only)
      ============================= */
   const discountLabel = (id: TierID) =>
-    id === "basic" ? " " : id === "pro" ? " " : "DISCOUNT 25%";
+    id === "basic" ? " " : id === "pro" ? " " : "";
 
   /* =============================
      UI - Neumorphism + kontras teks
