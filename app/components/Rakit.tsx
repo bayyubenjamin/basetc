@@ -250,7 +250,7 @@ export default function Rakit() {
 
   async function ensureApprove(amount: bigint) {
     if (!user || !feeToken) throw new Error("Fee token not set / wallet not connected.");
-    const maxAllowance = parseUnits("100", feeDecimals);
+    const maxAllowance = amount * 10n;
     if (allowance >= amount) return;
 
     beginProcessing(`Approving ${formatUnits(maxAllowance, feeDecimals)} ${feeSymbol}…`);
