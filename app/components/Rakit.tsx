@@ -44,7 +44,7 @@ const slotBorderByTier: Record<"basic"|"pro"|"legend", string> = {
   legend: "border-[#f5d06f]/85",
 };
 
-/* === SLOT === */
+/* === SLOT === (tampilan terang) */
 const NftSlot: FC<{ filled: boolean; tier: "basic" | "pro" | "legend" }> = ({ filled, tier }) => (
   <div
     className={[
@@ -71,7 +71,7 @@ const NftSlot: FC<{ filled: boolean; tier: "basic" | "pro" | "legend" }> = ({ fi
   </div>
 );
 
-/* ---------------- Popup + Overlay ---------------- */
+/* ---------------- Popup (visual light) + Processing overlay ---------------- */
 const CenterPopup: FC<{ open: boolean; message: string; onOK: () => void }> = ({ open, message, onOK }) => {
   if (!open) return null;
   return (
@@ -124,80 +124,69 @@ export default function Rakit() {
   const [loading, setLoading] = useState<boolean>(false);
   const [popupOpen, setPopupOpen] = useState<boolean>(false);
 
-  /* ... SEMUA BAGIAN KONTRAK & QUERY TIDAK DIUBAH ... */
+  /* IDs */
+  const basicId  = useReadContract({ address: rigNftAddress as `0x${string}`, abi: rigNftABI as any, functionName: "BASIC" });
+  const proId    = useReadContract({ address: rigNftAddress as `0x${string}`, abi: rigNftABI as any, functionName: "PRO" });
+  const legendId = useReadContract({ address: rigNftAddress as `0x${string}`, abi: rigNftABI as any, functionName: "LEGEND" });
+  const BASIC  = basicId.data  as bigint | undefined;
+  const PRO    = proId.data    as bigint | undefined;
+  const LEGEND = legendId.data as bigint | undefined;
 
-  /* ---------------- UI ---------------- */
-  return (
-    <div className="fin-wrap fin-content-pad-bottom">
-      <div className="fin-page-head">
-        <h1 className="text-[var(--text)]">Build Rig</h1>
-        <p className="text-[var(--muted)] font-semibold">Upgrade &amp; merge your rigs</p>
-      </div>
+  /* Owned balances */
+  const basicBal  = useReadContract({
+    address: rigNftAddress as `0x${string}`,
+    abi: rigNftABI as any,
+    functionName: "balanceOf",
+    args: user && BASIC  !== undefined ? [user, BASIC] : undefined,
+    query: { enabled: Boolean(user && BASIC !== undefined) },
+  });
+  const proBal    = useReadContract({
+    address: rigNftAddress as `0x${string}`,
+    abi: rigNftABI as any,
+    functionName: "balanceOf",
+    args: user && PRO    !== undefined ? [user, PRO] : undefined,
+    query: { enabled: Boolean(user && PRO !== undefined) },
+  });
+  const legendBal = useReadContract({
+    address: rigNftAddress as `0x${string}`,
+    abi: rigNftABI as any,
+    functionName: "balanceOf",
+    args: user && LEGEND !== undefined ? [user, LEGEND] : undefined,
+    query: { enabled: Boolean(user && LEGEND !== undefined) },
+  });
 
-      {/* BASIC */}
-      <section className="fin-card fin-card-pad neu" aria-label="Basic rigs">
-        <div className="fin-row">
-          <div className="fin-epoch">
-            <strong className="text-[var(--text)] uppercase font-extrabold tracking-wide">BASIC</strong>
-            <small className="text-xs text-[var(--muted)] font-semibold">
-              Owned: <span className="text-[var(--text)]">{String(ownedBasic)}</span>
-              <span className="mx-1">•</span>
-              Used: <span className="text-[var(--text)]">{String(bUsed)}</span>
-            </small>
-          </div>
-        </div>
+  const ownedBasic  = (basicBal.data  as bigint | undefined) ?? 0n;
+  const ownedPro    = (proBal.data    as bigint | undefined) ?? 0n;
+  const ownedLegend = (legendBal.data as bigint | undefined) ?? 0n;
 
-        <div className="mt-3 grid grid-cols-5 gap-2">
-          {Array.from({ length: Math.max(1, caps.b) }).map((_, i) => (
-            <NftSlot key={`b-${i}`} filled={i < Math.min(Number(ownedBasic), caps.b)} tier="basic" />
-          ))}
-        </div>
-      </section>
+  /* Usage for slot usage display */
+  const miningUsage = useReadContract({
+    address: gameCoreAddress as `0x${string}`,
+    abi: gameCoreABI as any,
+    functionName: "miningUsage",
+    args: user ? [user] : undefined,
+    query: { enabled: Boolean(user) },
+  });
+  const [
+    _bOwned, bUsed = 0n, _bIdle,
+    _pOwned, pUsed = 0n, _pIdle,
+    _lOwned, lUsed = 0n, _lIdle,
+  ] = ((miningUsage.data as bigint[] | undefined) ?? []).concat([0n,0n,0n,0n,0n,0n,0n,0n,0n]) as bigint[];
 
-      {/* PRO */}
-      <section className="fin-card fin-card-pad neu" aria-label="Pro rigs">
-        <div className="fin-row">
-          <div className="fin-epoch">
-            <strong className="text-[var(--text)] uppercase font-extrabold tracking-wide">PRO</strong>
-            <small className="text-xs text-[var(--muted)] font-semibold">
-              Owned: <span className="text-[var(--text)]">{String(ownedPro)}</span>
-              <span className="mx-1">•</span>
-              Used: <span className="text-[var(--text)]">{String(pUsed)}</span>
-            </small>
-          </div>
-        </div>
+  /* Slot caps */
+  const rigCaps = useReadContract({ address: gameCoreAddress as `0x${string}`, abi: gameCoreABI as any, functionName: "rigCaps" });
+  const caps = useMemo(() => {
+    const rc = rigCaps.data as { b: bigint; p: bigint; l: bigint } | undefined;
+    return { b: Number(rc?.b ?? 10n), p: Number(rc?.p ?? 5n), l: Number(rc?.l ?? 3n) };
+  }, [rigCaps.data]);
 
-        {/* 🔥 FIX: hanya baris ini yang berubah */}
-        <div className="mt-3 grid grid-cols-5 grid-flow-row gap-2">
-          {Array.from({ length: Math.max(1, caps.p) }).map((_, i) => (
-            <NftSlot key={`p-${i}`} filled={i < Math.min(Number(ownedPro), caps.p)} tier="pro" />
-          ))}
-        </div>
+  /* Need & fee token */
+  const needB2P = useReadContract({ address: gameCoreAddress as `0x${string}`, abi: gameCoreABI as any, functionName: "BASIC_TO_PRO_NEED" });
+  const needP2L = useReadContract({ address: gameCoreAddress as `0x${string}`, abi: gameCoreABI as any, functionName: "PRO_TO_LEGEND_NEED" });
+  const needBP = (needB2P.data as bigint | undefined) ?? 10n;
+  const needPL = (needP2L.data as bigint | undefined) ?? 5n;
 
-      </section>
+  const feeTokenRead = useReadContract({ address: gameCoreAddress as `0x${string}`, abi: gameCoreABI as any, functionName: "mergeFeeToken" });
+  const feeToken = (feeTokenRead.data as `0x${string}` | undefined) ?? undefined;
 
-      {/* LEGEND */}
-      <section className="fin-card fin-card-pad neu" aria-label="Legend rigs">
-        <div className="fin-row">
-          <div className="fin-epoch">
-            <strong className="text-[var(--text)] uppercase font-extrabold tracking-wide">LEGEND</strong>
-            <small className="text-xs text-[var(--muted)] font-semibold">
-              Owned: <span className="text-[var(--text)]">{String(ownedLegend)}</span>
-              <span className="mx-1">•</span>
-              Used: <span className="text-[var(--text)]">{String(lUsed)}</span>
-            </small>
-          </div>
-        </div>
-
-        <div className="mt-3 grid grid-cols-5 gap-2">
-          {Array.from({ length: Math.max(1, caps.l) }).map((_, i) => (
-            <NftSlot key={`l-${i}`} filled={i < Math.min(Number(ownedLegend), caps.l)} tier="legend" />
-          ))}
-        </div>
-      </section>
-
-      <LoadingOverlay show={loading} label={status || "Processing…"} />
-      <CenterPopup open={popupOpen} message={status} onOK={() => setPopupOpen(false)} />
-    </div>
-  );
-}
+  const feeB2PRead = useReadContract({ address: gameCoreAddress as `0x${string}`, abi: gameCoreABI as any, functionName: "feeBasic
