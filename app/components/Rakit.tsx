@@ -179,7 +179,7 @@ export default function Rakit() {
   const rigCaps = useReadContract({ address: gameCoreAddress as `0x${string}`, abi: gameCoreABI as any, functionName: "rigCaps" });
   const caps = useMemo(() => {
     const rc = rigCaps.data as { b: bigint; p: bigint; l: bigint } | undefined;
-    return { b: Number(rc?.b ?? 10n), p: Number(rc?.p ?? 5n), l: Number(rc?.l ?? 3n) };
+    return { b: Number(rc?.b ?? 10n), p: Number(rc?.p ?? 10n), l: Number(rc?.l ?? 3n) };
   }, [rigCaps.data]);
 
   /* Need & fee */
