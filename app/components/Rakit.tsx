@@ -71,7 +71,7 @@ const NftSlot: FC<{ filled: boolean; tier: "basic" | "pro" | "legend" }> = ({ fi
   </div>
 );
 
-/* ---------------- Popup (visual light) + Processing overlay ---------------- */
+/* ---------------- Popup + Overlay ---------------- */
 const CenterPopup: FC<{ open: boolean; message: string; onOK: () => void }> = ({ open, message, onOK }) => {
   if (!open) return null;
   return (
@@ -125,34 +125,54 @@ export default function Rakit() {
   const [popupOpen, setPopupOpen] = useState<boolean>(false);
 
   /* IDs */
-  const basicId  = useReadContract({ address: rigNftAddress as `0x${string}`, abi: rigNftABI as any, functionName: "BASIC" });
-  const proId    = useReadContract({ address: rigNftAddress as `0x${string}`, abi: rigNftABI as any, functionName: "PRO" });
-  const legendId = useReadContract({ address: rigNftAddress as `0x${string}`, abi: rigNftABI as any, functionName: "LEGEND" });
+  const basicId  = useReadContract({
+    address: rigNftAddress as `0x${string}`,
+    abi: rigNftABI,
+    functionName: "BASIC",
+    query: { refetchInterval: 3000, refetchOnWindowFocus: true }, // FIX
+  });
+
+  const proId = useReadContract({
+    address: rigNftAddress as `0x${string}`,
+    abi: rigNftABI,
+    functionName: "PRO",
+    query: { refetchInterval: 3000, refetchOnWindowFocus: true }, // FIX
+  });
+
+  const legendId = useReadContract({
+    address: rigNftAddress as `0x${string}`,
+    abi: rigNftABI,
+    functionName: "LEGEND",
+    query: { refetchInterval: 3000, refetchOnWindowFocus: true }, // FIX
+  });
+
   const BASIC  = basicId.data  as bigint | undefined;
   const PRO    = proId.data    as bigint | undefined;
   const LEGEND = legendId.data as bigint | undefined;
 
   /* Owned balances */
-  const basicBal  = useReadContract({
+  const basicBal = useReadContract({
     address: rigNftAddress as `0x${string}`,
-    abi: rigNftABI as any,
+    abi: rigNftABI,
     functionName: "balanceOf",
-    args: user && BASIC  !== undefined ? [user, BASIC] : undefined,
-    query: { enabled: Boolean(user && BASIC !== undefined) },
+    args: user && BASIC !== undefined ? [user, BASIC] : undefined,
+    query: { enabled: Boolean(user && BASIC), refetchInterval: 3000, refetchOnWindowFocus: true }, // FIX
   });
-  const proBal    = useReadContract({
+
+  const proBal = useReadContract({
     address: rigNftAddress as `0x${string}`,
-    abi: rigNftABI as any,
+    abi: rigNftABI,
     functionName: "balanceOf",
-    args: user && PRO    !== undefined ? [user, PRO] : undefined,
-    query: { enabled: Boolean(user && PRO !== undefined) },
+    args: user && PRO !== undefined ? [user, PRO] : undefined,
+    query: { enabled: Boolean(user && PRO), refetchInterval: 3000, refetchOnWindowFocus: true }, // FIX
   });
+
   const legendBal = useReadContract({
     address: rigNftAddress as `0x${string}`,
-    abi: rigNftABI as any,
+    abi: rigNftABI,
     functionName: "balanceOf",
     args: user && LEGEND !== undefined ? [user, LEGEND] : undefined,
-    query: { enabled: Boolean(user && LEGEND !== undefined) },
+    query: { enabled: Boolean(user && LEGEND), refetchInterval: 3000, refetchOnWindowFocus: true }, // FIX
   });
 
   const ownedBasic  = (basicBal.data  as bigint | undefined) ?? 0n;
@@ -162,11 +182,12 @@ export default function Rakit() {
   /* Usage for slot usage display */
   const miningUsage = useReadContract({
     address: gameCoreAddress as `0x${string}`,
-    abi: gameCoreABI as any,
+    abi: gameCoreABI,
     functionName: "miningUsage",
     args: user ? [user] : undefined,
-    query: { enabled: Boolean(user) },
+    query: { enabled: Boolean(user), refetchInterval: 3000, refetchOnWindowFocus: true }, // FIX
   });
+
   const [
     _bOwned, bUsed = 0n, _bIdle,
     _pOwned, pUsed = 0n, _pIdle,
@@ -174,41 +195,79 @@ export default function Rakit() {
   ] = ((miningUsage.data as bigint[] | undefined) ?? []).concat([0n,0n,0n,0n,0n,0n,0n,0n,0n]) as bigint[];
 
   /* Slot caps */
-  const rigCaps = useReadContract({ address: gameCoreAddress as `0x${string}`, abi: gameCoreABI as any, functionName: "rigCaps" });
+  const rigCaps = useReadContract({
+    address: gameCoreAddress as `0x${string}`,
+    abi: gameCoreABI,
+    functionName: "rigCaps",
+    query: { refetchInterval: 3000, refetchOnWindowFocus: true }, // FIX
+  });
+
   const caps = useMemo(() => {
     const rc = rigCaps.data as { b: bigint; p: bigint; l: bigint } | undefined;
     return { b: Number(rc?.b ?? 10n), p: Number(rc?.p ?? 5n), l: Number(rc?.l ?? 3n) };
   }, [rigCaps.data]);
 
   /* Need & fee token */
-  const needB2P = useReadContract({ address: gameCoreAddress as `0x${string}`, abi: gameCoreABI as any, functionName: "BASIC_TO_PRO_NEED" });
-  const needP2L = useReadContract({ address: gameCoreAddress as `0x${string}`, abi: gameCoreABI as any, functionName: "PRO_TO_LEGEND_NEED" });
+  const needB2P = useReadContract({
+    address: gameCoreAddress as `0x${string}`,
+    abi: gameCoreABI,
+    functionName: "BASIC_TO_PRO_NEED",
+    query: { refetchInterval: 3000, refetchOnWindowFocus: true }, // FIX
+  });
+
+  const needP2L = useReadContract({
+    address: gameCoreAddress as `0x${string}`,
+    abi: gameCoreABI,
+    functionName: "PRO_TO_LEGEND_NEED",
+    query: { refetchInterval: 3000, refetchOnWindowFocus: true }, // FIX
+  });
+
   const needBP = (needB2P.data as bigint | undefined) ?? 10n;
   const needPL = (needP2L.data as bigint | undefined) ?? 5n;
 
-  const feeTokenRead = useReadContract({ address: gameCoreAddress as `0x${string}`, abi: gameCoreABI as any, functionName: "mergeFeeToken" });
+  const feeTokenRead = useReadContract({
+    address: gameCoreAddress as `0x${string}`,
+    abi: gameCoreABI,
+    functionName: "mergeFeeToken",
+    query: { refetchInterval: 3000, refetchOnWindowFocus: true }, // FIX
+  });
+
   const feeToken = (feeTokenRead.data as `0x${string}` | undefined) ?? undefined;
 
-  const feeB2PRead = useReadContract({ address: gameCoreAddress as `0x${string}`, abi: gameCoreABI as any, functionName: "feeBasicToPro" });
-  const feeP2LRead = useReadContract({ address: gameCoreAddress as `0x${string}`, abi: gameCoreABI as any, functionName: "feeProToLegend" });
+  const feeB2PRead = useReadContract({
+    address: gameCoreAddress as `0x${string}`,
+    abi: gameCoreABI,
+    functionName: "feeBasicToPro",
+    query: { refetchInterval: 3000, refetchOnWindowFocus: true }, // FIX
+  });
+
+  const feeP2LRead = useReadContract({
+    address: gameCoreAddress as `0x${string}`,
+    abi: gameCoreABI,
+    functionName: "feeProToLegend",
+    query: { refetchInterval: 3000, refetchOnWindowFocus: true }, // FIX
+  });
+
   const feeDecimalsRead = useReadContract({
     address: feeToken,
     abi: erc20Abi,
     functionName: "decimals",
-    query: { enabled: Boolean(feeToken) },
+    query: { enabled: Boolean(feeToken), refetchInterval: 3000, refetchOnWindowFocus: true }, // FIX
   });
+
   const feeSymbolRead = useReadContract({
     address: feeToken,
     abi: erc20Abi,
     functionName: "symbol",
-    query: { enabled: Boolean(feeToken) },
+    query: { enabled: Boolean(feeToken), refetchInterval: 3000, refetchOnWindowFocus: true }, // FIX
   });
+
   const allowanceRead = useReadContract({
     address: feeToken,
     abi: erc20Abi,
     functionName: "allowance",
     args: user ? [user, gameCoreAddress as `0x${string}`] : undefined,
-    query: { enabled: Boolean(user && feeToken) },
+    query: { enabled: Boolean(user && feeToken), refetchInterval: 3000, refetchOnWindowFocus: true }, // FIX
   });
 
   const feeDecimals = (feeDecimalsRead.data as number | undefined) ?? 18;
@@ -222,7 +281,6 @@ export default function Rakit() {
   /* writer */
   const { writeContractAsync } = useWriteContract();
 
-  // === helpers for consistent UX ===
   function beginProcessing(label: string) {
     setStatus(label);
     setLoading(true);
@@ -239,7 +297,6 @@ export default function Rakit() {
     setPopupOpen(true);
   }
 
-  // --- error prettyfier (hanya ubah teks popup; tidak mengubah logic lain) ---
   function prettyErr(e: any): string {
     const msg = String(e?.shortMessage || e?.message || e || "");
     if (/ERC20:\s*transfer amount exceeds balance/i.test(msg)) {
@@ -265,7 +322,7 @@ export default function Rakit() {
       address: feeToken,
       abi: erc20Abi,
       functionName: "approve",
-      args: [gameCoreAddress as `0x${string}`, maxAllowance], // set approve besar sekalian
+      args: [gameCoreAddress as `0x${string}`, maxAllowance],
       account: user,
       chain: base,
     });
@@ -331,7 +388,7 @@ export default function Rakit() {
     }
   }
 
-  /* ---------------- UI (fintech-aligned + Neumorphism) ---------------- */
+  /* ---------------- UI ---------------- */
   return (
     <div className="fin-wrap fin-content-pad-bottom">
       <div className="fin-page-head">
@@ -343,9 +400,7 @@ export default function Rakit() {
       <section className="fin-card fin-card-pad neu" aria-label="Basic rigs">
         <div className="fin-row">
           <div className="fin-epoch">
-            {/* Nama NFT tebal + uppercase */}
             <strong className="text-[var(--text)] uppercase font-extrabold tracking-wide">BASIC</strong>
-            {/* Owned kecil + tampilkan Used */}
             <small className="text-xs text-[var(--muted)] font-semibold">
               Owned: <span className="text-[var(--text)]">{String(ownedBasic)}</span>
               <span className="mx-1">•</span>
@@ -367,11 +422,11 @@ export default function Rakit() {
               (fee <b className="text-[var(--text)]">{fmt2(Number(formatUnits(feeB2P, feeDecimals)))}</b> {feeSymbol})
             </span>
           </div>
+
           <button
             onClick={(e) => { e.preventDefault(); onMergeBasicToPro(); }}
             className={`mt-3 w-full fin-btn neu-btn !py-2 text-sm transition-transform active:scale-[0.98] ${(!user || loading) ? "opacity-50 cursor-not-allowed" : ""}`}
             disabled={!user || loading}
-            title={!user ? "Connect wallet" : "Merge to Pro"}
           >
             {loading ? (
               <span className="inline-flex items-center gap-2">
@@ -409,11 +464,11 @@ export default function Rakit() {
               (fee <b className="text-[var(--text)]">{fmt2(Number(formatUnits(feeP2L, feeDecimals)))}</b> {feeSymbol})
             </span>
           </div>
+
           <button
             onClick={(e) => { e.preventDefault(); onMergeProToLegend(); }}
             className={`mt-3 w-full fin-btn neu-btn !py-2 text-sm transition-transform active:scale-[0.98] ${(!user || loading) ? "opacity-50 cursor-not-allowed" : ""}`}
             disabled={!user || loading}
-            title={!user ? "Connect wallet" : "Merge to Legend"}
           >
             {loading ? (
               <span className="inline-flex items-center gap-2">
