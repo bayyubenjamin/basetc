@@ -345,7 +345,7 @@ export default function Rakit() {
           </div>
         </div>
 
-        <div className="mt-3 grid grid-cols-5 gap-2">
+        <div className="mt-3 grid grid-cols-5 auto-rows-max gap-2">
           {Array.from({ length: Math.max(1, caps.b) }).map((_, i) => (
             <NftSlot key={`b-${i}`} filled={i < Math.min(Number(ownedBasic), caps.b)} tier="basic" />
           ))}
