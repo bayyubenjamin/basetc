@@ -6,8 +6,6 @@ import { base } from "viem/chains";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const fetchCache = "force-no-store";
-export const revalidate = 0;
 
 // ==== ENV ====
 // GameCore contract (must expose epochNow(): uint256)
@@ -48,7 +46,7 @@ function json(body: any, status = 200) {
   });
 }
 
-export async function POST(req: Request) {
+export async function GET(req: Request) {
   try {
     if (!gameCoreAddress) return json({ ok: false, error: "Missing env CONTRACT_GAMECORE" }, 500);
     if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
@@ -122,10 +120,13 @@ export async function POST(req: Request) {
       invalid: number;
       rateLimited: number;
       sampleFids?: number[];
+      // debug fields (when ?debug=1)
       batches?: Array<{
         status: number;
         ok: boolean;
+        // fids tried in this batch (for visibility)
         fids: number[];
+        // the server response as received (truncated)
         raw?: any;
       }>;
     }> = [];
@@ -156,6 +157,7 @@ export async function POST(req: Request) {
           body: JSON.stringify({ notificationId, title, body, targetUrl, tokens }),
         });
 
+        // If non-200, try to capture text (some hosts may not return JSON on error)
         let jr: any;
         if (!resp.ok) {
           const txt = await resp.text().catch(() => "");
@@ -177,6 +179,7 @@ export async function POST(req: Request) {
         rl += rateLimitedTokens.length;
 
         if (debug) {
+          // keep raw (but trim big arrays to avoid huge payloads)
           const trimmed = {
             ...jr,
             successfulTokens: Array.isArray(jr?.successfulTokens)
@@ -197,6 +200,7 @@ export async function POST(req: Request) {
           });
         }
 
+        // 5) Update DB: on success, mark epoch (skip in force mode to keep QA clean)
         if (!force && successfulTokens.length > 0) {
           const fidsOk = chunk
             .filter((c) => successfulTokens.includes(c.token))
@@ -209,6 +213,7 @@ export async function POST(req: Request) {
           }
         }
 
+        // 6) Disable invalid tokens
         if (invalidTokens.length > 0) {
           const fidsBad = chunk
             .filter((c) => invalidTokens.includes(c.token))
