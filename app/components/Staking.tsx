@@ -2,30 +2,16 @@
 
 import { useState, useMemo } from "react";
 import type { FC } from "react";
-import {
-  useAccount,
-  useReadContract,
-  useWriteContract,
-  usePublicClient,
-} from "wagmi";
+import { useAccount, useReadContract, useWriteContract, usePublicClient } from "wagmi";
 import { base } from "viem/chains";
 import { formatEther, parseEther } from "viem";
-import {
-  stakingVaultAddress,
-  stakingVaultABI,
-  baseTcAddress,
-  baseTcABI,
-} from "../lib/web3Config";
+import { stakingVaultAddress, stakingVaultABI, baseTcAddress, baseTcABI } from "../lib/web3Config";
 
 const LOCK_OPTIONS = [
   { label: "7 Days (1.0x)", value: 1 },
   { label: "30 Days (1.2x)", value: 2 },
   { label: "365 Days (1.5x)", value: 3 },
 ];
-
-const MAX_PRO = 5;
-const MAX_LEGEND = 3;
-const BOOST_CAP = 50; // %
 
 const Staking: FC = () => {
   const { address } = useAccount();
@@ -38,14 +24,6 @@ const Staking: FC = () => {
   const [loading, setLoading] = useState(false);
 
   // --- Contract Reads ---
-  const { data: nonces, refetch: refetchNonces } = useReadContract({
-    address: stakingVaultAddress,
-    abi: stakingVaultABI as any,
-    functionName: "nonces",
-    args: [address],
-    query: { enabled: !!address },
-  });
-
   const { data: position, refetch: refetchPosition } = useReadContract({
     address: stakingVaultAddress,
     abi: stakingVaultABI as any,
@@ -78,31 +56,11 @@ const Staking: FC = () => {
     query: { enabled: !!address },
   });
 
-  // --- Read Boost NFTs ---
-  const { data: proCount } = useReadContract({
-    address: stakingVaultAddress,
-    abi: stakingVaultABI as any,
-    functionName: "getUserProCount",
-    args: [address],
-    query: { enabled: !!address },
-  });
-
-  const { data: legendCount } = useReadContract({
-    address: stakingVaultAddress,
-    abi: stakingVaultABI as any,
-    functionName: "getUserLegendCount",
-    args: [address],
-    query: { enabled: !!address },
-  });
-
   // --- Derived Data ---
   const stakedAmount = useMemo(() => {
     if (!position || !(position as any).tranches) return 0;
     const tranches = (position as any).tranches as { amount: bigint }[];
-    return tranches.reduce(
-      (sum, t) => sum + Number(formatEther(t.amount || 0n)),
-      0
-    );
+    return tranches.reduce((sum, t) => sum + Number(formatEther(t.amount || 0n)), 0);
   }, [position]);
 
   const rewards = useMemo(() => {
@@ -114,31 +72,18 @@ const Staking: FC = () => {
     }
   }, [pendingRewards]);
 
-  const boostPercent = useMemo(() => {
-    const pro = Math.min(Number(proCount ?? 0), MAX_PRO);
-    const legend = Math.min(Number(legendCount ?? 0), MAX_LEGEND);
-    const total = pro * 5 + legend * 8;
-    return Math.min(total, BOOST_CAP);
-  }, [proCount, legendCount]);
-
-  const boostedRewards = useMemo(
-    () => rewards * (1 + boostPercent / 100),
-    [rewards, boostPercent]
-  );
-
   // --- Actions ---
-  const handleAction = async (action: "stake" | "unstake" | "claim") => {
+  const handleAction = async (action: "stake" | "unstake") => {
     if (!address) return setStatus("Please connect your wallet.");
     setLoading(true);
     setStatus(`Preparing ${action}...`);
 
     try {
-      let stakeAmount: bigint = 0n;
       if (action === "stake") {
-        stakeAmount = parseEther(amount || "0");
+        const stakeAmount = parseEther(amount || "0");
         if (stakeAmount <= 0n) throw new Error("Amount must be greater than 0.");
-        if (stakeAmount > (baseTcBalance as bigint || 0n))
-          throw new Error("Insufficient balance.");
+        if (stakeAmount > (baseTcBalance as bigint || 0n)) throw new Error("Insufficient balance.");
+
         if ((allowance as bigint || 0n) < stakeAmount) {
           setStatus("Approving $BaseTC...");
           const approveHash = await writeContractAsync({
@@ -149,49 +94,41 @@ const Staking: FC = () => {
             account: address,
             chain: base,
           });
-          await publicClient?.waitForTransactionReceipt({
-            hash: approveHash as `0x${string}`,
-          });
+          await publicClient?.waitForTransactionReceipt({ hash: approveHash as `0x${string}` });
           await refetchAllowance();
           setStatus("Approval successful. Preparing to stake...");
         }
-      }
 
-      let txHash: string;
-      if (action === "stake") {
-        txHash = await writeContractAsync({
+        const txHash = await writeContractAsync({
           address: stakingVaultAddress,
           abi: stakingVaultABI as any,
           functionName: "stake",
-          args: [stakeAmount, lockType],
+          args: [parseEther(amount || "0"), lockType],
           account: address,
           chain: base,
         });
-      } else if (action === "unstake") {
-        txHash = await writeContractAsync({
+        await publicClient?.waitForTransactionReceipt({ hash: txHash as `0x${string}` });
+        setStatus("Stake successful!");
+      }
+
+      if (action === "unstake") {
+        // Unstake all tranches → reward otomatis claim
+        const tranches = (position as any)?.tranches || [];
+        if (tranches.length === 0) throw new Error("No staked tranches found.");
+        const trancheIdx = tranches.map((_, i) => i);
+        const amounts = tranches.map((t: any) => t.amount);
+        const txHash = await writeContractAsync({
           address: stakingVaultAddress,
           abi: stakingVaultABI as any,
           functionName: "unstake",
-          args: [[0], [parseEther(stakedAmount.toString())]],
+          args: [trancheIdx, amounts],
           account: address,
           chain: base,
         });
-      } else {
-        txHash = await writeContractAsync({
-          address: stakingVaultAddress,
-          abi: stakingVaultABI as any,
-          functionName: "claim",
-          args: [],
-          account: address,
-          chain: base,
-        });
+        await publicClient?.waitForTransactionReceipt({ hash: txHash as `0x${string}` });
+        setStatus("Unstake & Claim successful!");
       }
 
-      await publicClient?.waitForTransactionReceipt({
-        hash: txHash as `0x${string}`,
-      });
-
-      setStatus(`${action.charAt(0).toUpperCase() + action.slice(1)} successful!`);
       await Promise.all([refetchPosition(), refetchPending(), refetchBalance()]);
     } catch (e: any) {
       setStatus(e?.shortMessage || e?.message || "An error occurred.");
@@ -204,42 +141,16 @@ const Staking: FC = () => {
   return (
     <div className="max-w-md mx-auto p-4">
       <div className="space-y-6 rounded-lg bg-white p-6 border border-gray-300 shadow-md">
-        <h2 className="text-lg font-bold text-gray-800 text-center">
-          Staking Dashboard
-        </h2>
+        <h2 className="text-lg font-bold text-gray-800 text-center">Staking Dashboard</h2>
 
         <div className="grid grid-cols-2 gap-4 text-center">
           <div>
             <p className="text-sm text-gray-500">Staked Amount</p>
-            <p className="text-xl font-bold text-gray-900">
-              {stakedAmount.toLocaleString()}
-            </p>
+            <p className="text-xl font-bold text-gray-900">{stakedAmount.toLocaleString()}</p>
           </div>
           <div>
             <p className="text-sm text-gray-500">Pending Rewards</p>
             <p className="text-xl font-bold text-green-600">{rewards.toFixed(6)}</p>
-            <p className="text-xs text-gray-400">
-              Boosted: {boostedRewards.toFixed(6)}
-            </p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-3 gap-4 text-center mt-2">
-          <div>
-            <p className="text-sm text-gray-500">Pro NFT</p>
-            <p className="text-lg font-bold text-gray-900">
-              {Number(proCount ?? 0)}
-            </p>
-          </div>
-          <div>
-            <p className="text-sm text-gray-500">Legend NFT</p>
-            <p className="text-lg font-bold text-gray-900">
-              {Number(legendCount ?? 0)}
-            </p>
-          </div>
-          <div>
-            <p className="text-sm text-gray-500">Boost</p>
-            <p className="text-lg font-bold text-green-600">{boostPercent}%</p>
           </div>
         </div>
 
@@ -262,9 +173,7 @@ const Staking: FC = () => {
                 key={opt.value}
                 onClick={() => setLockType(opt.value as 1 | 2 | 3)}
                 className={`flex-1 rounded px-2 py-1 text-xs font-medium ${
-                  lockType === opt.value
-                    ? "bg-blue-600 text-white"
-                    : "bg-gray-200 text-gray-800 hover:bg-gray-300"
+                  lockType === opt.value ? "bg-blue-600 text-white" : "bg-gray-200 text-gray-800 hover:bg-gray-300"
                 }`}
               >
                 {opt.label}
@@ -273,7 +182,7 @@ const Staking: FC = () => {
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-2 pt-2">
+        <div className="grid grid-cols-2 gap-2 pt-2">
           <button
             onClick={() => handleAction("stake")}
             disabled={loading}
@@ -282,24 +191,15 @@ const Staking: FC = () => {
             {loading ? "..." : "Stake"}
           </button>
           <button
-            onClick={() => handleAction("claim")}
-            disabled={loading || rewards <= 0}
-            className="rounded-md bg-yellow-500 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
-          >
-            {loading ? "..." : "Claim"}
-          </button>
-          <button
             onClick={() => handleAction("unstake")}
             disabled={loading || stakedAmount <= 0}
             className="rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
           >
-            {loading ? "..." : "Unstake"}
+            {loading ? "..." : "Unstake & Claim"}
           </button>
         </div>
 
-        {status && (
-          <p className="text-center text-xs text-gray-500 pt-2">{status}</p>
-        )}
+        {status && <p className="text-center text-xs text-gray-500 pt-2">{status}</p>}
       </div>
     </div>
   );
