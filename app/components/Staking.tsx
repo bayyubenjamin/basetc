@@ -13,6 +13,10 @@ const LOCK_OPTIONS = [
   { label: "365 Days (1.5x)", value: 3 },
 ];
 
+const MAX_PRO = 5;
+const MAX_LEGEND = 3;
+const BOOST_CAP = 50; // %
+
 const Staking: FC = () => {
   const { address } = useAccount();
   const publicClient = usePublicClient();
@@ -64,6 +68,23 @@ const Staking: FC = () => {
     query: { enabled: !!address },
   });
 
+  // --- Read Boost NFTs ---
+  const { data: proCount } = useReadContract({
+    address: stakingVaultAddress,
+    abi: stakingVaultABI as any,
+    functionName: "getUserProCount",
+    args: [address],
+    query: { enabled: !!address },
+  });
+
+  const { data: legendCount } = useReadContract({
+    address: stakingVaultAddress,
+    abi: stakingVaultABI as any,
+    functionName: "getUserLegendCount",
+    args: [address],
+    query: { enabled: !!address },
+  });
+
   // --- Derived Data ---
   const stakedAmount = useMemo(() => {
     if (!position || !(position as any).tranches) return 0;
@@ -79,6 +100,15 @@ const Staking: FC = () => {
       return 0;
     }
   }, [pendingRewards]);
+
+  const boostPercent = useMemo(() => {
+    const pro = Math.min(Number(proCount || 0), MAX_PRO);
+    const legend = Math.min(Number(legendCount || 0), MAX_LEGEND);
+    const total = pro * 5 + legend * 8;
+    return Math.min(total, BOOST_CAP);
+  }, [proCount, legendCount]);
+
+  const boostedRewards = useMemo(() => rewards * (1 + boostPercent / 100), [rewards, boostPercent]);
 
   // --- Actions ---
   const handleAction = async (action: "stake" | "harvest" | "unstake") => {
@@ -175,10 +205,26 @@ const Staking: FC = () => {
           <div>
             <p className="text-sm text-gray-500">Pending Rewards</p>
             <p className="text-xl font-bold text-green-600">{rewards.toFixed(6)}</p>
+            <p className="text-xs text-gray-400">Boosted: {boostedRewards.toFixed(6)}</p>
           </div>
         </div>
 
-        <div className="space-y-2">
+        <div className="grid grid-cols-3 gap-4 text-center mt-2">
+          <div>
+            <p className="text-sm text-gray-500">Pro NFT</p>
+            <p className="text-lg font-bold text-gray-900">{proCount || 0}</p>
+          </div>
+          <div>
+            <p className="text-sm text-gray-500">Legend NFT</p>
+            <p className="text-lg font-bold text-gray-900">{legendCount || 0}</p>
+          </div>
+          <div>
+            <p className="text-sm text-gray-500">Boost</p>
+            <p className="text-lg font-bold text-green-600">{boostPercent}%</p>
+          </div>
+        </div>
+
+        <div className="space-y-2 mt-4">
           <label className="text-xs text-gray-500">Amount to Stake</label>
           <input
             type="number"
@@ -189,7 +235,7 @@ const Staking: FC = () => {
           />
         </div>
 
-        <div className="space-y-2">
+        <div className="space-y-2 mt-2">
           <label className="text-xs text-gray-500">Lock Duration</label>
           <div className="flex gap-2">
             {LOCK_OPTIONS.map((opt) => (
