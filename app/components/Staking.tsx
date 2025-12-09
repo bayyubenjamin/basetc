@@ -6,10 +6,12 @@ import { base } from "viem/chains";
 import { formatEther, parseEther } from "viem";
 import { stakingVaultAddress, stakingVaultABI, baseTcAddress, baseTcABI, rigNftABI } from "../lib/web3Config";
 
+// PERBAIKAN 1: Menyesuaikan opsi lock dengan LockClass enum di StakingVault.sol
+// LockClass { D30, D90, D365 } -> Index 0, 1, 2
 const LOCK_OPTIONS = [
-  { label: "7 Days (1.0x)", value: 1 },
-  { label: "30 Days (1.2x)", value: 2 },
-  { label: "365 Days (1.5x)", value: 3 },
+  { label: "30 Days (1.0x)", value: 0 }, // LockClass.D30
+  { label: "90 Days (1.2x)", value: 1 }, // LockClass.D90
+  { label: "365 Days (1.5x)", value: 2 }, // LockClass.D365
 ];
 
 const MAX_PRO = 5;
@@ -22,7 +24,8 @@ const Staking: FC = () => {
   const { writeContractAsync } = useWriteContract();
 
   const [amount, setAmount] = useState("");
-  const [lockType, setLockType] = useState<1 | 2 | 3>(1);
+  // PERBAIKAN 2: Mengubah tipe state lockType agar sesuai dengan indeks enum (0, 1, 2)
+  const [lockType, setLockType] = useState<0 | 1 | 2>(0); 
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -79,15 +82,19 @@ const Staking: FC = () => {
       });
       setAllowance(BigInt(allowRaw as bigint | number | string));
 
-      // Nonce
-      const nRaw = await publicClient.readContract({
-        address: stakingVaultAddress,
-        abi: stakingVaultABI,
-        functionName: "nonces",
-        args: [address],
-        authorizationList: [],
-      });
-      setNonce(BigInt(nRaw as bigint | number | string));
+      // Nonce - PERBAIKAN 3: Menghapus panggilan readContract untuk 'nonces'.
+      // Fungsi ini tidak ada di StakingVault.sol, dan memicu error "Failed to fetch data".
+      // Jika Anda membutuhkan nonce untuk ERC20 permit, Anda harus memanggilnya pada kontrak BaseTC.
+      // Jika tidak digunakan, lebih baik dihapus agar fetchData tidak gagal.
+      // const nRaw = await publicClient.readContract({
+      //   address: stakingVaultAddress,
+      //   abi: stakingVaultABI,
+      //   functionName: "nonces",
+      //   args: [address],
+      //   authorizationList: [],
+      // });
+      // setNonce(BigInt(nRaw as bigint | number | string));
+      // NOTE: Saya membiarkan state `nonce` tetap ada di atas untuk mencegah error use.
 
       // --- Fetch Pro/Legend count from RigNFT ---
       const rigAddr = (await publicClient.readContract({
@@ -132,6 +139,7 @@ const Staking: FC = () => {
       setLegendCount(Number(legendBalRaw as bigint | number));
     } catch (e: any) {
       console.error("Fetch error", e);
+      // Status ini sekarang hanya muncul jika ada error selain 'nonces' yang dihapus.
       setStatus("Failed to fetch data.");
     }
   };
@@ -169,6 +177,8 @@ const Staking: FC = () => {
     try {
       const stakeAmount = parseEther(amount || "0");
       if (action === "stake" && stakeAmount <= 0n) throw new Error("Amount must be greater than 0.");
+      
+      // PERBAIKAN 4: Cek saldo BaseTC akan berfungsi setelah 'nonces' dihapus
       if (action === "stake" && stakeAmount > baseTcBalance) throw new Error("Insufficient balance.");
 
       if (action === "stake" && allowance < stakeAmount) {
@@ -191,7 +201,8 @@ const Staking: FC = () => {
 
       if (action === "stake") {
         functionName = "stake";
-        args = [stakeAmount, lockType];
+        // lockType sekarang adalah 0, 1, atau 2, yang merupakan indeks enum yang valid.
+        args = [stakeAmount, lockType]; 
       } else {
         // unstake automatically claims reward
         functionName = "unstake";
@@ -215,6 +226,7 @@ const Staking: FC = () => {
       setStatus(`${action.charAt(0).toUpperCase() + action.slice(1)} successful!`);
       await fetchData();
     } catch (e: any) {
+      // Pastikan pesan error yang jelas jika transaksi atau validasi gagal
       setStatus(e?.shortMessage || e?.message || "An error occurred.");
     } finally {
       setLoading(false);
@@ -271,7 +283,8 @@ const Staking: FC = () => {
             {LOCK_OPTIONS.map((opt) => (
               <button
                 key={opt.value}
-                onClick={() => setLockType(opt.value as 1 | 2 | 3)}
+                // Menggunakan tipe 0 | 1 | 2 yang baru.
+                onClick={() => setLockType(opt.value as 0 | 1 | 2)} 
                 className={`flex-1 rounded px-2 py-1 text-xs font-medium ${
                   lockType === opt.value ? "bg-blue-600 text-white" : "bg-gray-200 text-gray-800 hover:bg-gray-300"
                 }`}
