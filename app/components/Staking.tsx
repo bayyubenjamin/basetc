@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useMemo, useEffect, FC } from "react";
+import { useState, useMemo, useEffect } from "react";
+import type { FC } from "react";
 import { useAccount, useWriteContract, usePublicClient } from "wagmi";
 import { base } from "viem/chains";
 import { formatEther, parseEther } from "viem";
@@ -40,7 +41,8 @@ const Staking: FC = () => {
     if (!address || !publicClient) return;
 
     try {
-      const pos = await publicClient.readContract({
+      // Get user position
+      const pos: any = await publicClient.readContract({
         address: stakingVaultAddress,
         abi: stakingVaultABI,
         functionName: "getUser",
@@ -49,73 +51,79 @@ const Staking: FC = () => {
       });
       setPosition(pos);
 
-      const reward = await publicClient.readContract({
+      // Pending rewards
+      const reward: bigint = await publicClient.readContract({
         address: stakingVaultAddress,
         abi: stakingVaultABI,
         functionName: "pendingReward",
         args: [address],
       });
-      setPendingRewards(reward as bigint);
+      setPendingRewards(reward);
 
-      const bal = await publicClient.readContract({
+      // BaseTC balance
+      const bal: bigint = await publicClient.readContract({
         address: baseTcAddress,
         abi: baseTcABI,
         functionName: "balanceOf",
         args: [address],
       });
-      setBaseTcBalance(bal as bigint);
+      setBaseTcBalance(bal);
 
-      const allow = await publicClient.readContract({
+      // Allowance
+      const allow: bigint = await publicClient.readContract({
         address: baseTcAddress,
         abi: baseTcABI,
         functionName: "allowance",
         args: [address, stakingVaultAddress],
       });
-      setAllowance(allow as bigint);
+      setAllowance(allow);
 
-      const n = await publicClient.readContract({
+      // Nonce
+      const n: bigint = await publicClient.readContract({
         address: stakingVaultAddress,
         abi: stakingVaultABI,
         functionName: "nonces",
         args: [address],
       });
-      setNonce(n as bigint);
+      setNonce(n);
 
-      // --- Fetch Pro/Legend count from RigNFT ---
-      const rigAddr = (await publicClient.readContract({
+      // RigNFT address
+      const rigAddr: `0x${string}` = await publicClient.readContract({
         address: stakingVaultAddress,
         abi: stakingVaultABI,
         functionName: "rigNft",
-      })) as `0x${string}`;
+      });
 
-      const proId = (await publicClient.readContract({
+      // Pro/Legend token IDs
+      const proId: bigint = await publicClient.readContract({
         address: stakingVaultAddress,
         abi: stakingVaultABI,
         functionName: "proId",
-      })) as bigint;
+      });
 
-      const legendId = (await publicClient.readContract({
+      const legendId: bigint = await publicClient.readContract({
         address: stakingVaultAddress,
         abi: stakingVaultABI,
         functionName: "legendId",
-      })) as bigint;
+      });
 
-      const proBal = await publicClient.readContract({
+      // NFT balances
+      const proBal: bigint = await publicClient.readContract({
         address: rigAddr,
         abi: rigNftABI,
         functionName: "balanceOf",
         args: [address, proId],
       });
 
-      const legendBal = await publicClient.readContract({
+      const legendBal: bigint = await publicClient.readContract({
         address: rigAddr,
         abi: rigNftABI,
         functionName: "balanceOf",
         args: [address, legendId],
       });
 
-      setProCount(Number(proBal as bigint));
-      setLegendCount(Number(legendBal as bigint));
+      setProCount(Number(proBal));
+      setLegendCount(Number(legendBal));
     } catch (e: any) {
       console.error("Fetch error", e);
       setStatus("Failed to fetch data.");
@@ -156,6 +164,7 @@ const Staking: FC = () => {
       if (action === "stake" && stakeAmount <= 0n) throw new Error("Amount must be greater than 0.");
       if (action === "stake" && stakeAmount > baseTcBalance) throw new Error("Insufficient balance.");
 
+      // Approve if needed
       if (action === "stake" && allowance < stakeAmount) {
         setStatus("Approving $BaseTC...");
         const approveHash = await writeContractAsync({
@@ -170,7 +179,7 @@ const Staking: FC = () => {
         setStatus("Approval successful. Preparing to stake...");
       }
 
-      // --- Prepare args ---
+      // Prepare args
       let functionName: string;
       let args: any[];
 
@@ -178,6 +187,7 @@ const Staking: FC = () => {
         functionName = "stake";
         args = [stakeAmount, lockType];
       } else {
+        // unstake automatically claims reward
         functionName = "unstake";
         const trancheIdx = position.tranches.map((_: any, idx: number) => idx);
         const amounts = position.tranches.map((t: any) => t.amount);
@@ -205,6 +215,7 @@ const Staking: FC = () => {
     }
   };
 
+  // --- UI ---
   return (
     <div className="max-w-md mx-auto p-4">
       <div className="space-y-6 rounded-lg bg-white p-6 border border-gray-300 shadow-md">
@@ -225,11 +236,11 @@ const Staking: FC = () => {
         <div className="grid grid-cols-3 gap-4 text-center mt-2">
           <div>
             <p className="text-sm text-gray-500">Pro NFT</p>
-            <p className="text-lg font-bold text-gray-900">{proCount ?? 0}</p>
+            <p className="text-lg font-bold text-gray-900">{proCount}</p>
           </div>
           <div>
             <p className="text-sm text-gray-500">Legend NFT</p>
-            <p className="text-lg font-bold text-gray-900">{legendCount ?? 0}</p>
+            <p className="text-lg font-bold text-gray-900">{legendCount}</p>
           </div>
           <div>
             <p className="text-sm text-gray-500">Boost</p>
