@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
-import type { FC } from "react";
+import { useState, useMemo, useEffect, FC } from "react";
 import { useAccount, useWriteContract, usePublicClient } from "wagmi";
 import { base } from "viem/chains";
 import { formatEther, parseEther } from "viem";
@@ -33,8 +32,8 @@ const Staking: FC = () => {
   const [allowance, setAllowance] = useState<bigint>(0n);
   const [nonce, setNonce] = useState<bigint>(0n);
 
-  const [proCount, setProCount] = useState(0);
-  const [legendCount, setLegendCount] = useState(0);
+  const [proCount, setProCount] = useState<number>(0);
+  const [legendCount, setLegendCount] = useState<number>(0);
 
   // --- Fetch contract data ---
   const fetchData = async () => {
@@ -83,40 +82,40 @@ const Staking: FC = () => {
       setNonce(n as bigint);
 
       // --- Fetch Pro/Legend count from RigNFT ---
-      const rigAddr = await publicClient.readContract({
+      const rigAddr = (await publicClient.readContract({
         address: stakingVaultAddress,
         abi: stakingVaultABI,
         functionName: "rigNft",
-      });
+      })) as `0x${string}`;
 
-      const proId = await publicClient.readContract({
+      const proId = (await publicClient.readContract({
         address: stakingVaultAddress,
         abi: stakingVaultABI,
         functionName: "proId",
-      });
+      })) as bigint;
 
-      const legendId = await publicClient.readContract({
+      const legendId = (await publicClient.readContract({
         address: stakingVaultAddress,
         abi: stakingVaultABI,
         functionName: "legendId",
-      });
+      })) as bigint;
 
       const proBal = await publicClient.readContract({
-        address: rigAddr as `0x${string}`,
+        address: rigAddr,
         abi: rigNftABI,
         functionName: "balanceOf",
         args: [address, proId],
       });
 
       const legendBal = await publicClient.readContract({
-        address: rigAddr as `0x${string}`,
+        address: rigAddr,
         abi: rigNftABI,
         functionName: "balanceOf",
         args: [address, legendId],
       });
 
-      setProCount(Number(proBal));
-      setLegendCount(Number(legendBal));
+      setProCount(Number(proBal as bigint));
+      setLegendCount(Number(legendBal as bigint));
     } catch (e: any) {
       console.error("Fetch error", e);
       setStatus("Failed to fetch data.");
@@ -134,7 +133,6 @@ const Staking: FC = () => {
   }, [position]);
 
   const rewards = useMemo(() => {
-    if (!pendingRewards) return 0;
     return Number(formatEther(pendingRewards));
   }, [pendingRewards]);
 
@@ -172,18 +170,14 @@ const Staking: FC = () => {
         setStatus("Approval successful. Preparing to stake...");
       }
 
-      const currentNonce = nonce;
-      const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600);
-
-      // --- Sign & Send ---
-      let functionName: any;
+      // --- Prepare args ---
+      let functionName: string;
       let args: any[];
 
       if (action === "stake") {
         functionName = "stake";
         args = [stakeAmount, lockType];
       } else {
-        // unstake automatically claims reward
         functionName = "unstake";
         const trancheIdx = position.tranches.map((_: any, idx: number) => idx);
         const amounts = position.tranches.map((t: any) => t.amount);
@@ -211,7 +205,6 @@ const Staking: FC = () => {
     }
   };
 
-  // --- UI ---
   return (
     <div className="max-w-md mx-auto p-4">
       <div className="space-y-6 rounded-lg bg-white p-6 border border-gray-300 shadow-md">
@@ -232,11 +225,11 @@ const Staking: FC = () => {
         <div className="grid grid-cols-3 gap-4 text-center mt-2">
           <div>
             <p className="text-sm text-gray-500">Pro NFT</p>
-            <p className="text-lg font-bold text-gray-900">{proCount}</p>
+            <p className="text-lg font-bold text-gray-900">{proCount ?? 0}</p>
           </div>
           <div>
             <p className="text-sm text-gray-500">Legend NFT</p>
-            <p className="text-lg font-bold text-gray-900">{legendCount}</p>
+            <p className="text-lg font-bold text-gray-900">{legendCount ?? 0}</p>
           </div>
           <div>
             <p className="text-sm text-gray-500">Boost</p>
