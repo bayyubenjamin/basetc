@@ -37,7 +37,7 @@ const Staking: FC = () => {
   const [proCount, setProCount] = useState(0);
   const [legendCount, setLegendCount] = useState(0);
 
-  // --- 1. FETCH DATA (DIPERBAIKI) ---
+  // --- 1. FETCH DATA ---
   const fetchData = async () => {
     if (!address || !publicClient) return;
 
@@ -48,6 +48,7 @@ const Staking: FC = () => {
         abi: stakingVaultABI,
         functionName: "getUser",
         args: [address],
+        authorizationList: [], // Ditambahkan kembali untuk fix build error
       });
       setPosition(pos);
 
@@ -57,6 +58,7 @@ const Staking: FC = () => {
         abi: stakingVaultABI,
         functionName: "pendingReward",
         args: [address],
+        authorizationList: [], 
       });
       setPendingRewards(BigInt(rewardRaw as bigint | number | string));
 
@@ -66,6 +68,7 @@ const Staking: FC = () => {
         abi: baseTcABI,
         functionName: "balanceOf",
         args: [address],
+        authorizationList: [],
       });
       setBaseTcBalance(BigInt(balRaw as bigint | number | string));
 
@@ -75,6 +78,7 @@ const Staking: FC = () => {
         abi: baseTcABI,
         functionName: "allowance",
         args: [address, stakingVaultAddress],
+        authorizationList: [],
       });
       setAllowance(BigInt(allowRaw as bigint | number | string));
 
@@ -84,12 +88,14 @@ const Staking: FC = () => {
         address: stakingVaultAddress,
         abi: stakingVaultABI,
         functionName: "rigNft",
+        authorizationList: [],
       })) as `0x${string}`;
 
       const proIdRaw = await publicClient.readContract({
         address: stakingVaultAddress,
         abi: stakingVaultABI,
         functionName: "proId",
+        authorizationList: [],
       });
       const proId = BigInt(proIdRaw as bigint | number | string);
 
@@ -97,6 +103,7 @@ const Staking: FC = () => {
         address: stakingVaultAddress,
         abi: stakingVaultABI,
         functionName: "legendId",
+        authorizationList: [],
       });
       const legendId = BigInt(legendIdRaw as bigint | number | string);
 
@@ -109,6 +116,7 @@ const Staking: FC = () => {
             abi: rigNftABI,
             functionName: "balanceOf",
             args: [address, proId],
+            authorizationList: [],
           });
           setProCount(Number(proBalRaw));
 
@@ -117,6 +125,7 @@ const Staking: FC = () => {
             abi: rigNftABI,
             functionName: "balanceOf",
             args: [address, legendId],
+            authorizationList: [],
           });
           setLegendCount(Number(legendBalRaw));
         } catch (err) {
