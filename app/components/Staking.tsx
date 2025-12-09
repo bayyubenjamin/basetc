@@ -176,7 +176,7 @@ const Staking: FC = () => {
         });
       }
 
-      await publicClient?.waitForTransactionReceipt({ hash: txHash });
+      await publicClient?.waitForTransactionReceipt({ hash: `${txHash}` as `0x${string}` });
       setStatus(`${action.charAt(0).toUpperCase() + action.slice(1)} successful!`);
       await Promise.all([refetchPosition(), refetchPending(), refetchBalance()]);
     } catch (e: any) {
