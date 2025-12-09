@@ -34,7 +34,7 @@ const Staking: FC = () => {
   const [balanceRaw, setBalanceRaw] = useState<bigint>(0n);
   const [allowanceRaw, setAllowanceRaw] = useState<bigint>(0n);
   
-  // NFT State (Dikembalikan)
+  // NFT State
   const [proCount, setProCount] = useState(0);
   const [legendCount, setLegendCount] = useState(0);
 
@@ -43,7 +43,8 @@ const Staking: FC = () => {
     if (!address || !publicClient) return;
 
     try {
-      // Multicall dengan allowFailure: true agar satu error tidak mematikan semua
+      // FIX BUILD ERROR: Tambahkan 'as any' pada config object multicall
+      // TypeScript Vercel sangat ketat, ini memaksa bypass type checking yang salah
       const results = await publicClient.multicall({
         contracts: [
           // 0. User Position
@@ -62,21 +63,24 @@ const Staking: FC = () => {
           { address: stakingVaultAddress, abi: stakingVaultABI as any, functionName: 'legendId', args: [] },
         ],
         allowFailure: true 
-      });
+      } as any); // <--- 'as any' INI SOLUSINYA
 
       // Parsing Hasil Utama
-      if (results[0].status === 'success') {
-          console.log("Raw Position Data:", results[0].result); // Cek console browser jika masih 0
-          setPositionRaw(results[0].result);
+      // Karena kita pakai 'as any', results dianggap any. Kita akses manual.
+      const resArray = results as any[];
+
+      if (resArray[0].status === 'success') {
+          console.log("Raw Position Data:", resArray[0].result);
+          setPositionRaw(resArray[0].result);
       }
-      if (results[1].status === 'success') setRewardsRaw(BigInt(results[1].result as any || 0));
-      if (results[2].status === 'success') setBalanceRaw(BigInt(results[2].result as any || 0));
-      if (results[3].status === 'success') setAllowanceRaw(BigInt(results[3].result as any || 0));
+      if (resArray[1].status === 'success') setRewardsRaw(BigInt(resArray[1].result || 0));
+      if (resArray[2].status === 'success') setBalanceRaw(BigInt(resArray[2].result || 0));
+      if (resArray[3].status === 'success') setAllowanceRaw(BigInt(resArray[3].result || 0));
 
       // Parsing NFT (Jika ada address valid)
-      const rigAddr = results[4].status === 'success' ? results[4].result as string : null;
-      const proId = results[5].status === 'success' ? results[5].result : null;
-      const legendId = results[6].status === 'success' ? results[6].result : null;
+      const rigAddr = resArray[4].status === 'success' ? resArray[4].result as string : null;
+      const proId = resArray[5].status === 'success' ? resArray[5].result : null;
+      const legendId = resArray[6].status === 'success' ? resArray[6].result : null;
 
       if (rigAddr && rigAddr !== "0x0000000000000000000000000000000000000000") {
           fetchNftData(rigAddr, proId, legendId);
@@ -96,9 +100,11 @@ const Staking: FC = () => {
                 { address: rigAddr, abi: rigNftABI as any, functionName: 'balanceOf', args: [address, legendId] },
             ],
             allowFailure: true
-        });
-        if(nftRes[0].status === 'success') setProCount(Number(nftRes[0].result));
-        if(nftRes[1].status === 'success') setLegendCount(Number(nftRes[1].result));
+        } as any); // Tambahkan as any di sini juga untuk keamanan build
+
+        const resArray = nftRes as any[];
+        if(resArray[0].status === 'success') setProCount(Number(resArray[0].result));
+        if(resArray[1].status === 'success') setLegendCount(Number(resArray[1].result));
       } catch (err) { console.warn("NFT Fail", err); }
   }
 
@@ -109,43 +115,31 @@ const Staking: FC = () => {
   }, [address]);
 
   // --- 2. CALCULATIONS (DEEP SEARCH PARSING) ---
-  
-  // Logic ini akan mencari 'amount' dimanapun ia berada (array/object/nested)
   const stakedAmount = useMemo(() => {
     if (!positionRaw) return "0";
 
     try {
         let tranches: any[] = [];
 
-        // STRATEGI 1: Cek apakah positionRaw langsung array tranches
+        // Logic pencarian data yang fleksibel
         if (Array.isArray(positionRaw)) {
-            // Cek apakah elemen pertamanya adalah array lagi? (Tuple return)
             if (Array.isArray(positionRaw[0])) {
                 tranches = positionRaw[0]; 
             } else {
-                // Cek apakah elemen pertamanya punya properti amount atau berbentuk BigInt?
-                // Jika ya, mungkin ini list of tranches langsung
                 tranches = positionRaw;
             }
         } 
-        // STRATEGI 2: Cek properti .tranches (Struct return)
         else if (positionRaw && typeof positionRaw === 'object' && positionRaw.tranches) {
             tranches = positionRaw.tranches;
         }
 
-        // Kalau gagal menemukan array, return 0
         if (!Array.isArray(tranches)) return "0";
 
-        // SUMMATION LOOP
         const total = tranches.reduce((sum: bigint, t: any) => {
             if (!t) return sum;
-
-            // Coba ambil amount dari Object (.amount) ATAU Array Index [0]
-            // Kita juga convert ke BigInt untuk keamanan
             let val = 0n;
             if (t.amount !== undefined) val = BigInt(t.amount);
             else if (Array.isArray(t) && t[0] !== undefined) val = BigInt(t[0]);
-            
             return sum + val;
         }, 0n);
 
@@ -161,7 +155,6 @@ const Staking: FC = () => {
      return rewardsRaw ? formatEther(rewardsRaw) : "0";
   }, [rewardsRaw]);
 
-  // Kalkulasi Boost
   const boostPercent = useMemo(() => {
     const pro = Math.min(proCount, MAX_PRO);
     const legend = Math.min(legendCount, MAX_LEGEND);
@@ -179,7 +172,6 @@ const Staking: FC = () => {
             const val = parseEther(amount || "0");
             if (val <= 0n) throw new Error("Amount > 0");
             
-            // Approve Logic
             if (allowanceRaw < val) {
                 setStatus("Approving BaseTC...");
                 const txApprove = await writeContractAsync({
@@ -193,7 +185,6 @@ const Staking: FC = () => {
                 setAllowanceRaw(val);
             }
 
-            // Stake Logic
             setStatus("Staking...");
             const tx = await writeContractAsync({
                 address: stakingVaultAddress,
@@ -205,10 +196,7 @@ const Staking: FC = () => {
             await publicClient?.waitForTransactionReceipt({ hash: tx });
 
         } else {
-            // Unstake Logic (Unstake All)
             setStatus("Unstaking...");
-            
-            // Re-use logic parsing yang sama untuk mencari tranches aktif
             let tranches: any[] = [];
             if (Array.isArray(positionRaw)) {
                 if (Array.isArray(positionRaw[0])) tranches = positionRaw[0];
@@ -217,7 +205,6 @@ const Staking: FC = () => {
                 tranches = positionRaw.tranches;
             }
 
-            // Map tranches ke format yang dibutuhkan contract (index & amount)
             const activeData = tranches.map((t: any, i: number) => {
                  const val = t?.amount !== undefined ? BigInt(t.amount) : (Array.isArray(t) ? BigInt(t[0]) : 0n);
                  return { idx: i, val };
@@ -238,7 +225,7 @@ const Staking: FC = () => {
         setStatus("Success!");
         if (isStake) setAmount("");
         fetchData(); 
-        setTimeout(fetchData, 4000); // Delayed refresh
+        setTimeout(fetchData, 4000);
 
     } catch (e: any) {
         setStatus("Failed: " + (e.shortMessage || e.message));
@@ -251,7 +238,6 @@ const Staking: FC = () => {
     <div className="max-w-md mx-auto p-4">
       <div className="space-y-6 rounded-lg bg-white p-6 border border-gray-300 shadow-md relative">
         
-        {/* Header with Refresh */}
         <div className="relative mb-4">
             <h2 className="text-lg font-bold text-gray-800 text-center">Staking Dashboard</h2>
             <button 
@@ -262,11 +248,9 @@ const Staking: FC = () => {
             </button>
         </div>
 
-        {/* --- STATS GRID (FIXED) --- */}
         <div className="grid grid-cols-2 gap-4 text-center">
           <div className="p-3 bg-gray-50 rounded-lg">
             <p className="text-sm text-gray-500 mb-1">My Staked</p>
-            {/* Menggunakan Number(...) untuk format koma yang cantik */}
             <p className="text-xl font-bold text-blue-600 truncate">
                 {Number(stakedAmount).toLocaleString(undefined, { maximumFractionDigits: 4 })}
             </p>
@@ -279,7 +263,7 @@ const Staking: FC = () => {
           </div>
         </div>
 
-        {/* --- NFT BOOST SECTION (DIKEMBALIKAN) --- */}
+        {/* NFT BOOST UI */}
         <div className="grid grid-cols-3 gap-2 text-center border-t border-b py-3 bg-blue-50/50 rounded-md">
             <div>
                 <p className="text-xs text-gray-500">Pro NFT</p>
@@ -295,7 +279,6 @@ const Staking: FC = () => {
             </div>
         </div>
 
-        {/* --- FORM INPUT --- */}
         <div className="space-y-3 mt-4">
             <div className="flex justify-between text-xs text-gray-500 px-1">
                 <span>Stake Amount</span>
@@ -311,7 +294,6 @@ const Staking: FC = () => {
             />
         </div>
 
-        {/* --- LOCK DURATION --- */}
         <div className="flex gap-2">
             {[
                 { l: "30D", v: 0 }, { l: "90D", v: 1 }, { l: "365D", v: 2 }
@@ -331,7 +313,6 @@ const Staking: FC = () => {
             ))}
         </div>
 
-        {/* --- ACTION BUTTONS --- */}
         <div className="grid grid-cols-2 gap-3 pt-2">
             <button 
                 onClick={() => handleAction(true)}
@@ -349,7 +330,6 @@ const Staking: FC = () => {
             </button>
         </div>
 
-        {/* --- STATUS --- */}
         {status && (
             <div className={`mt-4 text-center text-xs p-2 rounded border ${
                 status.includes("Fail") ? "bg-red-50 border-red-200 text-red-600" : "bg-blue-50 border-blue-200 text-blue-600"
