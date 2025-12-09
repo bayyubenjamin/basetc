@@ -43,11 +43,10 @@ const Staking: FC = () => {
     if (!address || !publicClient) return;
 
     try {
-      // FIX BUILD ERROR: Tambahkan 'as any' pada config object multicall
-      // TypeScript Vercel sangat ketat, ini memaksa bypass type checking yang salah
+      // FORCE CAST 'as any' pada config untuk lolos Vercel Build & TS Strict Check
       const results = await publicClient.multicall({
         contracts: [
-          // 0. User Position
+          // 0. User Position -> Returns [baseWeight, effectiveWeight, lastAction, unclaimed, tranches]
           { address: stakingVaultAddress, abi: stakingVaultABI as any, functionName: 'getUser', args: [address] },
           // 1. Pending Reward
           { address: stakingVaultAddress, abi: stakingVaultABI as any, functionName: 'pendingReward', args: [address] },
@@ -63,21 +62,22 @@ const Staking: FC = () => {
           { address: stakingVaultAddress, abi: stakingVaultABI as any, functionName: 'legendId', args: [] },
         ],
         allowFailure: true 
-      } as any); // <--- 'as any' INI SOLUSINYA
+      } as any);
 
-      // Parsing Hasil Utama
-      // Karena kita pakai 'as any', results dianggap any. Kita akses manual.
       const resArray = results as any[];
 
+      // DEBUG: Lihat struktur getUser di console browser (F12)
       if (resArray[0].status === 'success') {
-          console.log("Raw Position Data:", resArray[0].result);
+          console.log("DEBUG: Full getUser Result:", resArray[0].result);
+          // Kita simpan RAW result yang berupa Array [int, int, int, int, Array(tranches)]
           setPositionRaw(resArray[0].result);
       }
+      
       if (resArray[1].status === 'success') setRewardsRaw(BigInt(resArray[1].result || 0));
       if (resArray[2].status === 'success') setBalanceRaw(BigInt(resArray[2].result || 0));
       if (resArray[3].status === 'success') setAllowanceRaw(BigInt(resArray[3].result || 0));
 
-      // Parsing NFT (Jika ada address valid)
+      // Parsing NFT Data
       const rigAddr = resArray[4].status === 'success' ? resArray[4].result as string : null;
       const proId = resArray[5].status === 'success' ? resArray[5].result : null;
       const legendId = resArray[6].status === 'success' ? resArray[6].result : null;
@@ -100,7 +100,7 @@ const Staking: FC = () => {
                 { address: rigAddr, abi: rigNftABI as any, functionName: 'balanceOf', args: [address, legendId] },
             ],
             allowFailure: true
-        } as any); // Tambahkan as any di sini juga untuk keamanan build
+        } as any);
 
         const resArray = nftRes as any[];
         if(resArray[0].status === 'success') setProCount(Number(resArray[0].result));
@@ -110,36 +110,42 @@ const Staking: FC = () => {
 
   useEffect(() => {
     fetchData();
-    const interval = setInterval(fetchData, 15000);
+    const interval = setInterval(fetchData, 10000);
     return () => clearInterval(interval);
   }, [address]);
 
-  // --- 2. CALCULATIONS (DEEP SEARCH PARSING) ---
+  // --- 2. CALCULATIONS (FIXED INDEX 4 TARGETING) ---
   const stakedAmount = useMemo(() => {
     if (!positionRaw) return "0";
 
     try {
-        let tranches: any[] = [];
+        // PERBAIKAN UTAMA DISINI BERDASARKAN ABI:
+        // getUser returns: [baseWeight, effectiveWeight, lastAction, unclaimed, TRANCHES]
+        // TRANCHES ada di index ke-4 (array dimulai dari 0)
+        
+        // 1. Pastikan positionRaw adalah array (Tuple result)
+        if (!Array.isArray(positionRaw)) return "0";
 
-        // Logic pencarian data yang fleksibel
-        if (Array.isArray(positionRaw)) {
-            if (Array.isArray(positionRaw[0])) {
-                tranches = positionRaw[0]; 
-            } else {
-                tranches = positionRaw;
-            }
-        } 
-        else if (positionRaw && typeof positionRaw === 'object' && positionRaw.tranches) {
-            tranches = positionRaw.tranches;
-        }
+        // 2. Ambil data di index ke-4
+        const tranchesData = positionRaw[4];
 
-        if (!Array.isArray(tranches)) return "0";
+        // 3. Pastikan tranchesData adalah array
+        if (!Array.isArray(tranchesData)) return "0";
 
-        const total = tranches.reduce((sum: bigint, t: any) => {
+        // 4. Loop dan jumlahkan
+        const total = tranchesData.reduce((sum: bigint, t: any) => {
             if (!t) return sum;
+            
+            // Viem bisa mengembalikan struct sebagai Object {amount: 100n} atau Array [100n, ...]
             let val = 0n;
-            if (t.amount !== undefined) val = BigInt(t.amount);
-            else if (Array.isArray(t) && t[0] !== undefined) val = BigInt(t[0]);
+            
+            if (t.amount !== undefined) {
+                val = BigInt(t.amount);
+            } else if (Array.isArray(t) && t[0] !== undefined) {
+                // Jika return tuple array, 'amount' biasanya di index 0 dari struct Tranche
+                val = BigInt(t[0]);
+            }
+            
             return sum + val;
         }, 0n);
 
@@ -197,15 +203,14 @@ const Staking: FC = () => {
 
         } else {
             setStatus("Unstaking...");
-            let tranches: any[] = [];
-            if (Array.isArray(positionRaw)) {
-                if (Array.isArray(positionRaw[0])) tranches = positionRaw[0];
-                else tranches = positionRaw;
-            } else if (positionRaw?.tranches) {
-                tranches = positionRaw.tranches;
+            // UNSTAKE LOGIC HARUS SAMA PERSIS CARA BACA TRANCHESNYA
+            if (!Array.isArray(positionRaw) || !Array.isArray(positionRaw[4])) {
+                 throw new Error("No staking data found");
             }
+            
+            const tranchesData = positionRaw[4]; // Ambil dari index 4
 
-            const activeData = tranches.map((t: any, i: number) => {
+            const activeData = tranchesData.map((t: any, i: number) => {
                  const val = t?.amount !== undefined ? BigInt(t.amount) : (Array.isArray(t) ? BigInt(t[0]) : 0n);
                  return { idx: i, val };
             }).filter(x => x.val > 0n);
@@ -238,6 +243,7 @@ const Staking: FC = () => {
     <div className="max-w-md mx-auto p-4">
       <div className="space-y-6 rounded-lg bg-white p-6 border border-gray-300 shadow-md relative">
         
+        {/* Header & Refresh */}
         <div className="relative mb-4">
             <h2 className="text-lg font-bold text-gray-800 text-center">Staking Dashboard</h2>
             <button 
@@ -248,6 +254,7 @@ const Staking: FC = () => {
             </button>
         </div>
 
+        {/* Stats Grid */}
         <div className="grid grid-cols-2 gap-4 text-center">
           <div className="p-3 bg-gray-50 rounded-lg">
             <p className="text-sm text-gray-500 mb-1">My Staked</p>
@@ -263,7 +270,7 @@ const Staking: FC = () => {
           </div>
         </div>
 
-        {/* NFT BOOST UI */}
+        {/* NFT Boost UI */}
         <div className="grid grid-cols-3 gap-2 text-center border-t border-b py-3 bg-blue-50/50 rounded-md">
             <div>
                 <p className="text-xs text-gray-500">Pro NFT</p>
@@ -279,6 +286,7 @@ const Staking: FC = () => {
             </div>
         </div>
 
+        {/* Form */}
         <div className="space-y-3 mt-4">
             <div className="flex justify-between text-xs text-gray-500 px-1">
                 <span>Stake Amount</span>
@@ -294,6 +302,7 @@ const Staking: FC = () => {
             />
         </div>
 
+        {/* Locks */}
         <div className="flex gap-2">
             {[
                 { l: "30D", v: 0 }, { l: "90D", v: 1 }, { l: "365D", v: 2 }
@@ -313,6 +322,7 @@ const Staking: FC = () => {
             ))}
         </div>
 
+        {/* Buttons */}
         <div className="grid grid-cols-2 gap-3 pt-2">
             <button 
                 onClick={() => handleAction(true)}
@@ -330,6 +340,7 @@ const Staking: FC = () => {
             </button>
         </div>
 
+        {/* Status */}
         {status && (
             <div className={`mt-4 text-center text-xs p-2 rounded border ${
                 status.includes("Fail") ? "bg-red-50 border-red-200 text-red-600" : "bg-blue-50 border-blue-200 text-blue-600"
