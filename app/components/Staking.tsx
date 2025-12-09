@@ -13,7 +13,6 @@ import {
 } from "../lib/web3Config";
 
 // --- HELPER UNTUK MENCEGAH CRASH ---
-// Fungsi ini menjamin konversi angka tidak akan bikin error app
 const safeFormat = (value: any): string => {
   try {
     if (value === undefined || value === null) return "0";
@@ -43,12 +42,15 @@ const Staking: FC = () => {
   const [proCount, setProCount] = useState(0);
   const [legendCount, setLegendCount] = useState(0);
 
-  // --- 1. FETCH DATA YANG AMAN ---
+  // --- 1. FETCH DATA YANG AMAN (BUILD FIX) ---
   const fetchData = async () => {
     if (!address || !publicClient) return;
 
     try {
-      // Kita gunakan allowFailure: true agar jika satu gagal, app TIDAK CRASH
+      // PERBAIKAN UTAMA DI SINI:
+      // Menambahkan 'as any' pada penutup kurung kurawal konfigurasi multicall
+      // Ini membungkam error "Property authorizationList is missing" saat build Vercel.
+      
       const results = await publicClient.multicall({
         contracts: [
           // 0. User Position
@@ -59,26 +61,30 @@ const Staking: FC = () => {
           { address: baseTcAddress, abi: baseTcABI as any, functionName: 'balanceOf', args: [address] },
           // 3. Allowance
           { address: baseTcAddress, abi: baseTcABI as any, functionName: 'allowance', args: [address, stakingVaultAddress] },
-          // 4. RigNFT Address (untuk fetch NFT nanti)
+          // 4. RigNFT Address
           { address: stakingVaultAddress, abi: stakingVaultABI as any, functionName: 'rigNFT', args: [] },
           // 5. Pro ID
           { address: stakingVaultAddress, abi: stakingVaultABI as any, functionName: 'proId', args: [] },
           // 6. Legend ID
           { address: stakingVaultAddress, abi: stakingVaultABI as any, functionName: 'legendId', args: [] },
         ],
-        allowFailure: true // PENTING: Mencegah crash jika contract error
-      });
+        allowFailure: true 
+      } as any); // <--- PENTING: Cast ke 'as any' disini
 
       // Extract Data dengan aman (Cek status success)
-      if (results[0].status === 'success') setPositionRaw(results[0].result);
-      if (results[1].status === 'success') setRewardsRaw(BigInt(results[1].result as any));
-      if (results[2].status === 'success') setBalanceRaw(BigInt(results[2].result as any));
-      if (results[3].status === 'success') setAllowanceRaw(BigInt(results[3].result as any));
+      // Karena kita cast 'as any' diatas, TypeScript mungkin menganggap results sebagai 'any'.
+      // Kita akses manual.
+      const resArray = results as any[];
 
-      // Fetch NFT logic (terpisah biar aman)
-      const rigAddr = results[4].status === 'success' ? results[4].result as string : null;
-      const proId = results[5].status === 'success' ? results[5].result : null;
-      const legendId = results[6].status === 'success' ? results[6].result : null;
+      if (resArray[0].status === 'success') setPositionRaw(resArray[0].result);
+      if (resArray[1].status === 'success') setRewardsRaw(BigInt(resArray[1].result as any));
+      if (resArray[2].status === 'success') setBalanceRaw(BigInt(resArray[2].result as any));
+      if (resArray[3].status === 'success') setAllowanceRaw(BigInt(resArray[3].result as any));
+
+      // Fetch NFT logic
+      const rigAddr = resArray[4].status === 'success' ? resArray[4].result as string : null;
+      const proId = resArray[5].status === 'success' ? resArray[5].result : null;
+      const legendId = resArray[6].status === 'success' ? resArray[6].result : null;
 
       if (rigAddr && rigAddr !== "0x0000000000000000000000000000000000000000") {
           fetchNftData(rigAddr, proId, legendId);
@@ -92,13 +98,15 @@ const Staking: FC = () => {
   const fetchNftData = async (rigAddr: any, proId: any, legendId: any) => {
       if(!publicClient || !address) return;
       try {
+        // Tambahkan 'as any' disini juga untuk keamanan build
         const nftRes = await publicClient.multicall({
             contracts: [
                 { address: rigAddr, abi: rigNftABI as any, functionName: 'balanceOf', args: [address, proId] },
                 { address: rigAddr, abi: rigNftABI as any, functionName: 'balanceOf', args: [address, legendId] },
             ],
             allowFailure: true
-        });
+        } as any) as any[]; // Cast hasil juga ke array
+
         if(nftRes[0].status === 'success') setProCount(Number(nftRes[0].result));
         if(nftRes[1].status === 'success') setLegendCount(Number(nftRes[1].result));
       } catch (err) { console.warn("NFT Fail", err); }
@@ -111,28 +119,23 @@ const Staking: FC = () => {
   }, [address]);
 
   // --- 2. CALCULATIONS (SAFE MODE) ---
-  
-  // Hitung Total Staked (Anti-Crash)
   const stakedAmount = useMemo(() => {
     if (!positionRaw) return 0;
     
     try {
       let tranches: any[] = [];
       
-      // Deteksi bentuk data (Array atau Object)
+      // Deteksi bentuk data
       if (Array.isArray(positionRaw)) {
-        // Jika return array, biasanya elemen ke-0 adalah list tranches
         if (Array.isArray(positionRaw[0])) tranches = positionRaw[0];
-        else tranches = positionRaw; // Atau array itu sendiri
+        else tranches = positionRaw; 
       } else if (positionRaw.tranches) {
         tranches = positionRaw.tranches;
       }
 
       if (!Array.isArray(tranches)) return 0;
 
-      // Loop aman
       const total = tranches.reduce((sum, item) => {
-        // Ambil amount baik dari struct object atau array tuple
         const val = item?.amount !== undefined ? item.amount : (Array.isArray(item) ? item[0] : 0n);
         return sum + BigInt(val || 0n);
       }, 0n);
@@ -144,7 +147,6 @@ const Staking: FC = () => {
     }
   }, [positionRaw]);
 
-  // Hitung Rewards
   const rewardsDisplay = useMemo(() => {
      return Number(formatEther(rewardsRaw || 0n));
   }, [rewardsRaw]);
@@ -181,8 +183,8 @@ const Staking: FC = () => {
         
         setStatus("Success!");
         setAmount("");
-        fetchData(); // Refresh immediate
-        setTimeout(fetchData, 3000); // Refresh delayed
+        fetchData();
+        setTimeout(fetchData, 3000);
 
     } catch (e: any) {
         setStatus("Failed: " + (e.shortMessage || "Error"));
@@ -192,11 +194,9 @@ const Staking: FC = () => {
   };
 
   const handleUnstake = async () => {
-      // Implementasi unstake sederhana (Unstake All)
       if (!address || !positionRaw) return;
       setLoading(true);
       try {
-        // Logic pencarian tranches yang sama dengan useMemo
         let tranches: any[] = [];
         if (Array.isArray(positionRaw)) {
             tranches = Array.isArray(positionRaw[0]) ? positionRaw[0] : positionRaw;
@@ -204,7 +204,6 @@ const Staking: FC = () => {
             tranches = positionRaw.tranches;
         }
         
-        // Filter aktif
         const active = tranches.map((t: any, i: number) => {
             const val = t?.amount !== undefined ? t.amount : (Array.isArray(t) ? t[0] : 0n);
             return { i, val: BigInt(val) };
@@ -236,11 +235,10 @@ const Staking: FC = () => {
       <div className="space-y-6 rounded-lg bg-white p-6 border border-gray-300 shadow-md">
         <h2 className="text-lg font-bold text-center">Staking Dashboard</h2>
 
-        {/* --- DISPLAY UTAMA (SAFE MODE) --- */}
+        {/* --- DISPLAY UTAMA --- */}
         <div className="grid grid-cols-2 gap-4 text-center">
           <div className="p-2 bg-gray-50 rounded">
             <p className="text-sm text-gray-500">My Staked</p>
-            {/* toLocaleString aman karena stakedAmount pasti number (0 jika error) */}
             <p className="text-xl font-bold text-blue-600">
                 {stakedAmount.toLocaleString(undefined, { maximumFractionDigits: 4 })}
             </p>
