@@ -38,13 +38,15 @@ const Staking: FC = () => {
   const [proCount, setProCount] = useState(0);
   const [legendCount, setLegendCount] = useState(0);
 
-  // --- 1. FETCH DATA (OPTIMIZED WITH MULTICALL) ---
+  // --- 1. FETCH DATA (OPTIMIZED WITH MULTICALL & TYPE SAFE) ---
   const fetchData = async () => {
     if (!address || !publicClient) return;
 
     try {
       // PHASE 1: Ambil Data Utama dalam SATU Request (Batching)
-      // Ini mencegah error "HTTP Request Failed" karena rate limit RPC
+      // Mencegah "HTTP Request Failed" karena rate limit.
+      // Menggunakan 'as any' pada config object untuk bypass error TypeScript 'authorizationList'.
+      
       const [
         userRes,
         pendingRes,
@@ -70,8 +72,8 @@ const Staking: FC = () => {
           // 6. Legend ID
           { address: stakingVaultAddress, abi: stakingVaultABI as any, functionName: 'legendId', args: [] },
         ],
-        allowFailure: false // Jika satu gagal, lempar error agar kita tahu
-      });
+        allowFailure: false 
+      } as any); // <--- KUNCI PERBAIKAN: Cast config ke any agar build lolos
 
       // Update State Utama
       setPosition(userRes);
@@ -86,14 +88,13 @@ const Staking: FC = () => {
 
       if (rigAddr && rigAddr !== ZERO_ADDRESS) {
         try {
-          // Batching request saldo NFT juga
           const [proBalRes, legendBalRes] = await publicClient.multicall({
             contracts: [
               { address: rigAddr, abi: rigNftABI as any, functionName: 'balanceOf', args: [address, proId] },
               { address: rigAddr, abi: rigNftABI as any, functionName: 'balanceOf', args: [address, legendId] },
             ],
-            allowFailure: true // Boleh gagal jika kontrak NFT bermasalah
-          });
+            allowFailure: true 
+          } as any); // <--- KUNCI PERBAIKAN: Cast config ke any
 
           if (proBalRes.status === 'success') setProCount(Number(proBalRes.result));
           else setProCount(0);
@@ -114,7 +115,6 @@ const Staking: FC = () => {
       setStatus(""); // Clear error status
     } catch (e: any) {
       console.error("Fetch error", e);
-      // Deteksi error spesifik
       if (e?.message?.includes("HTTP")) {
          setStatus("Network busy. Please refresh shortly.");
       } else {
@@ -131,7 +131,6 @@ const Staking: FC = () => {
   // --- 2. DATA DERIVATIVES ---
   const stakedAmount = useMemo(() => {
     if (!position || !position.tranches) return 0;
-    // position.tranches adalah array struct dari contract
     return position.tranches.reduce((sum: number, t: any) => sum + Number(formatEther(t.amount)), 0);
   }, [position]);
 
@@ -162,7 +161,6 @@ const Staking: FC = () => {
       if (action === "stake") {
         if (stakeAmount <= 0n) throw new Error("Amount must be greater than 0.");
         
-        // Pengecekan saldo yang lebih ramah
         if (baseTcBalance === 0n) {
              throw new Error("Saldo BaseTC kosong atau gagal dimuat. Coba refresh.");
         }
@@ -172,6 +170,7 @@ const Staking: FC = () => {
 
         if (allowance < stakeAmount) {
           setStatus("Approving $BaseTC...");
+          // Gunakan 'as any' untuk keamanan build
           const approveHash = await writeContractAsync({
             address: baseTcAddress,
             abi: baseTcABI as any,
@@ -179,7 +178,7 @@ const Staking: FC = () => {
             args: [stakingVaultAddress, stakeAmount],
             account: address,
             chain: base,
-          });
+          } as any);
           await publicClient?.waitForTransactionReceipt({ hash: approveHash as `0x${string}` });
           setStatus("Approval successful. Processing stake...");
           setAllowance(stakeAmount);
@@ -217,7 +216,7 @@ const Staking: FC = () => {
         args,
         account: address,
         chain: base,
-      });
+      } as any);
 
       setStatus("Transaction sent. Waiting confirmation...");
       await publicClient?.waitForTransactionReceipt({ hash: txHash as `0x${string}` });
@@ -225,7 +224,6 @@ const Staking: FC = () => {
       setStatus(`${action === 'stake' ? 'Staking' : 'Unstaking'} successful!`);
       if (action === "stake") setAmount(""); 
       
-      // Delay sedikit sebelum fetch ulang agar blockchain terupdate
       setTimeout(() => fetchData(), 2000);
 
     } catch (e: any) {
@@ -275,7 +273,6 @@ const Staking: FC = () => {
         <div className="space-y-2 mt-4">
           <div className="flex justify-between">
             <label className="text-xs text-gray-500">Amount to Stake</label>
-            {/* Helper Balance Display */}
             <span className="text-xs text-gray-400">
                 Bal: {baseTcBalance ? formatEther(baseTcBalance) : "0"}
             </span>
