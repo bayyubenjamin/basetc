@@ -42,8 +42,10 @@ const Staking: FC = () => {
     if (!address || !publicClient) return;
 
     try {
-      // NOTE: Kita WAJIB menyertakan 'authorizationList: []' DAN 'args: [...]' 
-      // untuk memenuhi syarat tipe TypeScript yang ketat pada versi viem ini.
+      // PERBAIKAN: 
+      // 1. Menggunakan 'as any' pada ABI untuk mencegah error TypeScript.
+      // 2. MENGHAPUS 'authorizationList' yang menyebabkan error runtime "Invalid parameters".
+      // 3. Menambahkan 'args: []' pada fungsi tanpa parameter agar aman.
 
       // 1. Ambil data User Position
       const pos = await publicClient.readContract({
@@ -51,7 +53,6 @@ const Staking: FC = () => {
         abi: stakingVaultABI as any,
         functionName: "getUser",
         args: [address],
-        authorizationList: [],
       });
       setPosition(pos);
 
@@ -61,7 +62,6 @@ const Staking: FC = () => {
         abi: stakingVaultABI as any,
         functionName: "pendingReward",
         args: [address],
-        authorizationList: [],
       });
       setPendingRewards(BigInt(rewardRaw as bigint | number | string));
 
@@ -71,7 +71,6 @@ const Staking: FC = () => {
         abi: baseTcABI as any,
         functionName: "balanceOf",
         args: [address],
-        authorizationList: [],
       });
       setBaseTcBalance(BigInt(balRaw as bigint | number | string));
 
@@ -81,20 +80,17 @@ const Staking: FC = () => {
         abi: baseTcABI as any,
         functionName: "allowance",
         args: [address, stakingVaultAddress],
-        authorizationList: [],
       });
       setAllowance(BigInt(allowRaw as bigint | number | string));
 
       // --- BAGIAN FETCH NFT ---
       
-      // 5. Ambil Address RigNFT dari Contract
-      // PERBAIKAN: Ditambahkan 'args: []' karena getter variabel publik tanpa parameter tetap butuh properti args kosong.
+      // 5. Ambil Address RigNFT dari Contract (Gunakan 'rigNFT' sesuai ABI)
       const rigAddr = (await publicClient.readContract({
         address: stakingVaultAddress,
         abi: stakingVaultABI as any,
         functionName: "rigNFT", 
-        args: [], // <--- WAJIB ADA (walaupun kosong)
-        authorizationList: [],
+        args: [], 
       })) as `0x${string}`;
 
       // 6. Ambil ID NFT Pro
@@ -102,8 +98,7 @@ const Staking: FC = () => {
         address: stakingVaultAddress,
         abi: stakingVaultABI as any,
         functionName: "proId",
-        args: [], // <--- WAJIB ADA
-        authorizationList: [],
+        args: [],
       });
       const proId = BigInt(proIdRaw as bigint | number | string);
 
@@ -112,8 +107,7 @@ const Staking: FC = () => {
         address: stakingVaultAddress,
         abi: stakingVaultABI as any,
         functionName: "legendId",
-        args: [], // <--- WAJIB ADA
-        authorizationList: [],
+        args: [],
       });
       const legendId = BigInt(legendIdRaw as bigint | number | string);
 
@@ -125,7 +119,6 @@ const Staking: FC = () => {
             abi: rigNftABI as any,
             functionName: "balanceOf",
             args: [address, proId],
-            authorizationList: [],
           });
           setProCount(Number(proBalRaw));
 
@@ -134,7 +127,6 @@ const Staking: FC = () => {
             abi: rigNftABI as any,
             functionName: "balanceOf",
             args: [address, legendId],
-            authorizationList: [],
           });
           setLegendCount(Number(legendBalRaw));
         } catch (err) {
@@ -194,7 +186,6 @@ const Staking: FC = () => {
 
         if (allowance < stakeAmount) {
           setStatus("Approving $BaseTC...");
-          // Gunakan 'as any' pada ABI
           const approveHash = await writeContractAsync({
             address: baseTcAddress,
             abi: baseTcABI as any,
@@ -222,7 +213,6 @@ const Staking: FC = () => {
 
         if (!position || !position.tranches) throw new Error("No staking position.");
         
-        // Filter tranche yang saldonya > 0
         const activeTranches = position.tranches
             .map((t: any, idx: number) => ({ idx, amount: t.amount }))
             .filter((item: any) => item.amount > 0n);
