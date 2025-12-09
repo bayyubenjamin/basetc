@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
-import type { FC } from "react";
+import { useState, useMemo, useEffect, type FC } from "react";
 import { useAccount, useWriteContract, usePublicClient } from "wagmi";
 import { base } from "viem/chains";
 import { formatEther, parseEther } from "viem";
@@ -33,16 +32,15 @@ const Staking: FC = () => {
   const [allowance, setAllowance] = useState<bigint>(0n);
   const [nonce, setNonce] = useState<bigint>(0n);
 
-  const [proCount, setProCount] = useState<number>(0);
-  const [legendCount, setLegendCount] = useState<number>(0);
+  const [proCount, setProCount] = useState(0);
+  const [legendCount, setLegendCount] = useState(0);
 
   // --- Fetch contract data ---
   const fetchData = async () => {
     if (!address || !publicClient) return;
 
     try {
-      // Get user position
-      const pos: any = await publicClient.readContract({
+      const pos = await publicClient.readContract({
         address: stakingVaultAddress,
         abi: stakingVaultABI,
         functionName: "getUser",
@@ -52,78 +50,80 @@ const Staking: FC = () => {
       setPosition(pos);
 
       // Pending rewards
-      const reward: bigint = await publicClient.readContract({
+      const rewardRaw = await publicClient.readContract({
         address: stakingVaultAddress,
         abi: stakingVaultABI,
         functionName: "pendingReward",
         args: [address],
       });
-      setPendingRewards(reward);
+      setPendingRewards(BigInt(rewardRaw as bigint | number | string));
 
       // BaseTC balance
-      const bal: bigint = await publicClient.readContract({
+      const balRaw = await publicClient.readContract({
         address: baseTcAddress,
         abi: baseTcABI,
         functionName: "balanceOf",
         args: [address],
       });
-      setBaseTcBalance(bal);
+      setBaseTcBalance(BigInt(balRaw as bigint | number | string));
 
       // Allowance
-      const allow: bigint = await publicClient.readContract({
+      const allowRaw = await publicClient.readContract({
         address: baseTcAddress,
         abi: baseTcABI,
         functionName: "allowance",
         args: [address, stakingVaultAddress],
       });
-      setAllowance(allow);
+      setAllowance(BigInt(allowRaw as bigint | number | string));
 
       // Nonce
-      const n: bigint = await publicClient.readContract({
+      const nRaw = await publicClient.readContract({
         address: stakingVaultAddress,
         abi: stakingVaultABI,
         functionName: "nonces",
         args: [address],
       });
-      setNonce(n);
+      setNonce(BigInt(nRaw as bigint | number | string));
 
-      // RigNFT address
-      const rigAddr: `0x${string}` = await publicClient.readContract({
+      // --- Fetch Pro/Legend count from RigNFT ---
+      const rigAddr = (await publicClient.readContract({
         address: stakingVaultAddress,
         abi: stakingVaultABI,
         functionName: "rigNft",
-      });
+        authorizationList: [],
+      })) as `0x${string}`;
 
-      // Pro/Legend token IDs
-      const proId: bigint = await publicClient.readContract({
+      const proIdRaw = await publicClient.readContract({
         address: stakingVaultAddress,
         abi: stakingVaultABI,
         functionName: "proId",
+        authorizationList: [],
       });
+      const proId = BigInt(proIdRaw as bigint | number | string);
 
-      const legendId: bigint = await publicClient.readContract({
+      const legendIdRaw = await publicClient.readContract({
         address: stakingVaultAddress,
         abi: stakingVaultABI,
         functionName: "legendId",
+        authorizationList: [],
       });
+      const legendId = BigInt(legendIdRaw as bigint | number | string);
 
-      // NFT balances
-      const proBal: bigint = await publicClient.readContract({
+      const proBalRaw = await publicClient.readContract({
         address: rigAddr,
         abi: rigNftABI,
         functionName: "balanceOf",
         args: [address, proId],
       });
+      setProCount(Number(proBalRaw as bigint | number));
 
-      const legendBal: bigint = await publicClient.readContract({
+      const legendBalRaw = await publicClient.readContract({
         address: rigAddr,
         abi: rigNftABI,
         functionName: "balanceOf",
         args: [address, legendId],
       });
-
-      setProCount(Number(proBal));
-      setLegendCount(Number(legendBal));
+      setLegendCount(Number(legendBalRaw as bigint | number));
     } catch (e: any) {
       console.error("Fetch error", e);
       setStatus("Failed to fetch data.");
@@ -141,6 +141,7 @@ const Staking: FC = () => {
   }, [position]);
 
   const rewards = useMemo(() => {
+    if (!pendingRewards) return 0;
     return Number(formatEther(pendingRewards));
   }, [pendingRewards]);
 
@@ -164,7 +165,6 @@ const Staking: FC = () => {
       if (action === "stake" && stakeAmount <= 0n) throw new Error("Amount must be greater than 0.");
       if (action === "stake" && stakeAmount > baseTcBalance) throw new Error("Insufficient balance.");
 
-      // Approve if needed
       if (action === "stake" && allowance < stakeAmount) {
         setStatus("Approving $BaseTC...");
         const approveHash = await writeContractAsync({
@@ -179,8 +179,8 @@ const Staking: FC = () => {
         setStatus("Approval successful. Preparing to stake...");
       }
 
-      // Prepare args
-      let functionName: string;
+      // --- Prepare transaction ---
+      let functionName: any;
       let args: any[];
 
       if (action === "stake") {
