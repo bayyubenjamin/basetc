@@ -2,10 +2,20 @@
 
 import { useState, useMemo } from "react";
 import type { FC } from "react";
-import { useAccount, useReadContract, useWriteContract, usePublicClient } from "wagmi";
+import {
+  useAccount,
+  useReadContract,
+  useWriteContract,
+  usePublicClient,
+} from "wagmi";
 import { base } from "viem/chains";
 import { formatEther, parseEther } from "viem";
-import { stakingVaultAddress, stakingVaultABI, baseTcAddress, baseTcABI } from "../lib/web3Config";
+import {
+  stakingVaultAddress,
+  stakingVaultABI,
+  baseTcAddress,
+  baseTcABI,
+} from "../lib/web3Config";
 
 const LOCK_OPTIONS = [
   { label: "7 Days (1.0x)", value: 1 },
@@ -89,7 +99,10 @@ const Staking: FC = () => {
   const stakedAmount = useMemo(() => {
     if (!position || !(position as any).tranches) return 0;
     const tranches = (position as any).tranches as { amount: bigint }[];
-    return tranches.reduce((sum, t) => sum + Number(formatEther(t.amount || 0n)), 0);
+    return tranches.reduce(
+      (sum, t) => sum + Number(formatEther(t.amount || 0n)),
+      0
+    );
   }, [position]);
 
   const rewards = useMemo(() => {
@@ -102,23 +115,16 @@ const Staking: FC = () => {
   }, [pendingRewards]);
 
   const boostPercent = useMemo(() => {
-    const pro = Math.min(Number(proCount || 0), MAX_PRO);
-    const legend = Math.min(Number(legendCount || 0), MAX_LEGEND);
+    const pro = Math.min(Number(proCount ?? 0), MAX_PRO);
+    const legend = Math.min(Number(legendCount ?? 0), MAX_LEGEND);
     const total = pro * 5 + legend * 8;
     return Math.min(total, BOOST_CAP);
   }, [proCount, legendCount]);
 
-  const boostedRewards = useMemo(() => rewards * (1 + boostPercent / 100), [rewards, boostPercent]);
-
-  const rewardsUnlockable = useMemo(() => {
-    if (!position || !(position as any).tranches) return 0;
-    const now = Math.floor(Date.now() / 1000);
-    const tranches = (position as any).tranches as { amount: bigint; lockUntil: number }[];
-    // hanya hitung reward yang unlock
-    const unlockedTranches = tranches.filter(t => t.lockUntil <= now);
-    if (!unlockedTranches.length) return 0;
-    return rewards; // asumsi reward per tranche proporsional, bisa diubah sesuai logika kontrak
-  }, [position, rewards]);
+  const boostedRewards = useMemo(
+    () => rewards * (1 + boostPercent / 100),
+    [rewards, boostPercent]
+  );
 
   // --- Actions ---
   const handleAction = async (action: "stake" | "unstake" | "claim") => {
@@ -127,23 +133,28 @@ const Staking: FC = () => {
     setStatus(`Preparing ${action}...`);
 
     try {
-      const stakeAmount = parseEther(amount || "0");
-      if (action === "stake" && stakeAmount <= 0n) throw new Error("Amount must be greater than 0.");
-      if (action === "stake" && stakeAmount > (baseTcBalance as bigint || 0n)) throw new Error("Insufficient balance.");
-
-      if (action === "stake" && (allowance as bigint || 0n) < stakeAmount) {
-        setStatus("Approving $BaseTC...");
-        const approveHash = await writeContractAsync({
-          address: baseTcAddress,
-          abi: baseTcABI as any,
-          functionName: "approve",
-          args: [stakingVaultAddress, stakeAmount],
-          account: address,
-          chain: base,
-        });
-        await publicClient?.waitForTransactionReceipt({ hash: approveHash });
-        await refetchAllowance();
-        setStatus("Approval successful. Preparing to stake...");
+      let stakeAmount: bigint = 0n;
+      if (action === "stake") {
+        stakeAmount = parseEther(amount || "0");
+        if (stakeAmount <= 0n) throw new Error("Amount must be greater than 0.");
+        if (stakeAmount > (baseTcBalance as bigint || 0n))
+          throw new Error("Insufficient balance.");
+        if ((allowance as bigint || 0n) < stakeAmount) {
+          setStatus("Approving $BaseTC...");
+          const approveHash = await writeContractAsync({
+            address: baseTcAddress,
+            abi: baseTcABI as any,
+            functionName: "approve",
+            args: [stakingVaultAddress, stakeAmount],
+            account: address,
+            chain: base,
+          });
+          await publicClient?.waitForTransactionReceipt({
+            hash: approveHash as `0x${string}`,
+          });
+          await refetchAllowance();
+          setStatus("Approval successful. Preparing to stake...");
+        }
       }
 
       let txHash: string;
@@ -161,7 +172,7 @@ const Staking: FC = () => {
           address: stakingVaultAddress,
           abi: stakingVaultABI as any,
           functionName: "unstake",
-          args: [[0], [stakeAmount]], // contoh unstake semua di tranche 0
+          args: [[0], [parseEther(stakedAmount.toString())]],
           account: address,
           chain: base,
         });
@@ -176,7 +187,10 @@ const Staking: FC = () => {
         });
       }
 
-      await publicClient?.waitForTransactionReceipt({ hash: `${txHash}` as `0x${string}` });
+      await publicClient?.waitForTransactionReceipt({
+        hash: txHash as `0x${string}`,
+      });
+
       setStatus(`${action.charAt(0).toUpperCase() + action.slice(1)} successful!`);
       await Promise.all([refetchPosition(), refetchPending(), refetchBalance()]);
     } catch (e: any) {
@@ -190,28 +204,38 @@ const Staking: FC = () => {
   return (
     <div className="max-w-md mx-auto p-4">
       <div className="space-y-6 rounded-lg bg-white p-6 border border-gray-300 shadow-md">
-        <h2 className="text-lg font-bold text-gray-800 text-center">Staking Dashboard</h2>
+        <h2 className="text-lg font-bold text-gray-800 text-center">
+          Staking Dashboard
+        </h2>
 
         <div className="grid grid-cols-2 gap-4 text-center">
           <div>
             <p className="text-sm text-gray-500">Staked Amount</p>
-            <p className="text-xl font-bold text-gray-900">{stakedAmount.toLocaleString()}</p>
+            <p className="text-xl font-bold text-gray-900">
+              {stakedAmount.toLocaleString()}
+            </p>
           </div>
           <div>
             <p className="text-sm text-gray-500">Pending Rewards</p>
             <p className="text-xl font-bold text-green-600">{rewards.toFixed(6)}</p>
-            <p className="text-xs text-gray-400">Boosted: {boostedRewards.toFixed(6)}</p>
+            <p className="text-xs text-gray-400">
+              Boosted: {boostedRewards.toFixed(6)}
+            </p>
           </div>
         </div>
 
         <div className="grid grid-cols-3 gap-4 text-center mt-2">
           <div>
             <p className="text-sm text-gray-500">Pro NFT</p>
-            <p className="text-lg font-bold text-gray-900">{proCount || 0}</p>
+            <p className="text-lg font-bold text-gray-900">
+              {Number(proCount ?? 0)}
+            </p>
           </div>
           <div>
             <p className="text-sm text-gray-500">Legend NFT</p>
-            <p className="text-lg font-bold text-gray-900">{legendCount || 0}</p>
+            <p className="text-lg font-bold text-gray-900">
+              {Number(legendCount ?? 0)}
+            </p>
           </div>
           <div>
             <p className="text-sm text-gray-500">Boost</p>
@@ -238,7 +262,9 @@ const Staking: FC = () => {
                 key={opt.value}
                 onClick={() => setLockType(opt.value as 1 | 2 | 3)}
                 className={`flex-1 rounded px-2 py-1 text-xs font-medium ${
-                  lockType === opt.value ? "bg-blue-600 text-white" : "bg-gray-200 text-gray-800 hover:bg-gray-300"
+                  lockType === opt.value
+                    ? "bg-blue-600 text-white"
+                    : "bg-gray-200 text-gray-800 hover:bg-gray-300"
                 }`}
               >
                 {opt.label}
@@ -257,7 +283,7 @@ const Staking: FC = () => {
           </button>
           <button
             onClick={() => handleAction("claim")}
-            disabled={loading || rewardsUnlockable <= 0}
+            disabled={loading || rewards <= 0}
             className="rounded-md bg-yellow-500 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
           >
             {loading ? "..." : "Claim"}
@@ -271,7 +297,9 @@ const Staking: FC = () => {
           </button>
         </div>
 
-        {status && <p className="text-center text-xs text-gray-500 pt-2">{status}</p>}
+        {status && (
+          <p className="text-center text-xs text-gray-500 pt-2">{status}</p>
+        )}
       </div>
     </div>
   );
