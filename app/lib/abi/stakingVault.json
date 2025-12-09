@@ -14,37 +14,6 @@
 		"anonymous": false,
 		"inputs": [
 			{
-				"indexed": false,
-				"internalType": "uint16",
-				"name": "proBps",
-				"type": "uint16"
-			},
-			{
-				"indexed": false,
-				"internalType": "uint16",
-				"name": "legendBps",
-				"type": "uint16"
-			},
-			{
-				"indexed": false,
-				"internalType": "uint16",
-				"name": "capBps",
-				"type": "uint16"
-			},
-			{
-				"indexed": false,
-				"internalType": "uint32",
-				"name": "cooldown",
-				"type": "uint32"
-			}
-		],
-		"name": "BoostParamsUpdated",
-		"type": "event"
-	},
-	{
-		"anonymous": false,
-		"inputs": [
-			{
 				"indexed": true,
 				"internalType": "address",
 				"name": "user",
@@ -58,81 +27,6 @@
 			}
 		],
 		"name": "Claimed",
-		"type": "event"
-	},
-	{
-		"anonymous": false,
-		"inputs": [
-			{
-				"indexed": true,
-				"internalType": "address",
-				"name": "from",
-				"type": "address"
-			},
-			{
-				"indexed": false,
-				"internalType": "uint256",
-				"name": "amount",
-				"type": "uint256"
-			},
-			{
-				"indexed": false,
-				"internalType": "uint256",
-				"name": "injected",
-				"type": "uint256"
-			},
-			{
-				"indexed": false,
-				"internalType": "uint256",
-				"name": "newAcc",
-				"type": "uint256"
-			}
-		],
-		"name": "DepositReward",
-		"type": "event"
-	},
-	{
-		"anonymous": false,
-		"inputs": [
-			{
-				"indexed": true,
-				"internalType": "address",
-				"name": "funder",
-				"type": "address"
-			},
-			{
-				"indexed": false,
-				"internalType": "bool",
-				"name": "allowed",
-				"type": "bool"
-			}
-		],
-		"name": "FunderSet",
-		"type": "event"
-	},
-	{
-		"anonymous": false,
-		"inputs": [
-			{
-				"indexed": false,
-				"internalType": "uint16",
-				"name": "m30",
-				"type": "uint16"
-			},
-			{
-				"indexed": false,
-				"internalType": "uint16",
-				"name": "m90",
-				"type": "uint16"
-			},
-			{
-				"indexed": false,
-				"internalType": "uint16",
-				"name": "m365",
-				"type": "uint16"
-			}
-		],
-		"name": "LockMultiplierUpdated",
 		"type": "event"
 	},
 	{
@@ -159,24 +53,37 @@
 		"inputs": [
 			{
 				"indexed": false,
-				"internalType": "address",
-				"name": "rig",
-				"type": "address"
-			},
-			{
-				"indexed": false,
 				"internalType": "uint256",
-				"name": "proId",
+				"name": "newRate",
 				"type": "uint256"
 			},
 			{
 				"indexed": false,
 				"internalType": "uint256",
-				"name": "legendId",
+				"name": "newPeriodFinish",
 				"type": "uint256"
 			}
 		],
-		"name": "RigConfigUpdated",
+		"name": "RateUpdated",
+		"type": "event"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": false,
+				"internalType": "uint256",
+				"name": "amount",
+				"type": "uint256"
+			},
+			{
+				"indexed": false,
+				"internalType": "uint256",
+				"name": "newPeriodFinish",
+				"type": "uint256"
+			}
+		],
+		"name": "RewardsTopUp",
 		"type": "event"
 	},
 	{
@@ -328,35 +235,12 @@
 		"type": "function"
 	},
 	{
-		"inputs": [
-			{
-				"internalType": "uint256",
-				"name": "amount",
-				"type": "uint256"
-			}
-		],
-		"name": "depositReward",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
 		"inputs": [],
-		"name": "getGlobal",
+		"name": "getMiningDurationLeft",
 		"outputs": [
 			{
 				"internalType": "uint256",
-				"name": "_totalEffectiveWeight",
-				"type": "uint256"
-			},
-			{
-				"internalType": "uint256",
-				"name": "_accRewardPerShare",
-				"type": "uint256"
-			},
-			{
-				"internalType": "uint256",
-				"name": "_pendingInjection",
+				"name": "",
 				"type": "uint256"
 			}
 		],
@@ -440,6 +324,32 @@
 	},
 	{
 		"inputs": [],
+		"name": "lastTimeRewardApplicable",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "lastUpdateTime",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [],
 		"name": "legendBoostPerNFTBps",
 		"outputs": [
 			{
@@ -454,6 +364,19 @@
 	{
 		"inputs": [],
 		"name": "legendId",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "legendIdData",
 		"outputs": [
 			{
 				"internalType": "uint256",
@@ -556,8 +479,14 @@
 		"type": "function"
 	},
 	{
-		"inputs": [],
-		"name": "pendingInjection",
+		"inputs": [
+			{
+				"internalType": "address",
+				"name": "account",
+				"type": "address"
+			}
+		],
+		"name": "pendingReward",
 		"outputs": [
 			{
 				"internalType": "uint256",
@@ -569,14 +498,8 @@
 		"type": "function"
 	},
 	{
-		"inputs": [
-			{
-				"internalType": "address",
-				"name": "account",
-				"type": "address"
-			}
-		],
-		"name": "pendingReward",
+		"inputs": [],
+		"name": "periodFinish",
 		"outputs": [
 			{
 				"internalType": "uint256",
@@ -615,6 +538,45 @@
 	},
 	{
 		"inputs": [],
+		"name": "proIdData",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "rewardPerToken",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "rewardRate",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [],
 		"name": "rigNFT",
 		"outputs": [
 			{
@@ -624,34 +586,6 @@
 			}
 		],
 		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "uint16",
-				"name": "proBps",
-				"type": "uint16"
-			},
-			{
-				"internalType": "uint16",
-				"name": "legendBps",
-				"type": "uint16"
-			},
-			{
-				"internalType": "uint16",
-				"name": "capBps",
-				"type": "uint16"
-			},
-			{
-				"internalType": "uint32",
-				"name": "cooldown",
-				"type": "uint32"
-			}
-		],
-		"name": "setBoostParams",
-		"outputs": [],
-		"stateMutability": "nonpayable",
 		"type": "function"
 	},
 	{
@@ -675,22 +609,12 @@
 	{
 		"inputs": [
 			{
-				"internalType": "uint16",
-				"name": "m30",
-				"type": "uint16"
-			},
-			{
-				"internalType": "uint16",
-				"name": "m90",
-				"type": "uint16"
-			},
-			{
-				"internalType": "uint16",
-				"name": "m365",
-				"type": "uint16"
+				"internalType": "uint256",
+				"name": "_ratePerSec",
+				"type": "uint256"
 			}
 		],
-		"name": "setLockMultipliers",
+		"name": "setRewardRate",
 		"outputs": [],
 		"stateMutability": "nonpayable",
 		"type": "function"
@@ -726,12 +650,25 @@
 				"type": "uint256"
 			},
 			{
-				"internalType": "enum StakingVault.LockClass",
-				"name": "lockClass",
+				"internalType": "uint8",
+				"name": "lockType",
 				"type": "uint8"
 			}
 		],
 		"name": "stake",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "amount",
+				"type": "uint256"
+			}
+		],
+		"name": "topUpReward",
 		"outputs": [],
 		"stateMutability": "nonpayable",
 		"type": "function"
