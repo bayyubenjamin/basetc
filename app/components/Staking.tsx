@@ -55,7 +55,7 @@ const Staking: FC = () => {
     args: [address],
     query: { enabled: !!address },
   });
-  
+
   const { data: allowance, refetch: refetchAllowance } = useReadContract({
     address: baseTcAddress,
     abi: baseTcABI as any,
@@ -64,14 +64,21 @@ const Staking: FC = () => {
     query: { enabled: !!address },
   });
 
+  // --- Derived Data ---
   const stakedAmount = useMemo(() => {
-    if (!position) return 0;
-    // get total from tranches
+    if (!position || !(position as any).tranches) return 0;
     const tranches = (position as any).tranches as { amount: bigint }[];
-    return tranches.reduce((sum, t) => sum + Number(formatEther(t.amount)), 0);
+    return tranches.reduce((sum, t) => sum + Number(formatEther(t.amount || 0n)), 0);
   }, [position]);
 
-  const rewards = useMemo(() => (pendingRewards ? Number(formatEther(pendingRewards as bigint)) : 0), [pendingRewards]);
+  const rewards = useMemo(() => {
+    if (!pendingRewards) return 0;
+    try {
+      return Number(formatEther(pendingRewards as bigint));
+    } catch {
+      return 0;
+    }
+  }, [pendingRewards]);
 
   // --- Actions ---
   const handleAction = async (action: "stake" | "harvest" | "unstake") => {
@@ -82,9 +89,9 @@ const Staking: FC = () => {
     try {
       const stakeAmount = parseEther(amount || "0");
       if (action === "stake" && stakeAmount <= 0n) throw new Error("Amount must be greater than 0.");
-      if (action === "stake" && stakeAmount > (baseTcBalance as bigint)) throw new Error("Insufficient balance.");
+      if (action === "stake" && stakeAmount > (baseTcBalance as bigint || 0n)) throw new Error("Insufficient balance.");
 
-      if (action === "stake" && (allowance as bigint) < stakeAmount) {
+      if (action === "stake" && (allowance as bigint || 0n) < stakeAmount) {
         setStatus("Approving $BaseTC...");
         const approveHash = await writeContractAsync({
           address: baseTcAddress,
@@ -99,7 +106,7 @@ const Staking: FC = () => {
         setStatus("Approval successful. Preparing to stake...");
       }
 
-      const nonce = (await refetchNonces()).data;
+      const nonce = BigInt((await refetchNonces()).data || 0);
       const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600);
 
       const sigRes = await fetch("/api/sign-event-action", {
@@ -109,10 +116,10 @@ const Staking: FC = () => {
           vault: "staking",
           action,
           user: address,
-          amount: action === "stake" ? amount : parseEther(stakedAmount.toString()).toString(),
+          amount: action === "stake" ? amount : stakedAmount.toString(),
           lockType,
-          nonce: String(nonce),
-          deadline: String(deadline),
+          nonce: nonce.toString(),
+          deadline: deadline.toString(),
         }),
       });
       const sigData = await sigRes.json();
@@ -154,42 +161,43 @@ const Staking: FC = () => {
     }
   };
 
+  // --- UI ---
   return (
     <div className="max-w-md mx-auto p-4">
-      <div className="space-y-6 rounded-lg bg-neutral-900/50 p-6 border border-neutral-700 shadow-md">
-        <h2 className="text-lg font-bold text-white text-center">Staking Dashboard</h2>
+      <div className="space-y-6 rounded-lg bg-white p-6 border border-gray-300 shadow-md">
+        <h2 className="text-lg font-bold text-gray-800 text-center">Staking Dashboard</h2>
 
         <div className="grid grid-cols-2 gap-4 text-center">
           <div>
-            <p className="text-sm text-neutral-400">Staked Amount</p>
-            <p className="text-xl font-bold">{stakedAmount.toLocaleString()}</p>
+            <p className="text-sm text-gray-500">Staked Amount</p>
+            <p className="text-xl font-bold text-gray-900">{stakedAmount.toLocaleString()}</p>
           </div>
           <div>
-            <p className="text-sm text-neutral-400">Pending Rewards</p>
-            <p className="text-xl font-bold text-emerald-400">{rewards.toFixed(6)}</p>
+            <p className="text-sm text-gray-500">Pending Rewards</p>
+            <p className="text-xl font-bold text-green-600">{rewards.toFixed(6)}</p>
           </div>
         </div>
 
         <div className="space-y-2">
-          <label className="text-xs text-neutral-400">Amount to Stake</label>
+          <label className="text-xs text-gray-500">Amount to Stake</label>
           <input
             type="number"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
             placeholder="0.0"
-            className="w-full rounded-md bg-neutral-800 px-3 py-2 text-white placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
 
         <div className="space-y-2">
-          <label className="text-xs text-neutral-400">Lock Duration</label>
+          <label className="text-xs text-gray-500">Lock Duration</label>
           <div className="flex gap-2">
             {LOCK_OPTIONS.map((opt) => (
               <button
                 key={opt.value}
                 onClick={() => setLockType(opt.value as 1 | 2 | 3)}
                 className={`flex-1 rounded px-2 py-1 text-xs font-medium ${
-                  lockType === opt.value ? "bg-blue-600" : "bg-neutral-700 hover:bg-neutral-600"
+                  lockType === opt.value ? "bg-blue-600 text-white" : "bg-gray-200 text-gray-800 hover:bg-gray-300"
                 }`}
               >
                 {opt.label}
@@ -209,7 +217,7 @@ const Staking: FC = () => {
           <button
             onClick={() => handleAction("harvest")}
             disabled={loading || rewards <= 0}
-            className="rounded-md bg-yellow-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+            className="rounded-md bg-yellow-500 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
           >
             {loading ? "..." : "Harvest"}
           </button>
@@ -222,7 +230,7 @@ const Staking: FC = () => {
           </button>
         </div>
 
-        {status && <p className="text-center text-xs text-neutral-400 pt-2">{status}</p>}
+        {status && <p className="text-center text-xs text-gray-500 pt-2">{status}</p>}
       </div>
     </div>
   );
