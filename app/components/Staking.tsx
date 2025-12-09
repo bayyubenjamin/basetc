@@ -142,7 +142,7 @@ const Staking: FC = () => {
       setStatus(""); // Clear status error jika berhasil
     } catch (e: any) {
       console.error("Fetch error", e);
-      setStatus("Gagal mengambil data: " + (e?.shortMessage || e?.message));
+      setStatus("failed: " + (e?.shortMessage || e?.message));
     }
   };
 
