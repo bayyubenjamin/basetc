@@ -38,14 +38,15 @@ const Staking: FC = () => {
   const [proCount, setProCount] = useState(0);
   const [legendCount, setLegendCount] = useState(0);
 
-  // --- 1. FETCH DATA (OPTIMIZED WITH MULTICALL & TYPE SAFE) ---
+  // --- 1. FETCH DATA (OPTIMIZED & FIXED) ---
   const fetchData = async () => {
     if (!address || !publicClient) return;
 
     try {
       // PHASE 1: Ambil Data Utama dalam SATU Request (Batching)
-      // Mencegah "HTTP Request Failed" karena rate limit.
-      // Menggunakan 'as any' pada config object untuk bypass error TypeScript 'authorizationList'.
+      // PERBAIKAN: Menambahkan 'as any' pada HASIL return multicall.
+      // Ini memaksa TypeScript menganggap hasilnya sebagai 'any', sehingga kita bisa
+      // langsung mengakses nilainya (BigInt, struct, dll) tanpa error "Type mismatch".
       
       const [
         userRes,
@@ -73,29 +74,33 @@ const Staking: FC = () => {
           { address: stakingVaultAddress, abi: stakingVaultABI as any, functionName: 'legendId', args: [] },
         ],
         allowFailure: false 
-      } as any); // <--- KUNCI PERBAIKAN: Cast config ke any agar build lolos
+      } as any) as any; // <--- FIX UTAMA: Cast hasil ke 'any'
 
       // Update State Utama
+      // Karena sudah di-cast 'any', TypeScript tidak akan protes konversi ke BigInt
       setPosition(userRes);
-      setPendingRewards(BigInt(pendingRes as bigint));
-      setBaseTcBalance(BigInt(balanceRes as bigint));
-      setAllowance(BigInt(allowanceRes as bigint));
+      setPendingRewards(BigInt(pendingRes));
+      setBaseTcBalance(BigInt(balanceRes));
+      setAllowance(BigInt(allowanceRes));
 
       // PHASE 2: Fetch Data NFT (Hanya jika address valid)
       const rigAddr = rigAddrRes as `0x${string}`;
-      const proId = BigInt(proIdRes as bigint);
-      const legendId = BigInt(legendIdRes as bigint);
+      const proId = BigInt(proIdRes);
+      const legendId = BigInt(legendIdRes);
 
       if (rigAddr && rigAddr !== ZERO_ADDRESS) {
         try {
+          // Multicall kedua tetap menggunakan allowFailure: true (default)
+          // Kita cast config ke any, tapi biarkan hasilnya terinferensi sebagai objek (default behavior)
           const [proBalRes, legendBalRes] = await publicClient.multicall({
             contracts: [
               { address: rigAddr, abi: rigNftABI as any, functionName: 'balanceOf', args: [address, proId] },
               { address: rigAddr, abi: rigNftABI as any, functionName: 'balanceOf', args: [address, legendId] },
             ],
             allowFailure: true 
-          } as any); // <--- KUNCI PERBAIKAN: Cast config ke any
+          } as any);
 
+          // Cek status secara manual karena allowFailure: true
           if (proBalRes.status === 'success') setProCount(Number(proBalRes.result));
           else setProCount(0);
 
