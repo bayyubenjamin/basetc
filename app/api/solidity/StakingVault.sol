@@ -2,368 +2,443 @@
 pragma solidity ^0.8.24;
 
 /**
- * StakingVault (BaseTC) — Weighted Locks, Relayer-Gated (user pays gas)
+ * StakingVault (BaseTC vFinal)
+ * - Token stake & reward: BaseTC (ERC-20)
+ * - Reward source: GameCore (authorized funder) + Admin top-up (owner)
+ * - Distribusi: APR linear, via accRewardPerShare (MasterChef-style)
+ * - Lock: 30 / 90 / 365 hari (multiplier 1.00x / 1.20x / 1.50x)
+ * - Boost: claim-time check (tidak escrow NFT), cooldown 48h:
+ *      Pro  = +5% / NFT (max 5 = +25%)
+ *      Legend = +8% / NFT (max 3 = +24%)
+ *      Cap total boost = 50%
+ * - NFT tetap bisa dipakai mining (karena tidak di-escrow)
+ * - Safe: Ownable, ReentrancyGuard, SafeERC20
  *
- * Tujuan:
- * - User stake $BaseTC untuk jangka 7/30/365 hari.
- * - Reward dari leftover GameCore via RewardsVault.payout ke kontrak ini.
- * - Distribusi reward pakai index global (accRewardPerWeight) + SKIM dana baru.
- * - Semua aksi (stake/harvest/unstake) via UI dengan relayer signature (RELAYER_ROLE),
- *   tx tetap dikirim user (user bayar gas).
- *
- * Catatan:
- * - Early-unstake penalty opsional (default aktif 10%).
- * - Durasi & weight bisa diubah MANAGER_ROLE.
+ * Catatan penting:
+ * - Model "TWAB" di sini diterapkan secara praktis via distribusi incremental:
+ *   selama user tetap bertahan (tidak unstake), dia ikut andil pada setiap depositReward.
+ *   Makin lama stay -> makin banyak batch reward yang dia ambil (efek time-weighted).
+ * - Boost dihitung saat settle/claim. Saat boost berubah, kontrak "settle" dulu pending
+ *   dengan weight lama, lalu mengupdate effective weight untuk periode berikutnya.
  */
 
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
-import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+interface IERC20 {
+    function totalSupply() external view returns (uint256);
+    function balanceOf(address a) external view returns (uint256);
+    function transfer(address to, uint256 v) external returns (bool);
+    function allowance(address o, address s) external view returns (uint256);
+    function approve(address s, uint256 v) external returns (bool);
+    function transferFrom(address f, address t, uint256 v) external returns (bool);
+    event Transfer(address indexed from, address indexed to, uint256 value);
+    event Approval(address indexed owner, address indexed spender, uint256 value);
+}
 
-contract StakingVault is AccessControl, ReentrancyGuard {
-    using SafeERC20 for IERC20;
-    using ECDSA for bytes32;
-
-    // --- Roles ---
-    bytes32 public constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
-    bytes32 public constant RELAYER_ROLE = keccak256("RELAYER_ROLE");
-
-    IERC20 public immutable token; // BaseTC
-
-    // --- Accounting (skim total balance) ---
-    uint256 public accountedBalance; // principal + rewards yang belum dibayar
-
-    // --- Lock configs ---
-    struct LockConf { uint32 duration; uint32 weightBps; } // 10000 = 1.0x
-    LockConf public lock7d   = LockConf(7 days,   10000);  // 1.0x
-    LockConf public lock30d  = LockConf(30 days,  12000);  // 1.2x
-    LockConf public lock365d = LockConf(365 days, 15000);  // 1.5x
-
-    // --- Position ---
-    struct Position {
-        uint128 amount;      // principal
-        uint128 weight;      // amount * weightBps / 1e4
-        uint64  unlockAt;    // unix ts
-        uint128 rewards;     // accumulated (pending)
-        uint128 lastAccIdx;  // last index consumed (scaled 1e18)
+library SafeERC20 {
+    function safeTransfer(IERC20 t, address to, uint256 v) internal {
+        require(t.transfer(to, v), "TRANSFER_FAIL");
     }
-
-    mapping(address => Position) public pos;
-
-    uint128 public totalWeight;    // sum of all positions' weight
-    uint128 public accRewardPerW;  // global index scaled by 1e18
-
-    // --- Early-unstake penalty (optional) ---
-    uint16  public earlyPenaltyBps = 1000;      // default 10%
-    address public penaltyTreasury;             // if zero, penalty stays in vault
-
-    event EarlyUnstake(address indexed user, uint256 amount, uint256 penalty);
-
-    function setEarlyPenalty(uint16 bps, address treasury) external onlyRole(MANAGER_ROLE) {
-        require(bps <= 5000, "MAX_50%");
-        earlyPenaltyBps = bps;
-        penaltyTreasury = treasury; // zero => add to pool
+    function safeTransferFrom(IERC20 t, address f, address to, uint256 v) internal {
+        require(t.transferFrom(f, to, v), "TRANSFER_FROM_FAIL");
     }
-
-    // --- EIP712 ---
-    bytes32 private immutable _DOMAIN_SEPARATOR;
-    string  public constant EIP712_NAME    = "StakingVault";
-    string  public constant EIP712_VERSION = "1";
-
-    // action typehashes
-    bytes32 public constant STAKE_TYPEHASH   = keccak256("StakeAction(address user,uint256 amount,uint8 lockType,uint256 nonce,uint256 deadline)");
-    bytes32 public constant HARVEST_TYPEHASH = keccak256("HarvestAction(address user,uint256 nonce,uint256 deadline)");
-    bytes32 public constant UNSTAKE_TYPEHASH = keccak256("UnstakeAction(address user,uint256 amount,uint256 nonce,uint256 deadline)");
-
-    mapping(address => uint256) public nonces; // single rolling nonce per user
-
-    // --- Events ---
-    event Skimmed(uint256 amount);
-    event LockConfigSet(LockConf lock7d, LockConf lock30d, LockConf lock365d);
-    event Staked(address indexed user, uint256 amount, uint8 lockType, uint256 weight, uint256 unlockAt);
-    event Harvest(address indexed user, uint256 amount);
-    event Unstaked(address indexed user, uint256 amount);
-    event Rescue(address to, uint256 amount);
-
-    constructor(IERC20 baseTc, address admin) {
-        token = baseTc;
-        _grantRole(DEFAULT_ADMIN_ROLE, admin);
-        _grantRole(MANAGER_ROLE, admin);
-        _grantRole(RELAYER_ROLE, admin);
-
-        _DOMAIN_SEPARATOR = keccak256(
-            abi.encode(
-                keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
-                keccak256(bytes(EIP712_NAME)),
-                keccak256(bytes(EIP712_VERSION)),
-                block.chainid,
-                address(this)
-            )
-        );
-    }
-
-    // ===== Admin =====
-    function setLocks(LockConf calldata a, LockConf calldata b, LockConf calldata c) external onlyRole(MANAGER_ROLE) {
-        require(a.duration>0 && b.duration>0 && c.duration>0, "DUR");
-        require(a.weightBps>0 && b.weightBps>0 && c.weightBps>0, "BPS");
-        lock7d=a; lock30d=b; lock365d=c;
-        emit LockConfigSet(a,b,c);
-    }
-
-    function grantRelayer(address r) external onlyRole(DEFAULT_ADMIN_ROLE) { _grantRole(RELAYER_ROLE, r); }
-    function revokeRelayer(address r) external onlyRole(DEFAULT_ADMIN_ROLE) { _revokeRole(RELAYER_ROLE, r); }
-
-    function rescue(address to, uint256 amount) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        require(amount <= accountedBalance, "EXCEEDS");
-        accountedBalance -= amount;
-        token.safeTransfer(to, amount);
-        emit Rescue(to, amount);
-    }
-
-    // ===== Internals =====
-    function _skim() internal returns (uint256 newly) {
-        uint256 bal = token.balanceOf(address(this));
-        if (bal > accountedBalance) {
-            newly = bal - accountedBalance;
-            accountedBalance = bal;
-            emit Skimmed(newly);
-        }
-    }
-
-    function _updateIndex() internal {
-        uint256 newly = _skim();
-        if (newly == 0 || totalWeight == 0) return;
-        // acc += newly / totalWeight (scaled 1e18)
-        uint256 add = (newly * 1e18) / uint256(totalWeight);
-        accRewardPerW = uint128(uint256(accRewardPerW) + add);
-    }
-
-    /// Keeper hook: panggil setelah inflow leftover agar fair.
-    function poke() external nonReentrant {
-        _updateIndex();
-    }
-
-    function _lockConf(uint8 lockType) internal view returns (LockConf memory c) {
-        if (lockType == 1) return lock7d;
-        if (lockType == 2) return lock30d;
-        if (lockType == 3) return lock365d;
-        revert("lockType");
-    }
-
-    function _pending(Position memory p) internal view returns (uint256) {
-        if (p.weight == 0) return p.rewards;
-        uint256 delta = uint256(accRewardPerW) - uint256(p.lastAccIdx);
-        return p.rewards + (uint256(p.weight) * delta) / 1e18;
-    }
-
-    // ===== Views =====
-    function pending(address u) external view returns (uint256) {
-        Position memory p = pos[u];
-        return _pending(p);
-    }
-
-    // ===== Signature helpers (kurangi depth) =====
-    function _verifyStakeSig(
-        address user,
-        uint256 amount,
-        uint8 lockType,
-        uint256 nonce,
-        uint256 deadline,
-        bytes calldata relayerSig
-    ) internal view {
-        require(msg.sender == user, "ONLY_SELF");
-        require(block.timestamp <= deadline, "SIG_EXPIRED");
-        require(nonce == nonces[user], "BAD_NONCE");
-        bytes32 digest = keccak256(abi.encodePacked(
-            "\x19\x01",
-            _DOMAIN_SEPARATOR,
-            keccak256(abi.encode(STAKE_TYPEHASH, user, amount, lockType, nonce, deadline))
-        ));
-        address signer = ECDSA.recover(digest, relayerSig);
-        require(hasRole(RELAYER_ROLE, signer), "BAD_RELAYER_SIG");
-    }
-
-    function _verifyHarvestSig(
-        address user,
-        uint256 nonce,
-        uint256 deadline,
-        bytes calldata relayerSig
-    ) internal view {
-        require(msg.sender == user, "ONLY_SELF");
-        require(block.timestamp <= deadline, "SIG_EXPIRED");
-        require(nonce == nonces[user], "BAD_NONCE");
-        bytes32 digest = keccak256(abi.encodePacked(
-            "\x19\x01",
-            _DOMAIN_SEPARATOR,
-            keccak256(abi.encode(HARVEST_TYPEHASH, user, nonce, deadline))
-        ));
-        address signer = ECDSA.recover(digest, relayerSig);
-        require(hasRole(RELAYER_ROLE, signer), "BAD_RELAYER_SIG");
-    }
-
-    function _verifyUnstakeSig(
-        address user,
-        uint256 amount,
-        uint256 nonce,
-        uint256 deadline,
-        bytes calldata relayerSig
-    ) internal view {
-        require(msg.sender == user, "ONLY_SELF");
-        require(block.timestamp <= deadline, "SIG_EXPIRED");
-        require(nonce == nonces[user], "BAD_NONCE");
-        bytes32 digest = keccak256(abi.encodePacked(
-            "\x19\x01",
-            _DOMAIN_SEPARATOR,
-            keccak256(abi.encode(UNSTAKE_TYPEHASH, user, amount, nonce, deadline))
-        ));
-        address signer = ECDSA.recover(digest, relayerSig);
-        require(hasRole(RELAYER_ROLE, signer), "BAD_RELAYER_SIG");
-    }
-
-    // ===== Small helpers (pecah logika untuk kurangi stack) =====
-    function _harvestIfAny(address user) internal returns (uint256 paid) {
-        Position storage p = pos[user];
-        if (p.weight == 0) {
-            return 0;
-        }
-        Position memory pm = p; // copy for _pending
-        uint256 amt = _pending(pm);
-        if (amt > 0) {
-            p.rewards = 0;
-            require(amt <= accountedBalance, "INSUFFICIENT");
-            accountedBalance -= amt;
-            token.safeTransfer(user, amt);
-            emit Harvest(user, amt);
-        }
-        p.lastAccIdx = uint128(accRewardPerW);
-        return amt;
-    }
-
-    function _reducePosition(Position storage p, uint256 amount) internal returns (uint256 wOut) {
-        uint256 oldAmt = p.amount;
-        uint256 oldW = p.weight;
-        wOut = (oldW * amount) / oldAmt;
-        p.amount = uint128(oldAmt - amount);
-        p.weight = uint128(oldW - wOut);
-        p.lastAccIdx = uint128(accRewardPerW);
-        totalWeight -= uint128(wOut);
-    }
-
-    function _applyPenaltyAndPayout(address user, uint256 amount, bool early) internal {
-        uint256 net = amount;
-        uint256 penalty = 0;
-
-        if (early && earlyPenaltyBps > 0) {
-            penalty = (amount * earlyPenaltyBps) / 10_000;
-            net = amount - penalty;
-
-            if (penaltyTreasury != address(0)) {
-                require(penalty <= accountedBalance, "INSUFFICIENT");
-                accountedBalance -= penalty;
-                token.safeTransfer(penaltyTreasury, penalty);
-            } else {
-                // penalty stay in vault → jadi tambahan pool (tetap di accountedBalance)
-                _updateIndex(); // mengikuti pola sebelumnya
-            }
-            emit EarlyUnstake(user, amount, penalty);
-        }
-
-        require(net <= accountedBalance, "INSUFFICIENT");
-        accountedBalance -= net;
-        token.safeTransfer(user, net);
-        emit Unstaked(user, amount);
-    }
-
-    // ===== Relayer-gated actions (user pays gas) =====
-    function stakeWithSig(
-        address user,
-        uint256 amount,
-        uint8 lockType,
-        uint256 nonce,
-        uint256 deadline,
-        bytes calldata relayerSig
-    ) external nonReentrant {
-        _verifyStakeSig(user, amount, lockType, nonce, deadline, relayerSig);
-
-        _updateIndex();
-
-        Position storage p = pos[user];
-        if (p.weight > 0) {
-            // harvest ke storage
-            p.rewards = uint128(_pending(p));
-        }
-
-        LockConf memory c = _lockConf(lockType);
-        uint256 w = (amount * c.weightBps) / 1e4;
-
-        // pull tokens (needs prior approval)
-        token.safeTransferFrom(user, address(this), amount);
-        accountedBalance += amount; // principal diakui
-
-        p.amount += uint128(amount);
-        p.weight += uint128(w);
-        p.unlockAt = uint64(block.timestamp + c.duration);
-        p.lastAccIdx = uint128(accRewardPerW);
-        totalWeight += uint128(w);
-
-        nonces[user]++;
-        emit Staked(user, amount, lockType, w, p.unlockAt);
-    }
-
-    function harvestWithSig(
-        address user,
-        uint256 nonce,
-        uint256 deadline,
-        bytes calldata relayerSig
-    ) external nonReentrant {
-        _verifyHarvestSig(user, nonce, deadline, relayerSig);
-
-        _updateIndex();
-        Position storage p = pos[user];
-        require(p.weight > 0, "NO_POS");
-        Position memory pm = p;
-        uint256 amt = _pending(pm);
-        require(amt > 0, "NO_REWARDS");
-
-        p.rewards = 0;
-        p.lastAccIdx = uint128(accRewardPerW);
-
-        require(amt <= accountedBalance, "INSUFFICIENT");
-        accountedBalance -= amt;
-        token.safeTransfer(user, amt);
-
-        nonces[user]++;
-        emit Harvest(user, amt);
-    }
-
-    function unstakeWithSig(
-        address user,
-        uint256 amount,
-        uint256 nonce,
-        uint256 deadline,
-        bytes calldata relayerSig
-    ) external nonReentrant {
-        _verifyUnstakeSig(user, amount, nonce, deadline, relayerSig);
-
-        _updateIndex();
-
-        Position storage p = pos[user];
-        require(amount <= p.amount, "AMOUNT");
-
-        bool early = block.timestamp < p.unlockAt;
-
-        // auto-harvest pending sebelum release principal
-        _harvestIfAny(user);
-
-        // kurangi posisi & totalWeight
-        _reducePosition(p, amount);
-
-        // penalty (opsional) + payout principal
-        _applyPenaltyAndPayout(user, amount, early);
-
-        nonces[user]++;
+    function safeApprove(IERC20 t, address s, uint256 v) internal {
+        require(t.approve(s, v), "APPROVE_FAIL");
     }
 }
 
+abstract contract ReentrancyGuard {
+    uint256 private _rg;
+    constructor(){ _rg = 1; }
+    modifier nonReentrant(){
+        require(_rg == 1, "REENTRANT");
+        _rg = 2;
+        _;
+        _rg = 1;
+    }
+}
+
+abstract contract Ownable {
+    address public owner;
+    event OwnershipTransferred(address indexed prev, address indexed next);
+    constructor(){ owner = msg.sender; emit OwnershipTransferred(address(0), msg.sender); }
+    modifier onlyOwner(){ require(msg.sender == owner, "NOT_OWNER"); _; }
+    function transferOwnership(address n) external onlyOwner {
+        require(n != address(0), "ZERO_ADDR");
+        emit OwnershipTransferred(owner, n);
+        owner = n;
+    }
+}
+
+// Minimal ERC1155 balance checker untuk RigNFT
+interface IRigNFT {
+    function balanceOf(address account, uint256 id) external view returns (uint256);
+}
+
+contract StakingVault is Ownable, ReentrancyGuard {
+    using SafeERC20 for IERC20;
+
+    /*//////////////////////////////////////////////////////////////
+                                TOKEN & FUNDERS
+    //////////////////////////////////////////////////////////////*/
+    IERC20 public immutable baseTC;
+
+    mapping(address => bool) public isFunder; // GameCore + admin ops
+    event FunderSet(address indexed funder, bool allowed);
+
+    /*//////////////////////////////////////////////////////////////
+                           LOCK & BOOST CONFIG
+    //////////////////////////////////////////////////////////////*/
+    // Multiplier basis points (10000 = 1.0x)
+    uint16 public constant BPS = 10000;
+    uint16 public lock30MultBps = 10000; // 1.00x
+    uint16 public lock90MultBps = 12000; // 1.20x
+    uint16 public lock365MultBps = 15000; // 1.50x
+
+    uint32 public constant LOCK_30_D   = 30 days;
+    uint32 public constant LOCK_90_D   = 90 days;
+    uint32 public constant LOCK_365_D  = 365 days;
+
+    // Boost config (claim-time)
+    IRigNFT public rigNFT;
+    uint256 public proId;     // ERC1155 token id untuk Pro
+    uint256 public legendId;  // ERC1155 token id untuk Legend
+    uint8   public maxProPerWallet    = 5;
+    uint8   public maxLegendPerWallet = 3;
+    uint16  public proBoostPerNFTBps  = 500;  // +5% per Pro
+    uint16  public legendBoostPerNFTBps = 800; // +8% per Legend
+    uint16  public maxBoostCapBps     = 5000; // 50% cap (guardrail)
+    uint32  public boostHoldCooldown  = 48 hours; // wajib pegang >= 48 jam sebelum boost aktif
+
+    /*//////////////////////////////////////////////////////////////
+                             REWARD ACCOUNTING
+    //////////////////////////////////////////////////////////////*/
+    // accRewardPerShare menggunakan "effective weight" (amount * lockMult * (1+boost) saat terakhir settle).
+    uint256 public accRewardPerShare; // 1e18
+    uint256 public totalEffectiveWeight; // agregat effective weight
+    uint256 public pendingInjection; // reward tertahan saat pool weight = 0
+
+    // Ditambah untuk akurasi deposit (token deflasi/fee-on-transfer)
+    uint256 private _lastVaultBalance;
+
+    /*//////////////////////////////////////////////////////////////
+                              USER STATE
+    //////////////////////////////////////////////////////////////*/
+    struct Tranche {
+        uint128 amount;
+        uint32  lockUntil;
+        uint16  lockMultBps; // 10000/12000/15000
+    }
+
+    struct User {
+        uint256 rewardDebt;         // effectiveWeight * acc / 1e18 (pada checkpoint terakhir)
+        uint256 unclaimed;          // akumulasi pending saat settle, dibayar saat claim()
+        uint256 baseWeight;         // sum(amount * lockMultBps / BPS) tanpa boost
+        uint256 effectiveWeight;    // baseWeight * (1 + boostBps/BPS) pada checkpoint terakhir
+        uint48  lastActionAt;       // waktu terakhir stake/unstake/claim (basis cooldown)
+        Tranche[] tranches;         // posisi staking terkunci
+    }
+    mapping(address => User) private users;
+
+    /*//////////////////////////////////////////////////////////////
+                               EVENTS
+    //////////////////////////////////////////////////////////////*/
+    event Staked(address indexed user, uint256 amount, uint32 lockUntil, uint16 lockMultBps);
+    event Unstaked(address indexed user, uint256 amount);
+    event Claimed(address indexed user, uint256 amount);
+    event DepositReward(address indexed from, uint256 amount, uint256 injected, uint256 newAcc);
+    event RigConfigUpdated(address rig, uint256 proId, uint256 legendId);
+    event BoostParamsUpdated(uint16 proBps, uint16 legendBps, uint16 capBps, uint32 cooldown);
+    event LockMultiplierUpdated(uint16 m30, uint16 m90, uint16 m365);
+
+    /*//////////////////////////////////////////////////////////////
+                               CONSTRUCTOR
+    //////////////////////////////////////////////////////////////*/
+    constructor(IERC20 _baseTC) {
+        require(address(_baseTC) != address(0), "ZERO_TOKEN");
+        baseTC = _baseTC;
+        _lastVaultBalance = 0;
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                           OWNER / ADMIN FUNCTIONS
+    //////////////////////////////////////////////////////////////*/
+    function setFunder(address funder, bool allowed) external onlyOwner {
+        isFunder[funder] = allowed;
+        emit FunderSet(funder, allowed);
+    }
+
+    function setRigNFT(address rig, uint256 _proId, uint256 _legendId) external onlyOwner {
+        rigNFT = IRigNFT(rig);
+        proId = _proId;
+        legendId = _legendId;
+        emit RigConfigUpdated(rig, _proId, _legendId);
+    }
+
+    function setBoostParams(uint16 proBps, uint16 legendBps, uint16 capBps, uint32 cooldown) external onlyOwner {
+        require(capBps <= 10000, "CAP>100%");
+        proBoostPerNFTBps = proBps;
+        legendBoostPerNFTBps = legendBps;
+        maxBoostCapBps = capBps;
+        boostHoldCooldown = cooldown;
+        emit BoostParamsUpdated(proBps, legendBps, capBps, cooldown);
+    }
+
+    function setLockMultipliers(uint16 m30, uint16 m90, uint16 m365) external onlyOwner {
+        require(m30 >= 10000 && m90 >= 10000 && m365 >= 10000, "BAD_MULT");
+        lock30MultBps = m30;
+        lock90MultBps = m90;
+        lock365MultBps = m365;
+        emit LockMultiplierUpdated(m30, m90, m365);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                              CORE LOGIC
+    //////////////////////////////////////////////////////////////*/
+
+    // ======== FUNDING (GameCore/Admin) ========
+    function depositReward(uint256 amount) external nonReentrant {
+        require(isFunder[msg.sender] || msg.sender == owner, "NOT_FUNDER");
+        require(amount > 0, "AMOUNT=0");
+
+        // Transfer in and measure delta (for fee-on-transfer tokens)
+        uint256 beforeBal = baseTC.balanceOf(address(this));
+        baseTC.safeTransferFrom(msg.sender, address(this), amount);
+        uint256 afterBal = baseTC.balanceOf(address(this));
+        uint256 received = afterBal - beforeBal;
+
+        uint256 injectAmount = received + pendingInjection;
+
+        if (totalEffectiveWeight == 0) {
+            // Tidak ada staker aktif -> tahan dulu
+            pendingInjection = injectAmount;
+        } else {
+            accRewardPerShare += (injectAmount * 1e18) / totalEffectiveWeight;
+            pendingInjection = 0;
+        }
+
+        _lastVaultBalance = afterBal;
+        emit DepositReward(msg.sender, amount, injectAmount, accRewardPerShare);
+    }
+
+    // ======== STAKE ========
+    enum LockClass { D30, D90, D365 }
+
+    function stake(uint256 amount, LockClass lockClass) external nonReentrant {
+        require(amount > 0, "AMOUNT=0");
+        User storage u = users[msg.sender];
+
+        // 1) settle pending berdasar effectiveWeight lama
+        _settle(msg.sender, u);
+
+        // 2) hitung lockUntil + lockMultBps
+        (uint32 dur, uint16 mult) = _lockParams(lockClass);
+        uint32 until = uint32(block.timestamp) + dur;
+
+        // 3) transfer token masuk
+        baseTC.safeTransferFrom(msg.sender, address(this), amount);
+
+        // 4) push tranche
+        u.tranches.push(Tranche({
+            amount: _toU128(amount),
+            lockUntil: until,
+            lockMultBps: mult
+        }));
+
+        // 5) update baseWeight (tanpa boost)
+        uint256 addBase = (amount * mult) / BPS;
+        u.baseWeight += addBase;
+
+        // 6) apply boost baru (claim-time check berdasar cooldown dari lastActionAt)
+        uint16 boostBps = _currentBoostBps(msg.sender, u);
+        uint256 newEff = (u.baseWeight * (BPS + boostBps)) / BPS;
+
+        // 7) adjust totalEffectiveWeight
+        totalEffectiveWeight = totalEffectiveWeight + newEff - u.effectiveWeight;
+        u.effectiveWeight = newEff;
+
+        // 8) update rewardDebt sesuai acc saat ini
+        u.rewardDebt = (u.effectiveWeight * accRewardPerShare) / 1e18;
+
+        // 9) set lastActionAt
+        u.lastActionAt = uint48(block.timestamp);
+
+        _lastVaultBalance = baseTC.balanceOf(address(this));
+        emit Staked(msg.sender, amount, until, mult);
+    }
+
+    // ======== UNSTAKE (parsial / multi-tranche) ========
+    function unstake(uint256[] calldata trancheIdx, uint256[] calldata amounts) external nonReentrant {
+        require(trancheIdx.length == amounts.length && trancheIdx.length > 0, "BAD_ARGS");
+        User storage u = users[msg.sender];
+
+        // 1) settle pending dengan effectiveWeight lama
+        _settle(msg.sender, u);
+
+        uint256 totalOut = 0;
+        for (uint256 i = 0; i < trancheIdx.length; i++) {
+            uint256 idx = trancheIdx[i];
+            require(idx < u.tranches.length, "IDX_OOB");
+            Tranche storage t = u.tranches[idx];
+            require(block.timestamp >= t.lockUntil, "LOCKING");
+            uint256 take = amounts[i];
+            require(take > 0 && take <= t.amount, "BAD_AMT");
+
+            t.amount = uint128(uint256(t.amount) - take);
+            totalOut += take;
+
+            // kurangi baseWeight
+            uint256 subBase = (take * t.lockMultBps) / BPS;
+            u.baseWeight -= subBase;
+        }
+
+        // bersihkan elemen zero-amount di belakang (opsional)
+        _compactTranches(u);
+
+        // update effective weight dgn boost saat ini
+        uint16 boostBps = _currentBoostBps(msg.sender, u);
+        uint256 newEff = (u.baseWeight * (BPS + boostBps)) / BPS;
+        totalEffectiveWeight = totalEffectiveWeight + newEff - u.effectiveWeight;
+        u.effectiveWeight = newEff;
+
+        // update rewardDebt
+        u.rewardDebt = (u.effectiveWeight * accRewardPerShare) / 1e18;
+
+        // transfer token keluar
+        if (totalOut > 0) {
+            baseTC.safeTransfer(msg.sender, totalOut);
+        }
+
+        u.lastActionAt = uint48(block.timestamp);
+        _lastVaultBalance = baseTC.balanceOf(address(this));
+        emit Unstaked(msg.sender, totalOut);
+    }
+
+    // ======== CLAIM ========
+    function claim() external nonReentrant {
+        User storage u = users[msg.sender];
+
+        // settle pending pakai effectiveWeight lama
+        _settle(msg.sender, u);
+
+        uint256 toPay = u.unclaimed;
+        require(toPay > 0, "NO_REWARD");
+
+        u.unclaimed = 0;
+        baseTC.safeTransfer(msg.sender, toPay);
+
+        // update debt setelah pembayaran (effectiveWeight dan acc sudah di-refresh di _settle)
+        u.rewardDebt = (u.effectiveWeight * accRewardPerShare) / 1e18;
+        u.lastActionAt = uint48(block.timestamp);
+        _lastVaultBalance = baseTC.balanceOf(address(this));
+        emit Claimed(msg.sender, toPay);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                           INTERNAL HELPERS
+    //////////////////////////////////////////////////////////////*/
+
+    function _settle(address account, User storage u) internal {
+        // hitung pending berbasis effectiveWeight lama
+        if (u.effectiveWeight > 0) {
+            uint256 accrued = (u.effectiveWeight * accRewardPerShare) / 1e18;
+            if (accrued > u.rewardDebt) {
+                u.unclaimed += (accrued - u.rewardDebt);
+            }
+        }
+
+        // hitung boost eligibility saat ini (claim-time rule + cooldown)
+        uint16 boostBps = _currentBoostBps(account, u);
+
+        // refresh effective weight untuk periode berikutnya
+        uint256 newEff = (u.baseWeight * (BPS + boostBps)) / BPS;
+        if (newEff != u.effectiveWeight) {
+            totalEffectiveWeight = totalEffectiveWeight + newEff - u.effectiveWeight;
+            u.effectiveWeight = newEff;
+        }
+
+        // refresh rewardDebt ke checkpoint baru
+        u.rewardDebt = (u.effectiveWeight * accRewardPerShare) / 1e18;
+    }
+
+    function _currentBoostBps(address account, User storage u) internal view returns (uint16) {
+        // cooldown: harus >= 48 jam sejak aksi terakhir
+        if (block.timestamp < uint256(u.lastActionAt) + uint256(boostHoldCooldown)) {
+            return 0;
+        }
+        // jika rigNFT belum diset -> tidak ada boost
+        if (address(rigNFT) == address(0)) return 0;
+
+        uint256 pro = rigNFT.balanceOf(account, proId);
+        uint256 leg = rigNFT.balanceOf(account, legendId);
+
+        if (pro == 0 && leg == 0) return 0;
+
+        if (pro > maxProPerWallet) pro = maxProPerWallet;
+        if (leg > maxLegendPerWallet) leg = maxLegendPerWallet;
+
+        uint256 boost = pro * proBoostPerNFTBps + leg * legendBoostPerNFTBps;
+        if (boost > maxBoostCapBps) boost = maxBoostCapBps;
+        return uint16(boost);
+    }
+
+    function _lockParams(LockClass c) internal view returns (uint32 dur, uint16 mult) {
+        if (c == LockClass.D30) { return (LOCK_30_D, lock30MultBps); }
+        if (c == LockClass.D90) { return (LOCK_90_D, lock90MultBps); }
+        return (LOCK_365_D, lock365MultBps);
+    }
+
+    function _compactTranches(User storage u) internal {
+        uint256 len = u.tranches.length;
+        // hapus trailing zero-amount tranches
+        while (len > 0 && u.tranches[len-1].amount == 0) {
+            u.tranches.pop();
+            len--;
+        }
+    }
+
+    function _toU128(uint256 v) private pure returns (uint128) {
+        require(v <= type(uint128).max, "OVERFLOW_U128");
+        return uint128(v);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                                 VIEWS
+    //////////////////////////////////////////////////////////////*/
+    function pendingReward(address account) external view returns (uint256) {
+        User storage u = users[account];
+        uint256 _acc = accRewardPerShare;
+        uint256 eff = u.effectiveWeight;
+
+        // simulasi jika ada pendingInjection dan ada totalEffectiveWeight
+        if (pendingInjection > 0 && totalEffectiveWeight > 0) {
+            _acc = _acc + (pendingInjection * 1e18) / totalEffectiveWeight;
+        }
+
+        uint256 pending = u.unclaimed;
+        if (eff > 0) {
+            uint256 accrued = (eff * _acc) / 1e18;
+            if (accrued > u.rewardDebt) {
+                pending += (accrued - u.rewardDebt);
+            }
+        }
+        return pending;
+    }
+
+    function getUser(address account) external view returns (
+        uint256 baseWeight,
+        uint256 effectiveWeight,
+        uint48  lastActionAt,
+        uint256 unclaimed,
+        Tranche[] memory tranches
+    ) {
+        User storage u = users[account];
+        return (u.baseWeight, u.effectiveWeight, u.lastActionAt, u.unclaimed, u.tranches);
+    }
+
+    function getGlobal() external view returns (
+        uint256 _totalEffectiveWeight,
+        uint256 _accRewardPerShare,
+        uint256 _pendingInjection
+    ) {
+        return (totalEffectiveWeight, accRewardPerShare, pendingInjection);
+    }
+}

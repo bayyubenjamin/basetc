@@ -1,12 +1,17 @@
-// app/components/Staking.tsx
 "use client";
 
 import { useState, useMemo } from "react";
 import type { FC } from "react";
 import { useAccount, useReadContract, useWriteContract, usePublicClient } from "wagmi";
 import { base } from "viem/chains";
-import { formatEther, parseEther, type Address } from "viem";
+import { formatEther, parseEther } from "viem";
 import { stakingVaultAddress, stakingVaultABI, baseTcAddress, baseTcABI } from "../lib/web3Config";
+
+const LOCK_OPTIONS = [
+  { label: "7 Days (1.0x)", value: 1 },
+  { label: "30 Days (1.2x)", value: 2 },
+  { label: "365 Days (1.5x)", value: 3 },
+];
 
 const Staking: FC = () => {
   const { address } = useAccount();
@@ -30,7 +35,7 @@ const Staking: FC = () => {
   const { data: position, refetch: refetchPosition } = useReadContract({
     address: stakingVaultAddress,
     abi: stakingVaultABI as any,
-    functionName: "pos",
+    functionName: "getUser",
     args: [address],
     query: { enabled: !!address },
   });
@@ -38,7 +43,7 @@ const Staking: FC = () => {
   const { data: pendingRewards, refetch: refetchPending } = useReadContract({
     address: stakingVaultAddress,
     abi: stakingVaultABI as any,
-    functionName: "pending",
+    functionName: "pendingReward",
     args: [address],
     query: { enabled: !!address },
   });
@@ -59,7 +64,13 @@ const Staking: FC = () => {
     query: { enabled: !!address },
   });
 
-  const stakedAmount = useMemo(() => (position ? Number(formatEther((position as any)[0] as bigint)) : 0), [position]);
+  const stakedAmount = useMemo(() => {
+    if (!position) return 0;
+    // get total from tranches
+    const tranches = (position as any).tranches as { amount: bigint }[];
+    return tranches.reduce((sum, t) => sum + Number(formatEther(t.amount)), 0);
+  }, [position]);
+
   const rewards = useMemo(() => (pendingRewards ? Number(formatEther(pendingRewards as bigint)) : 0), [pendingRewards]);
 
   // --- Actions ---
@@ -69,142 +80,149 @@ const Staking: FC = () => {
     setStatus(`Preparing ${action}...`);
 
     try {
-        const stakeAmount = parseEther(amount || "0");
-        if (action === "stake" && stakeAmount <= 0n) throw new Error("Amount must be greater than 0.");
-        if (action === "stake" && stakeAmount > (baseTcBalance as bigint)) throw new Error("Insufficient balance.");
+      const stakeAmount = parseEther(amount || "0");
+      if (action === "stake" && stakeAmount <= 0n) throw new Error("Amount must be greater than 0.");
+      if (action === "stake" && stakeAmount > (baseTcBalance as bigint)) throw new Error("Insufficient balance.");
 
-        if (action === "stake" && (allowance as bigint) < stakeAmount) {
-            setStatus("Approving $BaseTC...");
-            const approveHash = await writeContractAsync({
-                address: baseTcAddress,
-                abi: baseTcABI as any,
-                functionName: "approve",
-                args: [stakingVaultAddress, stakeAmount],
-                account: address,
-                chain: base,
-            });
-            await publicClient?.waitForTransactionReceipt({ hash: approveHash });
-            await refetchAllowance();
-            setStatus("Approval successful. Preparing to stake...");
-        }
-
-        const nonce = (await refetchNonces()).data;
-        const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600);
-        
-        const sigRes = await fetch("/api/sign-event-action", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                vault: "staking",
-                action,
-                user: address,
-                amount: action === "stake" ? amount : parseEther(stakedAmount.toString()).toString(),
-                lockType,
-                nonce: String(nonce),
-                deadline: String(deadline),
-            }),
+      if (action === "stake" && (allowance as bigint) < stakeAmount) {
+        setStatus("Approving $BaseTC...");
+        const approveHash = await writeContractAsync({
+          address: baseTcAddress,
+          abi: baseTcABI as any,
+          functionName: "approve",
+          args: [stakingVaultAddress, stakeAmount],
+          account: address,
+          chain: base,
         });
+        await publicClient?.waitForTransactionReceipt({ hash: approveHash });
+        await refetchAllowance();
+        setStatus("Approval successful. Preparing to stake...");
+      }
 
-        const sigData = await sigRes.json();
-        if (!sigRes.ok) throw new Error(sigData.error || "Failed to get signature.");
+      const nonce = (await refetchNonces()).data;
+      const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600);
 
-        let functionName: "stakeWithSig" | "harvestWithSig" | "unstakeWithSig";
-        let args: any[];
+      const sigRes = await fetch("/api/sign-event-action", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          vault: "staking",
+          action,
+          user: address,
+          amount: action === "stake" ? amount : parseEther(stakedAmount.toString()).toString(),
+          lockType,
+          nonce: String(nonce),
+          deadline: String(deadline),
+        }),
+      });
+      const sigData = await sigRes.json();
+      if (!sigRes.ok) throw new Error(sigData.error || "Failed to get signature.");
 
-        if (action === "stake") {
-            functionName = "stakeWithSig";
-            args = [address, stakeAmount, lockType, nonce, deadline, sigData.signature];
-        } else if (action === "harvest") {
-            functionName = "harvestWithSig";
-            args = [address, nonce, deadline, sigData.signature];
-        } else {
-            functionName = "unstakeWithSig";
-            args = [address, parseEther(stakedAmount.toString()), nonce, deadline, sigData.signature];
-        }
+      let functionName: any;
+      let args: any[];
 
-        setStatus("Awaiting transaction confirmation...");
-        const txHash = await writeContractAsync({
-            address: stakingVaultAddress,
-            abi: stakingVaultABI as any,
-            functionName,
-            args,
-            account: address,
-            chain: base,
-        });
+      if (action === "stake") {
+        functionName = "stakeWithSig";
+        args = [address, stakeAmount, lockType, nonce, deadline, sigData.signature];
+      } else if (action === "harvest") {
+        functionName = "harvestWithSig";
+        args = [address, nonce, deadline, sigData.signature];
+      } else {
+        functionName = "unstakeWithSig";
+        args = [address, parseEther(stakedAmount.toString()), nonce, deadline, sigData.signature];
+      }
 
-        await publicClient?.waitForTransactionReceipt({ hash: txHash });
+      setStatus("Awaiting transaction confirmation...");
+      const txHash = await writeContractAsync({
+        address: stakingVaultAddress,
+        abi: stakingVaultABI as any,
+        functionName,
+        args,
+        account: address,
+        chain: base,
+      });
 
-        setStatus(`${action.charAt(0).toUpperCase() + action.slice(1)} successful!`);
-        await Promise.all([
-          refetchNonces(),
-          refetchPosition(),
-          refetchPending(),
-          refetchBalance(),
-        ]);
+      await publicClient?.waitForTransactionReceipt({ hash: txHash });
+
+      setStatus(`${action.charAt(0).toUpperCase() + action.slice(1)} successful!`);
+      await Promise.all([refetchNonces(), refetchPosition(), refetchPending(), refetchBalance()]);
 
     } catch (e: any) {
-        setStatus(e?.shortMessage || e?.message || "An error occurred.");
+      setStatus(e?.shortMessage || e?.message || "An error occurred.");
     } finally {
-        setLoading(false);
+      setLoading(false);
     }
   };
 
   return (
-    <div className="relative">
-      {/* OVERLAY SOON */}
-      <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center bg-black/40 backdrop-blur-sm">
-        <span className="text-4xl md:text-5xl font-extrabold tracking-widest text-white/90 drop-shadow">
-          SOON!
-        </span>
-      </div>
+    <div className="max-w-md mx-auto p-4">
+      <div className="space-y-6 rounded-lg bg-neutral-900/50 p-6 border border-neutral-700 shadow-md">
+        <h2 className="text-lg font-bold text-white text-center">Staking Dashboard</h2>
 
-      {/* ASLI (DIBIARKAN, HANYA DIBUAT BLUR & NON-INTERAKTIF) */}
-      <div className="blur-sm select-none pointer-events-none">
-        <div className="space-y-4 rounded-lg bg-neutral-900/50 p-4 border border-neutral-700">
-            <div className="grid grid-cols-2 gap-4 text-center">
-                <div>
-                    <p className="text-sm text-neutral-400">Your Staked Amount</p>
-                    <p className="text-xl font-bold">{stakedAmount.toLocaleString()}</p>
-                </div>
-                <div>
-                    <p className="text-sm text-neutral-400">Pending Rewards</p>
-                    <p className="text-xl font-bold text-emerald-400">{rewards.toFixed(6)}</p>
-                </div>
-            </div>
-
-            <div className="space-y-2">
-                <label className="text-xs text-neutral-400">Amount to Stake</label>
-                <input
-                    type="number"
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                    placeholder="0.0"
-                    className="w-full rounded-md bg-neutral-800 px-3 py-2 text-white placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-            </div>
-
-            <div className="space-y-2">
-                <label className="text-xs text-neutral-400">Lock Duration</label>
-                <div className="flex gap-2">
-                    <button onClick={() => setLockType(1)} className={`flex-1 rounded px-2 py-1 text-xs ${lockType === 1 ? 'bg-blue-600' : 'bg-neutral-700'}`}>7 Days (1.0x)</button>
-                    <button onClick={() => setLockType(2)} className={`flex-1 rounded px-2 py-1 text-xs ${lockType === 2 ? 'bg-blue-600' : 'bg-neutral-700'}`}>30 Days (1.2x)</button>
-                    <button onClick={() => setLockType(3)} className={`flex-1 rounded px-2 py-1 text-xs ${lockType === 3 ? 'bg-blue-600' : 'bg-neutral-700'}`}>365 Days (1.5x)</button>
-                </div>
-            </div>
-
-            <div className="grid grid-cols-3 gap-2 pt-2">
-                <button onClick={() => handleAction("stake")} disabled={loading} className="rounded-md bg-green-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">
-                    {loading ? "..." : "Stake"}
-                </button>
-                <button onClick={() => handleAction("harvest")} disabled={loading || rewards <= 0} className="rounded-md bg-yellow-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">
-                    {loading ? "..." : "Harvest"}
-                </button>
-                <button onClick={() => handleAction("unstake")} disabled={loading || stakedAmount <= 0} className="rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">
-                    {loading ? "..." : "Unstake"}
-                </button>
-            </div>
-            {status && <p className="text-center text-xs text-neutral-400 pt-2">{status}</p>}
+        <div className="grid grid-cols-2 gap-4 text-center">
+          <div>
+            <p className="text-sm text-neutral-400">Staked Amount</p>
+            <p className="text-xl font-bold">{stakedAmount.toLocaleString()}</p>
+          </div>
+          <div>
+            <p className="text-sm text-neutral-400">Pending Rewards</p>
+            <p className="text-xl font-bold text-emerald-400">{rewards.toFixed(6)}</p>
+          </div>
         </div>
+
+        <div className="space-y-2">
+          <label className="text-xs text-neutral-400">Amount to Stake</label>
+          <input
+            type="number"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            placeholder="0.0"
+            className="w-full rounded-md bg-neutral-800 px-3 py-2 text-white placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <label className="text-xs text-neutral-400">Lock Duration</label>
+          <div className="flex gap-2">
+            {LOCK_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => setLockType(opt.value as 1 | 2 | 3)}
+                className={`flex-1 rounded px-2 py-1 text-xs font-medium ${
+                  lockType === opt.value ? "bg-blue-600" : "bg-neutral-700 hover:bg-neutral-600"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-2 pt-2">
+          <button
+            onClick={() => handleAction("stake")}
+            disabled={loading}
+            className="rounded-md bg-green-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            {loading ? "..." : "Stake"}
+          </button>
+          <button
+            onClick={() => handleAction("harvest")}
+            disabled={loading || rewards <= 0}
+            className="rounded-md bg-yellow-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            {loading ? "..." : "Harvest"}
+          </button>
+          <button
+            onClick={() => handleAction("unstake")}
+            disabled={loading || stakedAmount <= 0}
+            className="rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            {loading ? "..." : "Unstake"}
+          </button>
+        </div>
+
+        {status && <p className="text-center text-xs text-neutral-400 pt-2">{status}</p>}
       </div>
     </div>
   );
