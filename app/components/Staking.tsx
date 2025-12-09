@@ -5,7 +5,7 @@ import type { FC } from "react";
 import { useAccount, useWriteContract, usePublicClient } from "wagmi";
 import { base } from "viem/chains";
 import { formatEther, parseEther } from "viem";
-import { stakingVaultAddress, stakingVaultABI, baseTcAddress, baseTcABI, rigNFTABI } from "../lib/web3Config";
+import { stakingVaultAddress, stakingVaultABI, baseTcAddress, baseTcABI, rigNftABI } from "../lib/web3Config";
 
 const LOCK_OPTIONS = [
   { label: "7 Days (1.0x)", value: 1 },
@@ -85,7 +85,7 @@ const Staking: FC = () => {
       const rigAddr = await publicClient.readContract({
         address: stakingVaultAddress,
         abi: stakingVaultABI,
-        functionName: "rigNFT",
+        functionName: "rigNft",
       });
 
       const proId = await publicClient.readContract({
@@ -102,14 +102,14 @@ const Staking: FC = () => {
 
       const proBal = await publicClient.readContract({
         address: rigAddr as `0x${string}`,
-        abi: rigNFTABI,
+        abi: rigNftABI,
         functionName: "balanceOf",
         args: [address, proId],
       });
 
       const legendBal = await publicClient.readContract({
         address: rigAddr as `0x${string}`,
-        abi: rigNFTABI,
+        abi: rigNftABI,
         functionName: "balanceOf",
         args: [address, legendId],
       });
