@@ -55,6 +55,7 @@ const Staking: FC = () => {
         abi: stakingVaultABI,
         functionName: "pendingReward",
         args: [address],
+        authorizationList: [],
       });
       setPendingRewards(BigInt(rewardRaw as bigint | number | string));
 
@@ -64,6 +65,7 @@ const Staking: FC = () => {
         abi: baseTcABI,
         functionName: "balanceOf",
         args: [address],
+        authorizationList: [],
       });
       setBaseTcBalance(BigInt(balRaw as bigint | number | string));
 
@@ -73,6 +75,7 @@ const Staking: FC = () => {
         abi: baseTcABI,
         functionName: "allowance",
         args: [address, stakingVaultAddress],
+        authorizationList: [],
       });
       setAllowance(BigInt(allowRaw as bigint | number | string));
 
@@ -82,6 +85,7 @@ const Staking: FC = () => {
         abi: stakingVaultABI,
         functionName: "nonces",
         args: [address],
+        authorizationList: [],
       });
       setNonce(BigInt(nRaw as bigint | number | string));
 
@@ -114,6 +118,7 @@ const Staking: FC = () => {
         abi: rigNftABI,
         functionName: "balanceOf",
         args: [address, proId],
+        authorizationList: [],
       });
       setProCount(Number(proBalRaw as bigint | number));
 
@@ -122,6 +127,7 @@ const Staking: FC = () => {
         abi: rigNftABI,
         functionName: "balanceOf",
         args: [address, legendId],
+        authorizationList: [],
       });
       setLegendCount(Number(legendBalRaw as bigint | number));
     } catch (e: any) {
