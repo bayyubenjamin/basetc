@@ -42,6 +42,7 @@ const Staking: FC = () => {
 
     try {
       const pos = await publicClient.readContract({
+        account: address,
         address: stakingVaultAddress,
         abi: stakingVaultABI,
         functionName: "getUser",
