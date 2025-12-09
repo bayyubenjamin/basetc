@@ -28,7 +28,7 @@ const Staking: FC = () => {
   const [loading, setLoading] = useState(false);
 
   // --- Contract Reads ---
-  const { data: nonces, refetch: refetchNonces } = useReadContract({
+  const { refetch: refetchNonces } = useReadContract({
     address: stakingVaultAddress,
     abi: stakingVaultABI as any,
     functionName: "nonces",
@@ -68,7 +68,7 @@ const Staking: FC = () => {
     query: { enabled: !!address },
   });
 
-  // --- Read Boost NFTs ---
+  // --- Boost NFTs ---
   const { data: proCount } = useReadContract({
     address: stakingVaultAddress,
     abi: stakingVaultABI as any,
@@ -136,7 +136,11 @@ const Staking: FC = () => {
         setStatus("Approval successful. Preparing to stake...");
       }
 
-      const nonce = BigInt((await refetchNonces()).data || 0);
+      // --- Fix nonce typing ---
+      const nonceRes = await refetchNonces();
+      const nonceData = nonceRes.data as bigint | undefined | null;
+      const nonce = nonceData ?? 0n;
+
       const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600);
 
       const sigRes = await fetch("/api/sign-event-action", {
@@ -152,6 +156,7 @@ const Staking: FC = () => {
           deadline: deadline.toString(),
         }),
       });
+
       const sigData = await sigRes.json();
       if (!sigRes.ok) throw new Error(sigData.error || "Failed to get signature.");
 
@@ -182,7 +187,7 @@ const Staking: FC = () => {
       await publicClient?.waitForTransactionReceipt({ hash: txHash });
 
       setStatus(`${action.charAt(0).toUpperCase() + action.slice(1)} successful!`);
-      await Promise.all([refetchNonces(), refetchPosition(), refetchPending(), refetchBalance()]);
+      await Promise.all([refetchPosition(), refetchPending(), refetchBalance(), refetchNonces()]);
 
     } catch (e: any) {
       setStatus(e?.shortMessage || e?.message || "An error occurred.");
