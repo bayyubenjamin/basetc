@@ -1,310 +1,386 @@
-// SPDX-License-Identifier: MIT
-pragma solidity ^0.8.24;
+"use client";
 
-/**
- * StakingVault (Fixed Rate Mining Model)
- * - Reward System: FIXED RATE (Mining Style)
- * - Admin menentukan "Reward Per Detik" (misal: 0.03 token/detik).
- * - Admin bisa Top Up saldo kapan saja tanpa mengubah Rate.
- * - Top Up hanya akan memperpanjang "Umur" (periodFinish) dari mining.
- */
+import { useState, useMemo, useEffect, type FC } from "react";
+import { useAccount, useWriteContract, usePublicClient } from "wagmi";
+import { base } from "viem/chains";
+import { formatEther, parseEther } from "viem";
+import { 
+  stakingVaultAddress, 
+  stakingVaultABI, 
+  baseTcAddress, 
+  baseTcABI, 
+  rigNftABI 
+} from "../lib/web3Config";
 
-interface IERC20 {
-    function totalSupply() external view returns (uint256);
-    function balanceOf(address a) external view returns (uint256);
-    function transfer(address to, uint256 v) external returns (bool);
-    function allowance(address o, address s) external view returns (uint256);
-    function approve(address s, uint256 v) external returns (bool);
-    function transferFrom(address f, address t, uint256 v) external returns (bool);
-}
+// --- CONFIG ---
+const MAX_PRO = 5;
+const MAX_LEGEND = 3;
+const BOOST_CAP = 50; // %
 
-library SafeERC20 {
-    function safeTransfer(IERC20 t, address to, uint256 v) internal {
-        require(t.transfer(to, v), "TRANSFER_FAIL");
+const Staking: FC = () => {
+  const { address } = useAccount();
+  const publicClient = usePublicClient();
+  const { writeContractAsync } = useWriteContract();
+
+  // Input State
+  const [amount, setAmount] = useState("");
+  const [lockType, setLockType] = useState<0 | 1 | 2>(0);
+  const [status, setStatus] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  // Data State
+  const [positionRaw, setPositionRaw] = useState<any>(null);
+  const [rewardsRaw, setRewardsRaw] = useState<bigint>(0n);
+  const [balanceRaw, setBalanceRaw] = useState<bigint>(0n);
+  const [allowanceRaw, setAllowanceRaw] = useState<bigint>(0n);
+  
+  // NFT State
+  const [proCount, setProCount] = useState(0);
+  const [legendCount, setLegendCount] = useState(0);
+
+  // Time State (Untuk Countdown)
+  const [currentTime, setCurrentTime] = useState(Math.floor(Date.now() / 1000));
+
+  // --- 1. FETCH DATA ---
+  const fetchData = async () => {
+    if (!address || !publicClient) return;
+
+    try {
+      const results = await publicClient.multicall({
+        contracts: [
+          // 0. User Position
+          { address: stakingVaultAddress, abi: stakingVaultABI as any, functionName: 'getUser', args: [address] },
+          // 1. Pending Reward
+          { address: stakingVaultAddress, abi: stakingVaultABI as any, functionName: 'pendingReward', args: [address] },
+          // 2. BaseTC Balance
+          { address: baseTcAddress, abi: baseTcABI as any, functionName: 'balanceOf', args: [address] },
+          // 3. Allowance
+          { address: baseTcAddress, abi: baseTcABI as any, functionName: 'allowance', args: [address, stakingVaultAddress] },
+          // 4. RigNFT Address
+          { address: stakingVaultAddress, abi: stakingVaultABI as any, functionName: 'rigNFT', args: [] },
+          // 5. Pro ID
+          { address: stakingVaultAddress, abi: stakingVaultABI as any, functionName: 'proId', args: [] },
+          // 6. Legend ID
+          { address: stakingVaultAddress, abi: stakingVaultABI as any, functionName: 'legendId', args: [] },
+        ],
+        allowFailure: true 
+      });
+
+      if (results[0].status === 'success') setPositionRaw(results[0].result);
+      if (results[1].status === 'success') setRewardsRaw(BigInt(results[1].result as any || 0));
+      if (results[2].status === 'success') setBalanceRaw(BigInt(results[2].result as any || 0));
+      if (results[3].status === 'success') setAllowanceRaw(BigInt(results[3].result as any || 0));
+
+      // NFT Logic
+      const rigAddr = results[4].status === 'success' ? results[4].result as string : null;
+      const proId = results[5].status === 'success' ? results[5].result : null;
+      const legendId = results[6].status === 'success' ? results[6].result : null;
+
+      if (rigAddr && rigAddr !== "0x0000000000000000000000000000000000000000") {
+          fetchNftData(rigAddr, proId, legendId);
+      }
+
+    } catch (e) {
+      console.error("Fetch Error:", e);
     }
-    function safeTransferFrom(IERC20 t, address f, address to, uint256 v) internal {
-        require(t.transferFrom(f, to, v), "TRANSFER_FROM_FAIL");
-    }
-}
+  };
 
-abstract contract ReentrancyGuard {
-    uint256 private _rg;
-    constructor(){ _rg = 1; }
-    modifier nonReentrant(){
-        require(_rg == 1, "REENTRANT");
-        _rg = 2;
-        _;
-        _rg = 1;
-    }
-}
+  const fetchNftData = async (rigAddr: any, proId: any, legendId: any) => {
+      if(!publicClient || !address) return;
+      try {
+        const nftRes = await publicClient.multicall({
+            contracts: [
+                { address: rigAddr, abi: rigNftABI as any, functionName: 'balanceOf', args: [address, proId] },
+                { address: rigAddr, abi: rigNftABI as any, functionName: 'balanceOf', args: [address, legendId] },
+            ],
+            allowFailure: true
+        });
+        if(nftRes[0].status === 'success') setProCount(Number(nftRes[0].result));
+        if(nftRes[1].status === 'success') setLegendCount(Number(nftRes[1].result));
+      } catch (err) { console.warn("NFT Fail", err); }
+  }
 
-abstract contract Ownable {
-    address public owner;
-    event OwnershipTransferred(address indexed prev, address indexed next);
-    constructor(){ owner = msg.sender; emit OwnershipTransferred(address(0), msg.sender); }
-    modifier onlyOwner(){ require(msg.sender == owner, "NOT_OWNER"); _; }
-    function transferOwnership(address n) external onlyOwner {
-        require(n != address(0), "ZERO_ADDR");
-        emit OwnershipTransferred(owner, n);
-        owner = n;
-    }
-}
-
-interface IRigNFT {
-    function balanceOf(address account, uint256 id) external view returns (uint256);
-}
-
-contract StakingVault is Ownable, ReentrancyGuard {
-    using SafeERC20 for IERC20;
-
-    IERC20 public immutable baseTC;
-    mapping(address => bool) public isFunder; 
-
-    // --- LOCK CONFIG (TETAP) ---
-    uint16 public constant BPS = 10000;
-    uint16 public lock30MultBps = 10000; 
-    uint16 public lock90MultBps = 12000; 
-    uint16 public lock365MultBps = 15000; 
-
-    uint32 public constant LOCK_30_D   = 30 days;
-    uint32 public constant LOCK_90_D   = 90 days;
-    uint32 public constant LOCK_365_D  = 365 days;
-
-    // --- BOOST CONFIG (TETAP) ---
-    IRigNFT public rigNFT;
-    uint256 public proId;     
-    uint256 public legendId;  
-    uint8   public maxProPerWallet    = 5;
-    uint8   public maxLegendPerWallet = 3;
-    uint16  public proBoostPerNFTBps  = 500;  
-    uint16  public legendBoostPerNFTBps = 800; 
-    uint16  public maxBoostCapBps     = 5000; 
-    uint32  public boostHoldCooldown  = 48 hours; 
-
-    // --- MINING STATE (BARU) ---
-    uint256 public rewardRate = 0;       // Token per detik (Wei)
-    uint256 public periodFinish = 0;     // Kapan saldo reward diperkirakan habis
-    uint256 public lastUpdateTime;
-    uint256 public accRewardPerShare; 
+  // Effect: Fetch Data & Update Time Timer
+  useEffect(() => {
+    fetchData();
+    const intervalData = setInterval(fetchData, 15000);
     
-    uint256 public totalEffectiveWeight; // Total Share Pool
+    // Timer untuk countdown (update tiap 1 menit cukup untuk UI Hari/Jam)
+    const intervalTime = setInterval(() => {
+        setCurrentTime(Math.floor(Date.now() / 1000));
+    }, 60000);
 
-    struct Tranche {
-        uint128 amount;
-        uint32  lockUntil;
-        uint16  lockMultBps; 
+    return () => {
+        clearInterval(intervalData);
+        clearInterval(intervalTime);
+    };
+  }, [address]);
+
+  // --- 2. CALCULATIONS ---
+  
+  // Helper untuk parsing Tranches yang aman
+  const getTranches = useMemo(() => {
+    if (!positionRaw) return [];
+    let tranches: any[] = [];
+    if (Array.isArray(positionRaw)) {
+        if (Array.isArray(positionRaw[0])) tranches = positionRaw[0];
+        else tranches = positionRaw;
+    } else if (positionRaw?.tranches) {
+        tranches = positionRaw.tranches;
     }
+    return Array.isArray(tranches) ? tranches : [];
+  }, [positionRaw]);
 
-    struct User {
-        uint256 rewardDebt;         
-        uint256 unclaimed;          
-        uint256 baseWeight;         
-        uint256 effectiveWeight;    
-        uint48  lastActionAt;       
-        Tranche[] tranches;         
-    }
-    mapping(address => User) private users;
+  // Total Staked
+  const stakedAmount = useMemo(() => {
+    try {
+        const total = getTranches.reduce((sum: bigint, t: any) => {
+            if (!t) return sum;
+            let val = 0n;
+            if (t.amount !== undefined) val = BigInt(t.amount);
+            else if (Array.isArray(t) && t[0] !== undefined) val = BigInt(t[0]);
+            return sum + val;
+        }, 0n);
+        return formatEther(total);
+    } catch (e) { return "0"; }
+  }, [getTranches]);
 
-    // Events
-    event Staked(address indexed user, uint256 amount, uint32 lockUntil, uint16 lockMultBps);
-    event Unstaked(address indexed user, uint256 amount);
-    event Claimed(address indexed user, uint256 amount);
-    event RateUpdated(uint256 newRate, uint256 newPeriodFinish);
-    event RewardsTopUp(uint256 amount, uint256 newPeriodFinish);
+  // Countdown Logic (Hari & Jam)
+  const lockCountdown = useMemo(() => {
+    if (getTranches.length === 0) return null;
 
-    constructor(IERC20 _baseTC) {
-        baseTC = _baseTC;
-    }
+    // Cari waktu lock paling lama (Max LockUntil)
+    let maxLockTime = 0n;
+    let hasActiveStake = false;
 
-    // --- MODIFIER UPDATE POOL ---
-    modifier updatePool(address account) {
-        accRewardPerShare = rewardPerToken(); 
-        lastUpdateTime = lastTimeRewardApplicable();
-        
-        if (account != address(0)) {
-            // Kita tidak pakai _settle di modifier, tapi manual di function agar hemat gas
+    getTranches.forEach((t: any) => {
+        // Parsing aman untuk struct/array tuple
+        const amt = t.amount !== undefined ? BigInt(t.amount) : (Array.isArray(t) ? BigInt(t[0]) : 0n);
+        const lock = t.lockUntil !== undefined ? BigInt(t.lockUntil) : (Array.isArray(t) ? BigInt(t[1]) : 0n);
+
+        if (amt > 0n) {
+            hasActiveStake = true;
+            if (lock > maxLockTime) maxLockTime = lock;
         }
-        _;
-    }
+    });
 
-    // --- ADMIN CONFIG ---
-    function setFunder(address funder, bool allowed) external onlyOwner {
-        isFunder[funder] = allowed;
-    }
+    if (!hasActiveStake) return null; // Tidak ada yang di-stake
+    if (maxLockTime <= BigInt(currentTime)) return "Unlocked"; // Sudah lewat waktu
 
-    function setRigNFT(address rig, uint256 _proId, uint256 _legendId) external onlyOwner {
-        rigNFT = IRigNFT(rig);
-        proId = _proId;
-        legendId = _legendId;
-    }
+    // Hitung selisih
+    const diff = Number(maxLockTime) - currentTime;
+    const days = Math.floor(diff / 86400);
+    const hours = Math.floor((diff % 86400) / 3600);
 
-    // [PENTING] Set Kecepatan Mining (Token per Detik)
-    // Contoh: Mau 80.000 token per bulan?
-    // 80000 / (30 * 24 * 3600) = 0.030864...
-    // Masukkan dalam Wei: 30864197530864197
-    function setRewardRate(uint256 _ratePerSec) external onlyOwner updatePool(address(0)) {
-        rewardRate = _ratePerSec;
-        _updatePeriodFinish();
-        emit RateUpdated(rewardRate, periodFinish);
-    }
+    return `${days} Days ${hours} Hours`;
+  }, [getTranches, currentTime]);
 
-    // [PENTING] Top Up Saldo Reward (Isi Bensin)
-    // Bisa dipanggil kapan saja, jumlah berapa saja. 
-    // Tidak mengubah Rate, hanya memperpanjang umur mining.
-    function topUpReward(uint256 amount) external nonReentrant updatePool(address(0)) {
-        require(isFunder[msg.sender] || msg.sender == owner, "NOT_FUNDER");
-        require(rewardRate > 0, "SET_RATE_FIRST");
-        
-        baseTC.safeTransferFrom(msg.sender, address(this), amount);
-        _updatePeriodFinish();
-        
-        emit RewardsTopUp(amount, periodFinish);
-    }
+  const rewardsDisplay = useMemo(() => {
+     return rewardsRaw ? formatEther(rewardsRaw) : "0";
+  }, [rewardsRaw]);
 
-    // Hitung ulang kapan saldo akan habis berdasarkan saldo saat ini / rate
-    function _updatePeriodFinish() internal {
-        if (rewardRate == 0) {
-            periodFinish = block.timestamp;
-            return;
-        }
-        uint256 currentBalance = baseTC.balanceOf(address(this));
-        // Estimasi durasi sisa = Saldo / Rate
-        uint256 durationLeft = currentBalance / rewardRate;
-        periodFinish = block.timestamp + durationLeft;
-    }
+  const boostPercent = useMemo(() => {
+    const pro = Math.min(proCount, MAX_PRO);
+    const legend = Math.min(legendCount, MAX_LEGEND);
+    return Math.min((pro * 5) + (legend * 8), BOOST_CAP);
+  }, [proCount, legendCount]);
 
-    // --- USER ACTIONS ---
+  // --- 3. ACTIONS ---
+  const handleAction = async (isStake: boolean) => {
+    if (!address) return;
+    setLoading(true);
+    setStatus("Processing...");
 
-    function stake(uint256 amount, uint8 lockType) external nonReentrant updatePool(msg.sender) {
-        require(amount > 0, "Amount 0");
-        User storage u = users[msg.sender];
-        _settle(msg.sender, u); 
+    try {
+        if (isStake) {
+            const val = parseEther(amount || "0");
+            if (val <= 0n) throw new Error("Amount > 0");
+            
+            if (allowanceRaw < val) {
+                setStatus("Approving BaseTC...");
+                const txApprove = await writeContractAsync({
+                    address: baseTcAddress,
+                    abi: baseTcABI as any,
+                    functionName: 'approve',
+                    args: [stakingVaultAddress, val],
+                    chain: base
+                } as any);
+                await publicClient?.waitForTransactionReceipt({ hash: txApprove });
+                setAllowanceRaw(val);
+            }
 
-        uint32 dur = LOCK_30_D;
-        uint16 mult = lock30MultBps;
-        if (lockType == 1) { dur = LOCK_90_D; mult = lock90MultBps; }
-        if (lockType == 2) { dur = LOCK_365_D; mult = lock365MultBps; }
-        
-        uint32 until = uint32(block.timestamp) + dur;
-        
-        baseTC.safeTransferFrom(msg.sender, address(this), amount);
+            setStatus("Staking...");
+            const tx = await writeContractAsync({
+                address: stakingVaultAddress,
+                abi: stakingVaultABI as any,
+                functionName: 'stake',
+                args: [val, lockType],
+                chain: base
+            } as any);
+            await publicClient?.waitForTransactionReceipt({ hash: tx });
 
-        u.tranches.push(Tranche({
-            amount: uint128(amount),
-            lockUntil: until,
-            lockMultBps: mult
-        }));
+        } else {
+            setStatus("Unstaking...");
+            // Logic unstake all active tranches
+            const tranches = getTranches;
+            const activeData = tranches.map((t: any, i: number) => {
+                 const val = t?.amount !== undefined ? BigInt(t.amount) : (Array.isArray(t) ? BigInt(t[0]) : 0n);
+                 return { idx: i, val };
+            }).filter(x => x.val > 0n);
 
-        u.baseWeight += (amount * mult) / BPS;
-        _updateEffectiveWeight(msg.sender, u);
-        
-        u.lastActionAt = uint48(block.timestamp);
-        emit Staked(msg.sender, amount, until, mult);
-    }
+            if (activeData.length === 0) throw new Error("No active stakes");
 
-    function unstake(uint256[] calldata trancheIdx, uint256[] calldata amounts) external nonReentrant updatePool(msg.sender) {
-        User storage u = users[msg.sender];
-        _settle(msg.sender, u);
-
-        uint256 totalOut = 0;
-        for (uint256 i = 0; i < trancheIdx.length; i++) {
-            uint256 idx = trancheIdx[i];
-            Tranche storage t = u.tranches[idx];
-            require(block.timestamp >= t.lockUntil, "Locked");
-            uint256 take = amounts[i];
-            require(take <= t.amount, "Bad amt");
-
-            t.amount = uint128(uint256(t.amount) - take);
-            totalOut += take;
-
-            uint256 subBase = (take * t.lockMultBps) / BPS;
-            if(subBase > u.baseWeight) u.baseWeight = 0; 
-            else u.baseWeight -= subBase;
+            const tx = await writeContractAsync({
+                address: stakingVaultAddress,
+                abi: stakingVaultABI as any,
+                functionName: 'unstake',
+                args: [activeData.map(x => x.idx), activeData.map(x => x.val)],
+                chain: base
+            } as any);
+            await publicClient?.waitForTransactionReceipt({ hash: tx });
         }
 
-        _updateEffectiveWeight(msg.sender, u);
-        if (totalOut > 0) baseTC.safeTransfer(msg.sender, totalOut);
+        setStatus("Success!");
+        if (isStake) setAmount("");
+        fetchData(); 
+        setTimeout(fetchData, 4000); 
+
+    } catch (e: any) {
+        setStatus("Failed: " + (e.shortMessage || e.message));
+    } finally {
+        setLoading(false);
+    }
+  };
+
+  return (
+    <div className="max-w-md mx-auto p-4">
+      <div className="space-y-6 rounded-lg bg-white p-6 border border-gray-300 shadow-md relative">
         
-        u.lastActionAt = uint48(block.timestamp);
-        emit Unstaked(msg.sender, totalOut);
-    }
+        {/* Header & Refresh */}
+        <div className="relative mb-4">
+            <h2 className="text-lg font-bold text-gray-800 text-center">Staking Dashboard</h2>
+            <button 
+                onClick={fetchData} 
+                className="absolute right-0 top-0 text-xs text-blue-500 hover:text-blue-700 underline"
+            >
+                Refresh
+            </button>
+        </div>
 
-    function claim() external nonReentrant updatePool(msg.sender) {
-        User storage u = users[msg.sender];
-        _settle(msg.sender, u);
+        {/* Stats Grid */}
+        <div className="grid grid-cols-2 gap-4 text-center">
+          <div className="p-3 bg-gray-50 rounded-lg">
+            <p className="text-sm text-gray-500 mb-1">My Staked</p>
+            <p className="text-xl font-bold text-blue-600 truncate">
+                {Number(stakedAmount).toLocaleString(undefined, { maximumFractionDigits: 4 })}
+            </p>
+          </div>
+          <div className="p-3 bg-gray-50 rounded-lg">
+            <p className="text-sm text-gray-500 mb-1">Pending Rewards</p>
+            <p className="text-xl font-bold text-green-600 truncate">
+                {Number(rewardsDisplay).toFixed(6)}
+            </p>
+          </div>
+        </div>
 
-        uint256 payout = u.unclaimed;
-        if (payout > 0) {
-            u.unclaimed = 0;
-            baseTC.safeTransfer(msg.sender, payout);
-            emit Claimed(msg.sender, payout);
-            // Cek saldo lagi utk update finish time yg akurat (opsional, gas saving: skip)
-        }
-        _updateEffectiveWeight(msg.sender, u); 
-        u.lastActionAt = uint48(block.timestamp);
-    }
+        {/* NFT Boost Section */}
+        <div className="grid grid-cols-3 gap-2 text-center border-t border-b py-3 bg-blue-50/50 rounded-md">
+            <div>
+                <p className="text-xs text-gray-500">Pro NFT</p>
+                <p className="font-bold text-gray-800">{proCount}</p>
+            </div>
+            <div>
+                <p className="text-xs text-gray-500">Legend NFT</p>
+                <p className="font-bold text-gray-800">{legendCount}</p>
+            </div>
+            <div>
+                <p className="text-xs text-gray-500">Boost</p>
+                <p className="font-bold text-green-600">+{boostPercent}%</p>
+            </div>
+        </div>
 
-    // --- INTERNAL & VIEWS ---
+        {/* Form Input */}
+        <div className="space-y-3 mt-4">
+            <div className="flex justify-between text-xs text-gray-500 px-1">
+                <span>Stake Amount</span>
+                <span>Bal: {balanceRaw ? Number(formatEther(balanceRaw)).toFixed(4) : "0"}</span>
+            </div>
+            <input 
+                type="number" 
+                value={amount} 
+                onChange={e => setAmount(e.target.value)}
+                className="w-full border border-gray-300 p-3 rounded-md focus:ring-2 focus:ring-blue-500 outline-none"
+                placeholder="0.0"
+                disabled={loading}
+            />
+        </div>
 
-    function rewardPerToken() public view returns (uint256) {
-        if (totalEffectiveWeight == 0) return accRewardPerShare;
-        return accRewardPerShare + (
-            ((lastTimeRewardApplicable() - lastUpdateTime) * rewardRate * 1e18) / totalEffectiveWeight
-        );
-    }
+        {/* Lock Buttons */}
+        <div className="flex gap-2">
+            {[
+                { l: "30D", v: 0 }, { l: "90D", v: 1 }, { l: "365D", v: 2 }
+            ].map((opt: any) => (
+                <button 
+                    key={opt.v}
+                    onClick={() => setLockType(opt.v)}
+                    disabled={loading}
+                    className={`flex-1 py-2 text-xs font-semibold rounded transition-colors ${
+                        lockType === opt.v 
+                        ? 'bg-blue-600 text-white shadow-sm' 
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                >
+                    {opt.l}
+                </button>
+            ))}
+        </div>
 
-    function lastTimeRewardApplicable() public view returns (uint256) {
-        return block.timestamp < periodFinish ? block.timestamp : periodFinish;
-    }
+        {/* Action Buttons */}
+        <div className="grid grid-cols-2 gap-3 pt-2">
+            <button 
+                onClick={() => handleAction(true)}
+                disabled={loading}
+                className="bg-green-600 hover:bg-green-700 text-white py-3 rounded-md font-semibold shadow-sm disabled:opacity-50 transition-all"
+            >
+                {loading ? 'Processing...' : 'Stake'}
+            </button>
+            <button 
+                onClick={() => handleAction(false)}
+                disabled={loading}
+                className="bg-red-500 hover:bg-red-600 text-white py-3 rounded-md font-semibold shadow-sm disabled:opacity-50 transition-all"
+            >
+                {loading ? '...' : 'Unstake All'}
+            </button>
+        </div>
 
-    function _settle(address, User storage u) internal {
-        uint256 accrued = (u.effectiveWeight * accRewardPerShare) / 1e18;
-        uint256 pending = accrued - u.rewardDebt;
-        if (pending > 0) u.unclaimed += pending;
-        u.rewardDebt = (u.effectiveWeight * accRewardPerShare) / 1e18;
-    }
+        {/* Status Message */}
+        {status && (
+            <div className={`mt-4 text-center text-xs p-2 rounded border ${
+                status.includes("Fail") ? "bg-red-50 border-red-200 text-red-600" : "bg-blue-50 border-blue-200 text-blue-600"
+            }`}>
+                {status}
+            </div>
+        )}
 
-    function _updateEffectiveWeight(address account, User storage u) internal {
-        uint16 boostBps = 0;
-        if (block.timestamp >= uint256(u.lastActionAt) + uint256(boostHoldCooldown)) {
-             if (address(rigNFT) != address(0)) {
-                uint256 pro = rigNFT.balanceOf(account, proId);
-                uint256 leg = rigNFT.balanceOf(account, legendId);
-                
-                if (pro > maxProPerWallet) pro = maxProPerWallet;
-                if (leg > maxLegendPerWallet) leg = maxLegendPerWallet;
-                
-                uint256 b = (pro * proBoostPerNFTBps) + (leg * legendBoostPerNFTBps);
-                if (b > maxBoostCapBps) b = maxBoostCapBps;
-                boostBps = uint16(b);
-             }
-        }
-        uint256 newEff = (u.baseWeight * (BPS + boostBps)) / BPS;
-        totalEffectiveWeight = totalEffectiveWeight + newEff - u.effectiveWeight;
-        u.effectiveWeight = newEff;
-        u.rewardDebt = (u.effectiveWeight * accRewardPerShare) / 1e18;
-    }
+        {/* --- COUNTDOWN UNSTAKE (REALTIME) --- */}
+        {lockCountdown && lockCountdown !== "Unlocked" && (
+            <div className="mt-4 pt-4 border-t text-center">
+                <p className="text-xs text-gray-500 mb-1">Time until unlock:</p>
+                <div className="inline-flex items-center gap-2 bg-gray-100 px-4 py-2 rounded-full">
+                    <span className="text-sm font-bold text-gray-700">⏳ {lockCountdown}</span>
+                </div>
+            </div>
+        )}
+        
+        {lockCountdown === "Unlocked" && Number(stakedAmount) > 0 && (
+             <div className="mt-4 pt-4 border-t text-center text-xs text-green-600 font-semibold">
+                ✅ Unlocked - Ready to Unstake
+             </div>
+        )}
 
-    // Info Front End
-    function pendingReward(address account) external view returns (uint256) {
-        User storage u = users[account];
-        uint256 _acc = rewardPerToken();
-        return u.unclaimed + ((u.effectiveWeight * _acc) / 1e18 - u.rewardDebt);
-    }
-    
-    function getUser(address account) external view returns (
-        uint256 baseWeight, uint256 effectiveWeight, uint48 lastActionAt, uint256 unclaimed, Tranche[] memory tranches
-    ) {
-        User storage u = users[account];
-        return (u.baseWeight, u.effectiveWeight, u.lastActionAt, u.unclaimed, u.tranches);
-    }
+      </div>
+    </div>
+  );
+};
 
-    // Info Sisa Waktu Mining
-    function getMiningDurationLeft() external view returns (uint256) {
-        if (block.timestamp >= periodFinish) return 0;
-        return periodFinish - block.timestamp;
-    }
-
-    function proIdData() external view returns (uint256) { return proId; }
-    function legendIdData() external view returns (uint256) { return legendId; }
-}
+export default Staking;
