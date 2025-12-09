@@ -29,6 +29,7 @@ const Staking: FC = () => {
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(false);
 
+  // State Data
   const [position, setPosition] = useState<any>(null);
   const [pendingRewards, setPendingRewards] = useState<bigint>(0n);
   const [baseTcBalance, setBaseTcBalance] = useState<bigint>(0n);
@@ -37,99 +38,71 @@ const Staking: FC = () => {
   const [proCount, setProCount] = useState(0);
   const [legendCount, setLegendCount] = useState(0);
 
-  // --- 1. FETCH DATA ---
+  // --- 1. FETCH DATA (OPTIMIZED WITH MULTICALL) ---
   const fetchData = async () => {
     if (!address || !publicClient) return;
 
     try {
-      // PERBAIKAN FINAL:
-      // Kita membuang 'authorizationList' agar Runtime aman.
-      // Kita melakukan casting objek parameter ke 'any' ({ ... } as any) agar Build TypeScript lulus.
-      
-      // 1. Ambil data User Position
-      const pos = await publicClient.readContract({
-        address: stakingVaultAddress,
-        abi: stakingVaultABI,
-        functionName: "getUser",
-        args: [address],
-      } as any);
-      setPosition(pos);
+      // PHASE 1: Ambil Data Utama dalam SATU Request (Batching)
+      // Ini mencegah error "HTTP Request Failed" karena rate limit RPC
+      const [
+        userRes,
+        pendingRes,
+        balanceRes,
+        allowanceRes,
+        rigAddrRes,
+        proIdRes,
+        legendIdRes
+      ] = await publicClient.multicall({
+        contracts: [
+          // 0. User Position
+          { address: stakingVaultAddress, abi: stakingVaultABI as any, functionName: 'getUser', args: [address] },
+          // 1. Pending Reward
+          { address: stakingVaultAddress, abi: stakingVaultABI as any, functionName: 'pendingReward', args: [address] },
+          // 2. BaseTC Balance
+          { address: baseTcAddress, abi: baseTcABI as any, functionName: 'balanceOf', args: [address] },
+          // 3. Allowance
+          { address: baseTcAddress, abi: baseTcABI as any, functionName: 'allowance', args: [address, stakingVaultAddress] },
+          // 4. RigNFT Address
+          { address: stakingVaultAddress, abi: stakingVaultABI as any, functionName: 'rigNFT', args: [] },
+          // 5. Pro ID
+          { address: stakingVaultAddress, abi: stakingVaultABI as any, functionName: 'proId', args: [] },
+          // 6. Legend ID
+          { address: stakingVaultAddress, abi: stakingVaultABI as any, functionName: 'legendId', args: [] },
+        ],
+        allowFailure: false // Jika satu gagal, lempar error agar kita tahu
+      });
 
-      // 2. Ambil Pending Rewards
-      const rewardRaw = await publicClient.readContract({
-        address: stakingVaultAddress,
-        abi: stakingVaultABI,
-        functionName: "pendingReward",
-        args: [address],
-      } as any);
-      setPendingRewards(BigInt(rewardRaw as bigint | number | string));
+      // Update State Utama
+      setPosition(userRes);
+      setPendingRewards(BigInt(pendingRes as bigint));
+      setBaseTcBalance(BigInt(balanceRes as bigint));
+      setAllowance(BigInt(allowanceRes as bigint));
 
-      // 3. Ambil Saldo BaseTC User
-      const balRaw = await publicClient.readContract({
-        address: baseTcAddress,
-        abi: baseTcABI,
-        functionName: "balanceOf",
-        args: [address],
-      } as any);
-      setBaseTcBalance(BigInt(balRaw as bigint | number | string));
+      // PHASE 2: Fetch Data NFT (Hanya jika address valid)
+      const rigAddr = rigAddrRes as `0x${string}`;
+      const proId = BigInt(proIdRes as bigint);
+      const legendId = BigInt(legendIdRes as bigint);
 
-      // 4. Ambil Allowance
-      const allowRaw = await publicClient.readContract({
-        address: baseTcAddress,
-        abi: baseTcABI,
-        functionName: "allowance",
-        args: [address, stakingVaultAddress],
-      } as any);
-      setAllowance(BigInt(allowRaw as bigint | number | string));
-
-      // --- BAGIAN FETCH NFT ---
-      
-      // 5. Ambil Address RigNFT dari Contract
-      const rigAddr = (await publicClient.readContract({
-        address: stakingVaultAddress,
-        abi: stakingVaultABI,
-        functionName: "rigNFT", 
-        args: [], 
-      } as any)) as `0x${string}`;
-
-      // 6. Ambil ID NFT Pro
-      const proIdRaw = await publicClient.readContract({
-        address: stakingVaultAddress,
-        abi: stakingVaultABI,
-        functionName: "proId",
-        args: [],
-      } as any);
-      const proId = BigInt(proIdRaw as bigint | number | string);
-
-      // 7. Ambil ID NFT Legend
-      const legendIdRaw = await publicClient.readContract({
-        address: stakingVaultAddress,
-        abi: stakingVaultABI,
-        functionName: "legendId",
-        args: [],
-      } as any);
-      const legendId = BigInt(legendIdRaw as bigint | number | string);
-
-      // 8. Cek Saldo NFT (Safety Check Address)
       if (rigAddr && rigAddr !== ZERO_ADDRESS) {
         try {
-          const proBalRaw = await publicClient.readContract({
-            address: rigAddr,
-            abi: rigNftABI,
-            functionName: "balanceOf",
-            args: [address, proId],
-          } as any);
-          setProCount(Number(proBalRaw));
+          // Batching request saldo NFT juga
+          const [proBalRes, legendBalRes] = await publicClient.multicall({
+            contracts: [
+              { address: rigAddr, abi: rigNftABI as any, functionName: 'balanceOf', args: [address, proId] },
+              { address: rigAddr, abi: rigNftABI as any, functionName: 'balanceOf', args: [address, legendId] },
+            ],
+            allowFailure: true // Boleh gagal jika kontrak NFT bermasalah
+          });
 
-          const legendBalRaw = await publicClient.readContract({
-            address: rigAddr,
-            abi: rigNftABI,
-            functionName: "balanceOf",
-            args: [address, legendId],
-          } as any);
-          setLegendCount(Number(legendBalRaw));
+          if (proBalRes.status === 'success') setProCount(Number(proBalRes.result));
+          else setProCount(0);
+
+          if (legendBalRes.status === 'success') setLegendCount(Number(legendBalRes.result));
+          else setLegendCount(0);
+
         } catch (err) {
-          console.warn("Gagal membaca NFT balance (abaikan jika tidak punya NFT):", err);
+          console.warn("NFT fetch warning:", err);
           setProCount(0);
           setLegendCount(0);
         }
@@ -138,20 +111,27 @@ const Staking: FC = () => {
         setLegendCount(0);
       }
 
-      setStatus(""); 
+      setStatus(""); // Clear error status
     } catch (e: any) {
       console.error("Fetch error", e);
-      setStatus("Fetch failed: " + (e?.shortMessage || e?.message));
+      // Deteksi error spesifik
+      if (e?.message?.includes("HTTP")) {
+         setStatus("Network busy. Please refresh shortly.");
+      } else {
+         setStatus("Fetch failed: " + (e?.shortMessage || e?.message));
+      }
     }
   };
 
+  // Auto-refresh saat address berubah
   useEffect(() => {
     fetchData();
   }, [address]);
 
-  // --- 2. PERHITUNGAN DATA ---
+  // --- 2. DATA DERIVATIVES ---
   const stakedAmount = useMemo(() => {
     if (!position || !position.tranches) return 0;
+    // position.tranches adalah array struct dari contract
     return position.tranches.reduce((sum: number, t: any) => sum + Number(formatEther(t.amount)), 0);
   }, [position]);
 
@@ -169,7 +149,7 @@ const Staking: FC = () => {
 
   const boostedRewards = useMemo(() => rewards * (1 + boostPercent / 100), [rewards, boostPercent]);
 
-  // --- 3. ACTIONS (STAKE & UNSTAKE) ---
+  // --- 3. ACTIONS ---
   const handleAction = async (action: "stake" | "unstake") => {
     if (!address) return setStatus("Please connect your wallet.");
     setLoading(true);
@@ -178,29 +158,35 @@ const Staking: FC = () => {
     try {
       const stakeAmount = parseEther(amount || "0");
 
-      // Validasi STAKE
+      // --- LOGIC STAKE ---
       if (action === "stake") {
         if (stakeAmount <= 0n) throw new Error("Amount must be greater than 0.");
-        if (stakeAmount > baseTcBalance) throw new Error("Insufficient balance.");
+        
+        // Pengecekan saldo yang lebih ramah
+        if (baseTcBalance === 0n) {
+             throw new Error("Saldo BaseTC kosong atau gagal dimuat. Coba refresh.");
+        }
+        if (stakeAmount > baseTcBalance) {
+             throw new Error(`Insufficient balance. Anda punya ${formatEther(baseTcBalance)} BaseTC.`);
+        }
 
         if (allowance < stakeAmount) {
           setStatus("Approving $BaseTC...");
-          // Gunakan 'as any' pada options writeContractAsync juga untuk keamanan build
           const approveHash = await writeContractAsync({
             address: baseTcAddress,
-            abi: baseTcABI,
+            abi: baseTcABI as any,
             functionName: "approve",
             args: [stakingVaultAddress, stakeAmount],
             account: address,
             chain: base,
-          } as any);
+          });
           await publicClient?.waitForTransactionReceipt({ hash: approveHash as `0x${string}` });
           setStatus("Approval successful. Processing stake...");
           setAllowance(stakeAmount);
         }
       }
 
-      // Persiapan Transaksi
+      // --- LOGIC UNSTAKE ---
       let functionName: string;
       let args: any[];
 
@@ -208,43 +194,39 @@ const Staking: FC = () => {
         functionName = "stake";
         args = [stakeAmount, lockType];
       } else {
-        // UNSTAKE
         functionName = "unstake";
-
-        if (!position || !position.tranches) throw new Error("No staking position.");
+        if (!position || !position.tranches) throw new Error("No staking position loaded.");
         
         const activeTranches = position.tranches
             .map((t: any, idx: number) => ({ idx, amount: t.amount }))
             .filter((item: any) => item.amount > 0n);
 
-        if (activeTranches.length === 0) {
-            throw new Error("Tidak ada saldo aktif untuk di-unstake.");
-        }
+        if (activeTranches.length === 0) throw new Error("No active stakes to unstake.");
 
         const trancheIdx = activeTranches.map((item: any) => item.idx);
         const amounts = activeTranches.map((item: any) => item.amount);
-
         args = [trancheIdx, amounts];
       }
 
+      // --- EXECUTE TRANSACTION ---
       setStatus("Please confirm transaction in your wallet...");
-      
       const txHash = await writeContractAsync({
         address: stakingVaultAddress,
-        abi: stakingVaultABI, 
+        abi: stakingVaultABI as any,
         functionName,
         args,
         account: address,
         chain: base,
-      } as any);
+      });
 
       setStatus("Transaction sent. Waiting confirmation...");
       await publicClient?.waitForTransactionReceipt({ hash: txHash as `0x${string}` });
 
       setStatus(`${action === 'stake' ? 'Staking' : 'Unstaking'} successful!`);
-      
       if (action === "stake") setAmount(""); 
-      await fetchData(); 
+      
+      // Delay sedikit sebelum fetch ulang agar blockchain terupdate
+      setTimeout(() => fetchData(), 2000);
 
     } catch (e: any) {
       console.error(e);
@@ -254,7 +236,7 @@ const Staking: FC = () => {
     }
   };
 
-  // --- UI RENDER ---
+  // --- UI ---
   return (
     <div className="max-w-md mx-auto p-4">
       <div className="space-y-6 rounded-lg bg-white p-6 border border-gray-300 shadow-md">
@@ -291,7 +273,13 @@ const Staking: FC = () => {
 
         {/* Form Input */}
         <div className="space-y-2 mt-4">
-          <label className="text-xs text-gray-500">Amount to Stake</label>
+          <div className="flex justify-between">
+            <label className="text-xs text-gray-500">Amount to Stake</label>
+            {/* Helper Balance Display */}
+            <span className="text-xs text-gray-400">
+                Bal: {baseTcBalance ? formatEther(baseTcBalance) : "0"}
+            </span>
+          </div>
           <input
             type="number"
             value={amount}
@@ -340,7 +328,7 @@ const Staking: FC = () => {
 
         {/* Status Message */}
         {status && (
-            <div className={`mt-4 text-center text-xs p-2 rounded border ${
+            <div className={`mt-4 text-center text-xs p-2 rounded border break-words ${
                 status.toLowerCase().includes("fail") || status.toLowerCase().includes("error") 
                 ? "bg-red-50 text-red-600 border-red-200" 
                 : "bg-blue-50 text-blue-600 border-blue-200"
