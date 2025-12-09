@@ -42,68 +42,78 @@ const Staking: FC = () => {
     if (!address || !publicClient) return;
 
     try {
-      // NOTE: Menggunakan 'as any' pada ABI untuk menghindari error tipe 'authorizationList' yang ketat pada viem versi baru.
-      
-      // Ambil data User Position
+      // NOTE: Kita WAJIB menyertakan 'authorizationList: []' di setiap readContract 
+      // karena versi viem/wagmi Anda mewajibkannya (berdasarkan error log).
+
+      // 1. Ambil data User Position
       const pos = await publicClient.readContract({
         address: stakingVaultAddress,
-        abi: stakingVaultABI as any, 
+        abi: stakingVaultABI as any,
         functionName: "getUser",
         args: [address],
+        authorizationList: [], // <--- WAJIB ADA
       });
       setPosition(pos);
 
-      // Ambil Pending Rewards
+      // 2. Ambil Pending Rewards
       const rewardRaw = await publicClient.readContract({
         address: stakingVaultAddress,
         abi: stakingVaultABI as any,
         functionName: "pendingReward",
         args: [address],
+        authorizationList: [], // <--- WAJIB ADA
       });
       setPendingRewards(BigInt(rewardRaw as bigint | number | string));
 
-      // Ambil Saldo BaseTC User
+      // 3. Ambil Saldo BaseTC User
       const balRaw = await publicClient.readContract({
         address: baseTcAddress,
         abi: baseTcABI as any,
         functionName: "balanceOf",
         args: [address],
+        authorizationList: [], // <--- WAJIB ADA
       });
       setBaseTcBalance(BigInt(balRaw as bigint | number | string));
 
-      // Ambil Allowance
+      // 4. Ambil Allowance
       const allowRaw = await publicClient.readContract({
         address: baseTcAddress,
         abi: baseTcABI as any,
         functionName: "allowance",
         args: [address, stakingVaultAddress],
+        authorizationList: [], // <--- WAJIB ADA
       });
       setAllowance(BigInt(allowRaw as bigint | number | string));
 
-      // --- BAGIAN KRUSIAL: FETCH NFT ---
+      // --- BAGIAN FETCH NFT ---
       
-      // PERBAIKAN: Nama fungsi di ABI/Contract adalah "rigNFT", bukan "rigNft"
+      // 5. Ambil Address RigNFT dari Contract (Gunakan nama fungsi 'rigNFT' sesuai ABI)
       const rigAddr = (await publicClient.readContract({
         address: stakingVaultAddress,
         abi: stakingVaultABI as any,
         functionName: "rigNFT", 
+        authorizationList: [], // <--- WAJIB ADA
       })) as `0x${string}`;
 
+      // 6. Ambil ID NFT Pro
       const proIdRaw = await publicClient.readContract({
         address: stakingVaultAddress,
         abi: stakingVaultABI as any,
         functionName: "proId",
+        authorizationList: [], // <--- WAJIB ADA
       });
       const proId = BigInt(proIdRaw as bigint | number | string);
 
+      // 7. Ambil ID NFT Legend
       const legendIdRaw = await publicClient.readContract({
         address: stakingVaultAddress,
         abi: stakingVaultABI as any,
         functionName: "legendId",
+        authorizationList: [], // <--- WAJIB ADA
       });
       const legendId = BigInt(legendIdRaw as bigint | number | string);
 
-      // Cek apakah rigAddr valid (bukan 0x0)
+      // 8. Cek Saldo NFT (Safety Check Address)
       if (rigAddr && rigAddr !== ZERO_ADDRESS) {
         try {
           const proBalRaw = await publicClient.readContract({
@@ -111,6 +121,7 @@ const Staking: FC = () => {
             abi: rigNftABI as any,
             functionName: "balanceOf",
             args: [address, proId],
+            authorizationList: [], // <--- WAJIB ADA
           });
           setProCount(Number(proBalRaw));
 
@@ -119,6 +130,7 @@ const Staking: FC = () => {
             abi: rigNftABI as any,
             functionName: "balanceOf",
             args: [address, legendId],
+            authorizationList: [], // <--- WAJIB ADA
           });
           setLegendCount(Number(legendBalRaw));
         } catch (err) {
@@ -134,7 +146,6 @@ const Staking: FC = () => {
       setStatus(""); 
     } catch (e: any) {
       console.error("Fetch error", e);
-      // Tampilkan error yang lebih spesifik jika ada
       setStatus("Fetch failed: " + (e?.shortMessage || e?.message));
     }
   };
@@ -226,7 +237,7 @@ const Staking: FC = () => {
       
       const txHash = await writeContractAsync({
         address: stakingVaultAddress,
-        abi: stakingVaultABI as any, // 'as any' untuk menghindari type check strict
+        abi: stakingVaultABI as any, 
         functionName,
         args,
         account: address,
