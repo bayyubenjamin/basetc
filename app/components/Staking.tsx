@@ -42,8 +42,8 @@ const Staking: FC = () => {
     if (!address || !publicClient) return;
 
     try {
-      // NOTE: Kita WAJIB menyertakan 'authorizationList: []' di setiap readContract 
-      // karena versi viem/wagmi Anda mewajibkannya (berdasarkan error log).
+      // NOTE: Kita WAJIB menyertakan 'authorizationList: []' DAN 'args: [...]' 
+      // untuk memenuhi syarat tipe TypeScript yang ketat pada versi viem ini.
 
       // 1. Ambil data User Position
       const pos = await publicClient.readContract({
@@ -51,7 +51,7 @@ const Staking: FC = () => {
         abi: stakingVaultABI as any,
         functionName: "getUser",
         args: [address],
-        authorizationList: [], // <--- WAJIB ADA
+        authorizationList: [],
       });
       setPosition(pos);
 
@@ -61,7 +61,7 @@ const Staking: FC = () => {
         abi: stakingVaultABI as any,
         functionName: "pendingReward",
         args: [address],
-        authorizationList: [], // <--- WAJIB ADA
+        authorizationList: [],
       });
       setPendingRewards(BigInt(rewardRaw as bigint | number | string));
 
@@ -71,7 +71,7 @@ const Staking: FC = () => {
         abi: baseTcABI as any,
         functionName: "balanceOf",
         args: [address],
-        authorizationList: [], // <--- WAJIB ADA
+        authorizationList: [],
       });
       setBaseTcBalance(BigInt(balRaw as bigint | number | string));
 
@@ -81,18 +81,20 @@ const Staking: FC = () => {
         abi: baseTcABI as any,
         functionName: "allowance",
         args: [address, stakingVaultAddress],
-        authorizationList: [], // <--- WAJIB ADA
+        authorizationList: [],
       });
       setAllowance(BigInt(allowRaw as bigint | number | string));
 
       // --- BAGIAN FETCH NFT ---
       
-      // 5. Ambil Address RigNFT dari Contract (Gunakan nama fungsi 'rigNFT' sesuai ABI)
+      // 5. Ambil Address RigNFT dari Contract
+      // PERBAIKAN: Ditambahkan 'args: []' karena getter variabel publik tanpa parameter tetap butuh properti args kosong.
       const rigAddr = (await publicClient.readContract({
         address: stakingVaultAddress,
         abi: stakingVaultABI as any,
         functionName: "rigNFT", 
-        authorizationList: [], // <--- WAJIB ADA
+        args: [], // <--- WAJIB ADA (walaupun kosong)
+        authorizationList: [],
       })) as `0x${string}`;
 
       // 6. Ambil ID NFT Pro
@@ -100,7 +102,8 @@ const Staking: FC = () => {
         address: stakingVaultAddress,
         abi: stakingVaultABI as any,
         functionName: "proId",
-        authorizationList: [], // <--- WAJIB ADA
+        args: [], // <--- WAJIB ADA
+        authorizationList: [],
       });
       const proId = BigInt(proIdRaw as bigint | number | string);
 
@@ -109,7 +112,8 @@ const Staking: FC = () => {
         address: stakingVaultAddress,
         abi: stakingVaultABI as any,
         functionName: "legendId",
-        authorizationList: [], // <--- WAJIB ADA
+        args: [], // <--- WAJIB ADA
+        authorizationList: [],
       });
       const legendId = BigInt(legendIdRaw as bigint | number | string);
 
@@ -121,7 +125,7 @@ const Staking: FC = () => {
             abi: rigNftABI as any,
             functionName: "balanceOf",
             args: [address, proId],
-            authorizationList: [], // <--- WAJIB ADA
+            authorizationList: [],
           });
           setProCount(Number(proBalRaw));
 
@@ -130,7 +134,7 @@ const Staking: FC = () => {
             abi: rigNftABI as any,
             functionName: "balanceOf",
             args: [address, legendId],
-            authorizationList: [], // <--- WAJIB ADA
+            authorizationList: [],
           });
           setLegendCount(Number(legendBalRaw));
         } catch (err) {
