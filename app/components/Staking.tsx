@@ -1,17 +1,21 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import type { FC } from "react";
-import { useAccount, useReadContract, useWriteContract, usePublicClient } from "wagmi";
+import { useAccount, useWriteContract, usePublicClient } from "wagmi";
 import { base } from "viem/chains";
 import { formatEther, parseEther } from "viem";
-import { stakingVaultAddress, stakingVaultABI, baseTcAddress, baseTcABI } from "../lib/web3Config";
+import { stakingVaultAddress, stakingVaultABI, baseTcAddress, baseTcABI, rigNFTABI } from "../lib/web3Config";
 
 const LOCK_OPTIONS = [
   { label: "7 Days (1.0x)", value: 1 },
   { label: "30 Days (1.2x)", value: 2 },
   { label: "365 Days (1.5x)", value: 3 },
 ];
+
+const MAX_PRO = 5;
+const MAX_LEGEND = 3;
+const BOOST_CAP = 50; // %
 
 const Staking: FC = () => {
   const { address } = useAccount();
@@ -23,54 +27,124 @@ const Staking: FC = () => {
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // --- Contract Reads ---
-  const { data: position, refetch: refetchPosition } = useReadContract({
-    address: stakingVaultAddress,
-    abi: stakingVaultABI as any,
-    functionName: "getUser",
-    args: [address],
-    query: { enabled: !!address },
-  });
+  const [position, setPosition] = useState<any>(null);
+  const [pendingRewards, setPendingRewards] = useState<bigint>(0n);
+  const [baseTcBalance, setBaseTcBalance] = useState<bigint>(0n);
+  const [allowance, setAllowance] = useState<bigint>(0n);
+  const [nonce, setNonce] = useState<bigint>(0n);
 
-  const { data: pendingRewards, refetch: refetchPending } = useReadContract({
-    address: stakingVaultAddress,
-    abi: stakingVaultABI as any,
-    functionName: "pendingReward",
-    args: [address],
-    query: { enabled: !!address },
-  });
+  const [proCount, setProCount] = useState(0);
+  const [legendCount, setLegendCount] = useState(0);
 
-  const { data: baseTcBalance, refetch: refetchBalance } = useReadContract({
-    address: baseTcAddress,
-    abi: baseTcABI as any,
-    functionName: "balanceOf",
-    args: [address],
-    query: { enabled: !!address },
-  });
+  // --- Fetch contract data ---
+  const fetchData = async () => {
+    if (!address || !publicClient) return;
 
-  const { data: allowance, refetch: refetchAllowance } = useReadContract({
-    address: baseTcAddress,
-    abi: baseTcABI as any,
-    functionName: "allowance",
-    args: [address, stakingVaultAddress],
-    query: { enabled: !!address },
-  });
+    try {
+      const pos = await publicClient.readContract({
+        address: stakingVaultAddress,
+        abi: stakingVaultABI,
+        functionName: "getUser",
+        args: [address],
+      });
+      setPosition(pos);
+
+      const reward = await publicClient.readContract({
+        address: stakingVaultAddress,
+        abi: stakingVaultABI,
+        functionName: "pendingReward",
+        args: [address],
+      });
+      setPendingRewards(reward as bigint);
+
+      const bal = await publicClient.readContract({
+        address: baseTcAddress,
+        abi: baseTcABI,
+        functionName: "balanceOf",
+        args: [address],
+      });
+      setBaseTcBalance(bal as bigint);
+
+      const allow = await publicClient.readContract({
+        address: baseTcAddress,
+        abi: baseTcABI,
+        functionName: "allowance",
+        args: [address, stakingVaultAddress],
+      });
+      setAllowance(allow as bigint);
+
+      const n = await publicClient.readContract({
+        address: stakingVaultAddress,
+        abi: stakingVaultABI,
+        functionName: "nonces",
+        args: [address],
+      });
+      setNonce(n as bigint);
+
+      // --- Fetch Pro/Legend count from RigNFT ---
+      const rigAddr = await publicClient.readContract({
+        address: stakingVaultAddress,
+        abi: stakingVaultABI,
+        functionName: "rigNFT",
+      });
+
+      const proId = await publicClient.readContract({
+        address: stakingVaultAddress,
+        abi: stakingVaultABI,
+        functionName: "proId",
+      });
+
+      const legendId = await publicClient.readContract({
+        address: stakingVaultAddress,
+        abi: stakingVaultABI,
+        functionName: "legendId",
+      });
+
+      const proBal = await publicClient.readContract({
+        address: rigAddr as `0x${string}`,
+        abi: rigNFTABI,
+        functionName: "balanceOf",
+        args: [address, proId],
+      });
+
+      const legendBal = await publicClient.readContract({
+        address: rigAddr as `0x${string}`,
+        abi: rigNFTABI,
+        functionName: "balanceOf",
+        args: [address, legendId],
+      });
+
+      setProCount(Number(proBal));
+      setLegendCount(Number(legendBal));
+    } catch (e: any) {
+      console.error("Fetch error", e);
+      setStatus("Failed to fetch data.");
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, [address]);
 
   // --- Derived Data ---
   const stakedAmount = useMemo(() => {
-    if (!position || !(position as any).tranches) return 0;
-    const tranches = (position as any).tranches as { amount: bigint }[];
-    return tranches.reduce((sum, t) => sum + Number(formatEther(t.amount || 0n)), 0);
+    if (!position || !position.tranches) return 0;
+    return position.tranches.reduce((sum: number, t: any) => sum + Number(formatEther(t.amount)), 0);
   }, [position]);
 
   const rewards = useMemo(() => {
     if (!pendingRewards) return 0;
-    try {
-      return Number(formatEther(pendingRewards as bigint));
-    } catch {
-      return 0;
-    }
+    return Number(formatEther(pendingRewards));
   }, [pendingRewards]);
+
+  const boostPercent = useMemo(() => {
+    const pro = Math.min(proCount, MAX_PRO);
+    const legend = Math.min(legendCount, MAX_LEGEND);
+    const total = pro * 5 + legend * 8;
+    return Math.min(total, BOOST_CAP);
+  }, [proCount, legendCount]);
+
+  const boostedRewards = useMemo(() => rewards * (1 + boostPercent / 100), [rewards, boostPercent]);
 
   // --- Actions ---
   const handleAction = async (action: "stake" | "unstake") => {
@@ -79,57 +153,56 @@ const Staking: FC = () => {
     setStatus(`Preparing ${action}...`);
 
     try {
+      const stakeAmount = parseEther(amount || "0");
+      if (action === "stake" && stakeAmount <= 0n) throw new Error("Amount must be greater than 0.");
+      if (action === "stake" && stakeAmount > baseTcBalance) throw new Error("Insufficient balance.");
+
+      if (action === "stake" && allowance < stakeAmount) {
+        setStatus("Approving $BaseTC...");
+        const approveHash = await writeContractAsync({
+          address: baseTcAddress,
+          abi: baseTcABI as any,
+          functionName: "approve",
+          args: [stakingVaultAddress, stakeAmount],
+          account: address,
+          chain: base,
+        });
+        await publicClient?.waitForTransactionReceipt({ hash: approveHash as `0x${string}` });
+        setStatus("Approval successful. Preparing to stake...");
+      }
+
+      const currentNonce = nonce;
+      const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600);
+
+      // --- Sign & Send ---
+      let functionName: any;
+      let args: any[];
+
       if (action === "stake") {
-        const stakeAmount = parseEther(amount || "0");
-        if (stakeAmount <= 0n) throw new Error("Amount must be greater than 0.");
-        if (stakeAmount > (baseTcBalance as bigint || 0n)) throw new Error("Insufficient balance.");
-
-        if ((allowance as bigint || 0n) < stakeAmount) {
-          setStatus("Approving $BaseTC...");
-          const approveHash = await writeContractAsync({
-            address: baseTcAddress,
-            abi: baseTcABI as any,
-            functionName: "approve",
-            args: [stakingVaultAddress, stakeAmount],
-            account: address,
-            chain: base,
-          });
-          await publicClient?.waitForTransactionReceipt({ hash: approveHash as `0x${string}` });
-          await refetchAllowance();
-          setStatus("Approval successful. Preparing to stake...");
-        }
-
-        const txHash = await writeContractAsync({
-          address: stakingVaultAddress,
-          abi: stakingVaultABI as any,
-          functionName: "stake",
-          args: [parseEther(amount || "0"), lockType],
-          account: address,
-          chain: base,
-        });
-        await publicClient?.waitForTransactionReceipt({ hash: txHash as `0x${string}` });
-        setStatus("Stake successful!");
+        functionName = "stake";
+        args = [stakeAmount, lockType];
+      } else {
+        // unstake automatically claims reward
+        functionName = "unstake";
+        const trancheIdx = position.tranches.map((_: any, idx: number) => idx);
+        const amounts = position.tranches.map((t: any) => t.amount);
+        args = [trancheIdx, amounts];
       }
 
-      if (action === "unstake") {
-        // Unstake all tranches → reward otomatis claim
-        const tranches = (position as any)?.tranches || [];
-        if (tranches.length === 0) throw new Error("No staked tranches found.");
-        const trancheIdx = tranches.map((_, i) => i);
-        const amounts = tranches.map((t: any) => t.amount);
-        const txHash = await writeContractAsync({
-          address: stakingVaultAddress,
-          abi: stakingVaultABI as any,
-          functionName: "unstake",
-          args: [trancheIdx, amounts],
-          account: address,
-          chain: base,
-        });
-        await publicClient?.waitForTransactionReceipt({ hash: txHash as `0x${string}` });
-        setStatus("Unstake & Claim successful!");
-      }
+      setStatus("Awaiting transaction confirmation...");
+      const txHash = await writeContractAsync({
+        address: stakingVaultAddress,
+        abi: stakingVaultABI as any,
+        functionName,
+        args,
+        account: address,
+        chain: base,
+      });
 
-      await Promise.all([refetchPosition(), refetchPending(), refetchBalance()]);
+      await publicClient?.waitForTransactionReceipt({ hash: txHash as `0x${string}` });
+
+      setStatus(`${action.charAt(0).toUpperCase() + action.slice(1)} successful!`);
+      await fetchData();
     } catch (e: any) {
       setStatus(e?.shortMessage || e?.message || "An error occurred.");
     } finally {
@@ -151,6 +224,22 @@ const Staking: FC = () => {
           <div>
             <p className="text-sm text-gray-500">Pending Rewards</p>
             <p className="text-xl font-bold text-green-600">{rewards.toFixed(6)}</p>
+            <p className="text-xs text-gray-400">Boosted: {boostedRewards.toFixed(6)}</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-4 text-center mt-2">
+          <div>
+            <p className="text-sm text-gray-500">Pro NFT</p>
+            <p className="text-lg font-bold text-gray-900">{proCount}</p>
+          </div>
+          <div>
+            <p className="text-sm text-gray-500">Legend NFT</p>
+            <p className="text-lg font-bold text-gray-900">{legendCount}</p>
+          </div>
+          <div>
+            <p className="text-sm text-gray-500">Boost</p>
+            <p className="text-lg font-bold text-green-600">{boostPercent}%</p>
           </div>
         </div>
 
@@ -195,7 +284,7 @@ const Staking: FC = () => {
             disabled={loading || stakedAmount <= 0}
             className="rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
           >
-            {loading ? "..." : "Unstake & Claim"}
+            {loading ? "..." : "Unstake + Claim"}
           </button>
         </div>
 
@@ -206,4 +295,3 @@ const Staking: FC = () => {
 };
 
 export default Staking;
-
