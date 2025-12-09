@@ -42,90 +42,83 @@ const Staking: FC = () => {
     if (!address || !publicClient) return;
 
     try {
+      // NOTE: Menggunakan 'as any' pada ABI untuk menghindari error tipe 'authorizationList' yang ketat pada viem versi baru.
+      
       // Ambil data User Position
       const pos = await publicClient.readContract({
         address: stakingVaultAddress,
-        abi: stakingVaultABI,
+        abi: stakingVaultABI as any, 
         functionName: "getUser",
         args: [address],
-        authorizationList: [], // Ditambahkan kembali untuk fix build error
       });
       setPosition(pos);
 
       // Ambil Pending Rewards
       const rewardRaw = await publicClient.readContract({
         address: stakingVaultAddress,
-        abi: stakingVaultABI,
+        abi: stakingVaultABI as any,
         functionName: "pendingReward",
         args: [address],
-        authorizationList: [], 
       });
       setPendingRewards(BigInt(rewardRaw as bigint | number | string));
 
       // Ambil Saldo BaseTC User
       const balRaw = await publicClient.readContract({
         address: baseTcAddress,
-        abi: baseTcABI,
+        abi: baseTcABI as any,
         functionName: "balanceOf",
         args: [address],
-        authorizationList: [],
       });
       setBaseTcBalance(BigInt(balRaw as bigint | number | string));
 
       // Ambil Allowance
       const allowRaw = await publicClient.readContract({
         address: baseTcAddress,
-        abi: baseTcABI,
+        abi: baseTcABI as any,
         functionName: "allowance",
         args: [address, stakingVaultAddress],
-        authorizationList: [],
       });
       setAllowance(BigInt(allowRaw as bigint | number | string));
 
       // --- BAGIAN KRUSIAL: FETCH NFT ---
-      // Kita ambil address RigNFT dari kontrak StakingVault
+      
+      // PERBAIKAN: Nama fungsi di ABI/Contract adalah "rigNFT", bukan "rigNft"
       const rigAddr = (await publicClient.readContract({
         address: stakingVaultAddress,
-        abi: stakingVaultABI,
-        functionName: "rigNft",
-        authorizationList: [],
+        abi: stakingVaultABI as any,
+        functionName: "rigNFT", 
       })) as `0x${string}`;
 
       const proIdRaw = await publicClient.readContract({
         address: stakingVaultAddress,
-        abi: stakingVaultABI,
+        abi: stakingVaultABI as any,
         functionName: "proId",
-        authorizationList: [],
       });
       const proId = BigInt(proIdRaw as bigint | number | string);
 
       const legendIdRaw = await publicClient.readContract({
         address: stakingVaultAddress,
-        abi: stakingVaultABI,
+        abi: stakingVaultABI as any,
         functionName: "legendId",
-        authorizationList: [],
       });
       const legendId = BigInt(legendIdRaw as bigint | number | string);
 
-      // FIX: Cek apakah rigAddr valid (bukan 0x0) sebelum memanggil balanceOf
-      // Ini mencegah crash jika kontrak belum sempurna terhubung atau ada delay RPC
+      // Cek apakah rigAddr valid (bukan 0x0)
       if (rigAddr && rigAddr !== ZERO_ADDRESS) {
         try {
           const proBalRaw = await publicClient.readContract({
             address: rigAddr,
-            abi: rigNftABI,
+            abi: rigNftABI as any,
             functionName: "balanceOf",
             args: [address, proId],
-            authorizationList: [],
           });
           setProCount(Number(proBalRaw));
 
           const legendBalRaw = await publicClient.readContract({
             address: rigAddr,
-            abi: rigNftABI,
+            abi: rigNftABI as any,
             functionName: "balanceOf",
             args: [address, legendId],
-            authorizationList: [],
           });
           setLegendCount(Number(legendBalRaw));
         } catch (err) {
@@ -134,15 +127,15 @@ const Staking: FC = () => {
           setLegendCount(0);
         }
       } else {
-        // Jika rigNft belum diset, anggap 0
         setProCount(0);
         setLegendCount(0);
       }
 
-      setStatus(""); // Clear status error jika berhasil
+      setStatus(""); 
     } catch (e: any) {
       console.error("Fetch error", e);
-      setStatus("failed: " + (e?.shortMessage || e?.message));
+      // Tampilkan error yang lebih spesifik jika ada
+      setStatus("Fetch failed: " + (e?.shortMessage || e?.message));
     }
   };
 
@@ -186,6 +179,7 @@ const Staking: FC = () => {
 
         if (allowance < stakeAmount) {
           setStatus("Approving $BaseTC...");
+          // Gunakan 'as any' pada ABI
           const approveHash = await writeContractAsync({
             address: baseTcAddress,
             abi: baseTcABI as any,
@@ -196,7 +190,6 @@ const Staking: FC = () => {
           });
           await publicClient?.waitForTransactionReceipt({ hash: approveHash as `0x${string}` });
           setStatus("Approval successful. Processing stake...");
-          // Update allowance lokal sementara
           setAllowance(stakeAmount);
         }
       }
@@ -209,13 +202,12 @@ const Staking: FC = () => {
         functionName = "stake";
         args = [stakeAmount, lockType];
       } else {
-        // --- FIX KRUSIAL UNTUK UNSTAKE ---
+        // UNSTAKE
         functionName = "unstake";
 
         if (!position || !position.tranches) throw new Error("No staking position.");
         
-        // 1. Ambil semua tranche, simpan index aslinya
-        // 2. Filter HANYA tranche yang jumlahnya > 0
+        // Filter tranche yang saldonya > 0
         const activeTranches = position.tranches
             .map((t: any, idx: number) => ({ idx, amount: t.amount }))
             .filter((item: any) => item.amount > 0n);
@@ -224,7 +216,6 @@ const Staking: FC = () => {
             throw new Error("Tidak ada saldo aktif untuk di-unstake.");
         }
 
-        // Siapkan array untuk kontrak
         const trancheIdx = activeTranches.map((item: any) => item.idx);
         const amounts = activeTranches.map((item: any) => item.amount);
 
@@ -235,7 +226,7 @@ const Staking: FC = () => {
       
       const txHash = await writeContractAsync({
         address: stakingVaultAddress,
-        abi: stakingVaultABI as any,
+        abi: stakingVaultABI as any, // 'as any' untuk menghindari type check strict
         functionName,
         args,
         account: address,
@@ -247,12 +238,11 @@ const Staking: FC = () => {
 
       setStatus(`${action === 'stake' ? 'Staking' : 'Unstaking'} successful!`);
       
-      if (action === "stake") setAmount(""); // Reset input jika stake
-      await fetchData(); // Refresh data
+      if (action === "stake") setAmount(""); 
+      await fetchData(); 
 
     } catch (e: any) {
       console.error(e);
-      // Tampilkan pesan error yang bersih
       setStatus(e?.shortMessage || e?.message || "An error occurred.");
     } finally {
       setLoading(false);
@@ -336,7 +326,6 @@ const Staking: FC = () => {
           </button>
           <button
             onClick={() => handleAction("unstake")}
-            // Disable tombol jika tidak ada saldo untuk di-unstake
             disabled={loading || stakedAmount <= 0}
             className="rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50 hover:bg-red-700 transition-colors"
           >
