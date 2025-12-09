@@ -42,73 +42,72 @@ const Staking: FC = () => {
     if (!address || !publicClient) return;
 
     try {
-      // PERBAIKAN: 
-      // 1. Menggunakan 'as any' pada ABI untuk mencegah error TypeScript.
-      // 2. MENGHAPUS 'authorizationList' yang menyebabkan error runtime "Invalid parameters".
-      // 3. Menambahkan 'args: []' pada fungsi tanpa parameter agar aman.
-
+      // PERBAIKAN FINAL:
+      // Kita membuang 'authorizationList' agar Runtime aman.
+      // Kita melakukan casting objek parameter ke 'any' ({ ... } as any) agar Build TypeScript lulus.
+      
       // 1. Ambil data User Position
       const pos = await publicClient.readContract({
         address: stakingVaultAddress,
-        abi: stakingVaultABI as any,
+        abi: stakingVaultABI,
         functionName: "getUser",
         args: [address],
-      });
+      } as any);
       setPosition(pos);
 
       // 2. Ambil Pending Rewards
       const rewardRaw = await publicClient.readContract({
         address: stakingVaultAddress,
-        abi: stakingVaultABI as any,
+        abi: stakingVaultABI,
         functionName: "pendingReward",
         args: [address],
-      });
+      } as any);
       setPendingRewards(BigInt(rewardRaw as bigint | number | string));
 
       // 3. Ambil Saldo BaseTC User
       const balRaw = await publicClient.readContract({
         address: baseTcAddress,
-        abi: baseTcABI as any,
+        abi: baseTcABI,
         functionName: "balanceOf",
         args: [address],
-      });
+      } as any);
       setBaseTcBalance(BigInt(balRaw as bigint | number | string));
 
       // 4. Ambil Allowance
       const allowRaw = await publicClient.readContract({
         address: baseTcAddress,
-        abi: baseTcABI as any,
+        abi: baseTcABI,
         functionName: "allowance",
         args: [address, stakingVaultAddress],
-      });
+      } as any);
       setAllowance(BigInt(allowRaw as bigint | number | string));
 
       // --- BAGIAN FETCH NFT ---
       
-      // 5. Ambil Address RigNFT dari Contract (Gunakan 'rigNFT' sesuai ABI)
+      // 5. Ambil Address RigNFT dari Contract
       const rigAddr = (await publicClient.readContract({
         address: stakingVaultAddress,
-        abi: stakingVaultABI as any,
+        abi: stakingVaultABI,
         functionName: "rigNFT", 
         args: [], 
-      })) as `0x${string}`;
+      } as any)) as `0x${string}`;
 
       // 6. Ambil ID NFT Pro
       const proIdRaw = await publicClient.readContract({
         address: stakingVaultAddress,
-        abi: stakingVaultABI as any,
+        abi: stakingVaultABI,
         functionName: "proId",
         args: [],
-      });
+      } as any);
       const proId = BigInt(proIdRaw as bigint | number | string);
 
       // 7. Ambil ID NFT Legend
       const legendIdRaw = await publicClient.readContract({
         address: stakingVaultAddress,
-        abi: stakingVaultABI as any,
+        abi: stakingVaultABI,
         functionName: "legendId",
         args: [],
-      });
+      } as any);
       const legendId = BigInt(legendIdRaw as bigint | number | string);
 
       // 8. Cek Saldo NFT (Safety Check Address)
@@ -116,18 +115,18 @@ const Staking: FC = () => {
         try {
           const proBalRaw = await publicClient.readContract({
             address: rigAddr,
-            abi: rigNftABI as any,
+            abi: rigNftABI,
             functionName: "balanceOf",
             args: [address, proId],
-          });
+          } as any);
           setProCount(Number(proBalRaw));
 
           const legendBalRaw = await publicClient.readContract({
             address: rigAddr,
-            abi: rigNftABI as any,
+            abi: rigNftABI,
             functionName: "balanceOf",
             args: [address, legendId],
-          });
+          } as any);
           setLegendCount(Number(legendBalRaw));
         } catch (err) {
           console.warn("Gagal membaca NFT balance (abaikan jika tidak punya NFT):", err);
@@ -186,14 +185,15 @@ const Staking: FC = () => {
 
         if (allowance < stakeAmount) {
           setStatus("Approving $BaseTC...");
+          // Gunakan 'as any' pada options writeContractAsync juga untuk keamanan build
           const approveHash = await writeContractAsync({
             address: baseTcAddress,
-            abi: baseTcABI as any,
+            abi: baseTcABI,
             functionName: "approve",
             args: [stakingVaultAddress, stakeAmount],
             account: address,
             chain: base,
-          });
+          } as any);
           await publicClient?.waitForTransactionReceipt({ hash: approveHash as `0x${string}` });
           setStatus("Approval successful. Processing stake...");
           setAllowance(stakeAmount);
@@ -231,12 +231,12 @@ const Staking: FC = () => {
       
       const txHash = await writeContractAsync({
         address: stakingVaultAddress,
-        abi: stakingVaultABI as any, 
+        abi: stakingVaultABI, 
         functionName,
         args,
         account: address,
         chain: base,
-      });
+      } as any);
 
       setStatus("Transaction sent. Waiting confirmation...");
       await publicClient?.waitForTransactionReceipt({ hash: txHash as `0x${string}` });
