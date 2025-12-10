@@ -38,7 +38,7 @@ const Staking: FC = () => {
   const [proCount, setProCount] = useState(0);
   const [legendCount, setLegendCount] = useState(0);
 
-  // Time State
+  // --- NEW: State Waktu untuk Tabel ---
   const [currentTime, setCurrentTime] = useState(Math.floor(Date.now() / 1000));
 
   // --- 1. FETCH DATA ---
@@ -46,32 +46,51 @@ const Staking: FC = () => {
     if (!address || !publicClient) return;
 
     try {
+      // Multicall request
       const results = await publicClient.multicall({
         contracts: [
+          // 0. User Position -> [baseWeight, effectiveWeight, lastAction, unclaimed, tranches]
           { address: stakingVaultAddress, abi: stakingVaultABI as any, functionName: 'getUser', args: [address] },
+          // 1. Pending Reward
           { address: stakingVaultAddress, abi: stakingVaultABI as any, functionName: 'pendingReward', args: [address] },
+          // 2. BaseTC Balance
           { address: baseTcAddress, abi: baseTcABI as any, functionName: 'balanceOf', args: [address] },
+          // 3. Allowance
           { address: baseTcAddress, abi: baseTcABI as any, functionName: 'allowance', args: [address, stakingVaultAddress] },
+          // 4. RigNFT Address
           { address: stakingVaultAddress, abi: stakingVaultABI as any, functionName: 'rigNFT', args: [] },
+          // 5. Pro ID
           { address: stakingVaultAddress, abi: stakingVaultABI as any, functionName: 'proId', args: [] },
+          // 6. Legend ID
           { address: stakingVaultAddress, abi: stakingVaultABI as any, functionName: 'legendId', args: [] },
         ],
         allowFailure: true 
-      });
+      } as any);
 
-      if (results[0].status === 'success') setPositionRaw(results[0].result);
-      if (results[1].status === 'success') setRewardsRaw(BigInt(results[1].result as any || 0));
-      if (results[2].status === 'success') setBalanceRaw(BigInt(results[2].result as any || 0));
-      if (results[3].status === 'success') setAllowanceRaw(BigInt(results[3].result as any || 0));
+      const resArray = results as any[];
 
-      const rigAddr = results[4].status === 'success' ? results[4].result as string : null;
-      const proId = results[5].status === 'success' ? results[5].result : null;
-      const legendId = results[6].status === 'success' ? results[6].result : null;
+      // DEBUG: Cek hasil getUser di console untuk memastikan urutan index
+      if (resArray[0].status === 'success') {
+          // console.log("DEBUG Position:", resArray[0].result);
+          setPositionRaw(resArray[0].result);
+      }
+      
+      if (resArray[1].status === 'success') setRewardsRaw(BigInt(resArray[1].result || 0));
+      if (resArray[2].status === 'success') setBalanceRaw(BigInt(resArray[2].result || 0));
+      if (resArray[3].status === 'success') setAllowanceRaw(BigInt(resArray[3].result || 0));
+
+      // Parsing NFT Data
+      const rigAddr = resArray[4].status === 'success' ? resArray[4].result as string : null;
+      const proId = resArray[5].status === 'success' ? resArray[5].result : null;
+      const legendId = resArray[6].status === 'success' ? resArray[6].result : null;
 
       if (rigAddr && rigAddr !== "0x0000000000000000000000000000000000000000") {
           fetchNftData(rigAddr, proId, legendId);
       }
-    } catch (e) { console.error("Fetch Error:", e); }
+
+    } catch (e) {
+      console.error("Fetch Error:", e);
+    }
   };
 
   const fetchNftData = async (rigAddr: any, proId: any, legendId: any) => {
@@ -83,50 +102,88 @@ const Staking: FC = () => {
                 { address: rigAddr, abi: rigNftABI as any, functionName: 'balanceOf', args: [address, legendId] },
             ],
             allowFailure: true
-        });
-        if(nftRes[0].status === 'success') setProCount(Number(nftRes[0].result));
-        if(nftRes[1].status === 'success') setLegendCount(Number(nftRes[1].result));
+        } as any);
+
+        const resArray = nftRes as any[];
+        if(resArray[0].status === 'success') setProCount(Number(resArray[0].result));
+        if(resArray[1].status === 'success') setLegendCount(Number(resArray[1].result));
       } catch (err) { console.warn("NFT Fail", err); }
   }
 
   useEffect(() => {
     fetchData();
-    const intervalData = setInterval(fetchData, 15000);
-    const intervalTime = setInterval(() => setCurrentTime(Math.floor(Date.now() / 1000)), 60000);
-    return () => { clearInterval(intervalData); clearInterval(intervalTime); };
+    const interval = setInterval(fetchData, 10000); // Auto refresh tiap 10 detik
+    
+    // NEW: Interval update jam untuk tabel
+    const timeInterval = setInterval(() => setCurrentTime(Math.floor(Date.now() / 1000)), 60000);
+
+    return () => {
+        clearInterval(interval);
+        clearInterval(timeInterval);
+    };
   }, [address]);
 
-  // --- 2. CALCULATIONS ---
-  
-  const getTranches = useMemo(() => {
-    if (!positionRaw) return [];
-    let tranches: any[] = [];
-    if (Array.isArray(positionRaw)) {
-        if (Array.isArray(positionRaw[0])) tranches = positionRaw[0];
-        else tranches = positionRaw;
-    } else if (positionRaw?.tranches) {
-        tranches = positionRaw.tranches;
-    }
-    // Filter out empty tranches (amount 0)
-    return Array.isArray(tranches) 
-        ? tranches.filter((t:any) => {
-            const amt = t?.amount !== undefined ? BigInt(t.amount) : (Array.isArray(t) ? BigInt(t[0]) : 0n);
-            return amt > 0n;
-        })
-        : [];
-  }, [positionRaw]);
-
+  // --- 2. CALCULATIONS (SAFE PARSING) ---
   const stakedAmount = useMemo(() => {
+    if (!positionRaw) return "0";
+
     try {
-        const total = getTranches.reduce((sum: bigint, t: any) => {
-            const val = t?.amount !== undefined ? BigInt(t.amount) : (Array.isArray(t) ? BigInt(t[0]) : 0n);
+        // ABI Baru: getUser returns struct dengan urutan:
+        // 0: baseWeight, 1: effectiveWeight, 2: lastActionAt, 3: unclaimed, 4: tranches
+        
+        // Cek apakah positionRaw adalah array (Tuple)
+        if (!Array.isArray(positionRaw)) return "0";
+
+        // Ambil data tranches di index ke-4
+        const tranchesData = positionRaw[4];
+
+        if (!Array.isArray(tranchesData)) return "0";
+
+        const total = tranchesData.reduce((sum: bigint, t: any) => {
+            if (!t) return sum;
+            
+            // Handle jika Viem return Object atau Array
+            let val = 0n;
+            if (t.amount !== undefined) {
+                val = BigInt(t.amount);
+            } else if (Array.isArray(t) && t[0] !== undefined) {
+                val = BigInt(t[0]);
+            }
+            
             return sum + val;
         }, 0n);
-        return formatEther(total);
-    } catch (e) { return "0"; }
-  }, [getTranches]);
 
-  const rewardsDisplay = useMemo(() => rewardsRaw ? formatEther(rewardsRaw) : "0", [rewardsRaw]);
+        return formatEther(total);
+
+    } catch (e) {
+        console.error("Calc Error:", e);
+        return "0";
+    }
+  }, [positionRaw]);
+
+  // --- NEW: Helper untuk Data Tabel ---
+  const tranchesList = useMemo(() => {
+    if (!positionRaw || !Array.isArray(positionRaw) || !Array.isArray(positionRaw[4])) return [];
+    
+    // Filter tranche yang > 0 saja
+    return positionRaw[4].filter((t: any) => {
+        const amt = t?.amount !== undefined ? BigInt(t.amount) : (Array.isArray(t) ? BigInt(t[0]) : 0n);
+        return amt > 0n;
+    });
+  }, [positionRaw]);
+
+  // --- NEW: Helper Format Tanggal ---
+  const formatUnlockDate = (timestamp: number) => {
+    const date = new Date(timestamp * 1000);
+    // Format: 15 Jan 25, 14:00
+    return date.toLocaleDateString("id-ID", { 
+        day: "numeric", month: "short", year: "2-digit", hour: "2-digit", minute:"2-digit" 
+    });
+  };
+
+  const rewardsDisplay = useMemo(() => {
+     return rewardsRaw ? formatEther(rewardsRaw) : "0";
+  }, [rewardsRaw]);
 
   const boostPercent = useMemo(() => {
     const pro = Math.min(proCount, MAX_PRO);
@@ -134,15 +191,31 @@ const Staking: FC = () => {
     return Math.min((pro * 5) + (legend * 8), BOOST_CAP);
   }, [proCount, legendCount]);
 
-  // Format Date Helper
-  const formatUnlockDate = (timestamp: number) => {
-    const date = new Date(timestamp * 1000);
-    return date.toLocaleDateString("id-ID", { 
-        day: "numeric", month: "short", year: "2-digit", hour: "2-digit", minute:"2-digit" 
-    });
+  // --- 3. ACTIONS ---
+  
+  // Fungsi khusus untuk CLAIM (Panen Reward)
+  const handleClaim = async () => {
+    if (!address) return;
+    setLoading(true);
+    setStatus("Claiming rewards...");
+    try {
+        const tx = await writeContractAsync({
+            address: stakingVaultAddress,
+            abi: stakingVaultABI as any,
+            functionName: 'claim',
+            args: [],
+            chain: base
+        } as any);
+        await publicClient?.waitForTransactionReceipt({ hash: tx });
+        setStatus("Rewards Claimed!");
+        fetchData();
+    } catch (e: any) {
+        setStatus("Claim Failed: " + (e.shortMessage || e.message));
+    } finally {
+        setLoading(false);
+    }
   };
 
-  // --- 3. ACTIONS ---
   const handleAction = async (isStake: boolean) => {
     if (!address) return;
     setLoading(true);
@@ -153,6 +226,7 @@ const Staking: FC = () => {
             const val = parseEther(amount || "0");
             if (val <= 0n) throw new Error("Amount > 0");
             
+            // Check Allowance
             if (allowanceRaw < val) {
                 setStatus("Approving BaseTC...");
                 const txApprove = await writeContractAsync({
@@ -171,47 +245,34 @@ const Staking: FC = () => {
                 address: stakingVaultAddress,
                 abi: stakingVaultABI as any,
                 functionName: 'stake',
-                args: [val, lockType],
+                args: [val, lockType], // Sesuai ABI: stake(uint256, uint8)
                 chain: base
             } as any);
             await publicClient?.waitForTransactionReceipt({ hash: tx });
 
         } else {
-            // UNSTAKE PINTAR (Hanya yang sudah unlock)
-            setStatus("Checking locks...");
-            const now = Math.floor(Date.now() / 1000);
+            setStatus("Unstaking...");
             
-            // Perlu index asli dari Raw Data (bukan filtered) untuk contract call
-            // Kita fetch ulang sebentar raw tranches full list
-            let fullTranches: any[] = [];
-            if (Array.isArray(positionRaw)) {
-                 fullTranches = Array.isArray(positionRaw[0]) ? positionRaw[0] : positionRaw;
-            } else if (positionRaw?.tranches) {
-                 fullTranches = positionRaw.tranches;
+            // Validasi data sebelum unstake
+            if (!Array.isArray(positionRaw) || !Array.isArray(positionRaw[4])) {
+                 throw new Error("No staking data found");
             }
+            
+            const tranchesData = positionRaw[4];
 
-            const readyToUnstake = fullTranches.map((t: any, i: number) => {
+            // Cari tranche yang aktif (>0)
+            const activeData = tranchesData.map((t: any, i: number) => {
                  const val = t?.amount !== undefined ? BigInt(t.amount) : (Array.isArray(t) ? BigInt(t[0]) : 0n);
-                 const lockTime = t?.lockUntil !== undefined ? Number(t.lockUntil) : (Array.isArray(t) ? Number(t[1]) : 0);
-                 return { idx: i, val, lockTime };
-            }).filter(x => x.val > 0n && x.lockTime <= now);
+                 return { idx: i, val };
+            }).filter(x => x.val > 0n);
 
-            if (readyToUnstake.length === 0) {
-                 // Cek apakah ada yg locked
-                 const anyLocked = fullTranches.some((t:any) => {
-                    const v = t?.amount !== undefined ? BigInt(t.amount) : (Array.isArray(t) ? BigInt(t[0]) : 0n);
-                    return v > 0n;
-                 });
-                 if (anyLocked) throw new Error("Stakes are still locked.");
-                 else throw new Error("No active stakes.");
-            }
+            if (activeData.length === 0) throw new Error("No active stakes");
 
-            setStatus(`Unstaking ${readyToUnstake.length} ready items...`);
             const tx = await writeContractAsync({
                 address: stakingVaultAddress,
                 abi: stakingVaultABI as any,
                 functionName: 'unstake',
-                args: [readyToUnstake.map(x => x.idx), readyToUnstake.map(x => x.val)],
+                args: [activeData.map(x => x.idx), activeData.map(x => x.val)], // Sesuai ABI: unstake(uint256[], uint256[])
                 chain: base
             } as any);
             await publicClient?.waitForTransactionReceipt({ hash: tx });
@@ -220,7 +281,7 @@ const Staking: FC = () => {
         setStatus("Success!");
         if (isStake) setAmount("");
         fetchData(); 
-        setTimeout(fetchData, 4000); 
+        setTimeout(fetchData, 4000); // Delay refresh untuk indexing
 
     } catch (e: any) {
         setStatus("Failed: " + (e.shortMessage || e.message));
@@ -233,7 +294,7 @@ const Staking: FC = () => {
     <div className="max-w-md mx-auto p-4">
       <div className="space-y-6 rounded-lg bg-white p-6 border border-gray-300 shadow-md relative">
         
-        {/* Header */}
+        {/* Header & Refresh */}
         <div className="relative mb-4">
             <h2 className="text-lg font-bold text-gray-800 text-center">Staking Dashboard</h2>
             <button 
@@ -252,15 +313,25 @@ const Staking: FC = () => {
                 {Number(stakedAmount).toLocaleString(undefined, { maximumFractionDigits: 4 })}
             </p>
           </div>
-          <div className="p-3 bg-gray-50 rounded-lg">
+          <div className="p-3 bg-gray-50 rounded-lg relative">
             <p className="text-sm text-gray-500 mb-1">Pending Rewards</p>
             <p className="text-xl font-bold text-green-600 truncate">
                 {Number(rewardsDisplay).toFixed(6)}
             </p>
+            {/* NEW: Claim Button (Muncul jika ada reward > 0) */}
+            {rewardsRaw > 0n && (
+                <button 
+                    onClick={handleClaim}
+                    disabled={loading}
+                    className="mt-1 text-xs bg-green-100 text-green-700 px-2 py-1 rounded hover:bg-green-200 w-full"
+                >
+                    {loading ? "..." : "Claim Rewards"}
+                </button>
+            )}
           </div>
         </div>
 
-        {/* NFT Boost */}
+        {/* NFT Boost UI */}
         <div className="grid grid-cols-3 gap-2 text-center border-t border-b py-3 bg-blue-50/50 rounded-md">
             <div>
                 <p className="text-xs text-gray-500">Pro NFT</p>
@@ -276,7 +347,7 @@ const Staking: FC = () => {
             </div>
         </div>
 
-        {/* Inputs */}
+        {/* Form */}
         <div className="space-y-3 mt-4">
             <div className="flex justify-between text-xs text-gray-500 px-1">
                 <span>Stake Amount</span>
@@ -292,6 +363,7 @@ const Staking: FC = () => {
             />
         </div>
 
+        {/* Locks */}
         <div className="flex gap-2">
             {[
                 { l: "30D", v: 0 }, { l: "90D", v: 1 }, { l: "365D", v: 2 }
@@ -301,7 +373,9 @@ const Staking: FC = () => {
                     onClick={() => setLockType(opt.v)}
                     disabled={loading}
                     className={`flex-1 py-2 text-xs font-semibold rounded transition-colors ${
-                        lockType === opt.v ? 'bg-blue-600 text-white shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        lockType === opt.v 
+                        ? 'bg-blue-600 text-white shadow-sm' 
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                     }`}
                 >
                     {opt.l}
@@ -323,10 +397,11 @@ const Staking: FC = () => {
                 disabled={loading}
                 className="bg-red-500 hover:bg-red-600 text-white py-3 rounded-md font-semibold shadow-sm disabled:opacity-50 transition-all"
             >
-                {loading ? '...' : 'Unstake Ready'}
+                {loading ? '...' : 'Unstake All'}
             </button>
         </div>
 
+        {/* Status */}
         {status && (
             <div className={`mt-4 text-center text-xs p-2 rounded border ${
                 status.includes("Fail") ? "bg-red-50 border-red-200 text-red-600" : "bg-blue-50 border-blue-200 text-blue-600"
@@ -335,15 +410,15 @@ const Staking: FC = () => {
             </div>
         )}
 
-        {/* --- TABEL DAFTAR STAKING (FITUR BARU) --- */}
+        {/* --- NEW: TABEL ACTIVE STAKES --- */}
         <div className="mt-6 pt-4 border-t border-gray-200">
-            <h3 className="text-xs font-bold text-gray-500 uppercase mb-3">Active Stakes</h3>
+            <h3 className="text-xs font-bold text-gray-500 uppercase mb-3 text-center">Active Stakes</h3>
             
-            {getTranches.length === 0 ? (
+            {tranchesList.length === 0 ? (
                 <p className="text-center text-sm text-gray-400 py-2">No active stakes found.</p>
             ) : (
-                <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
-                    {getTranches.map((t: any, idx: number) => {
+                <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                    {tranchesList.map((t: any, idx: number) => {
                         const val = t?.amount !== undefined ? BigInt(t.amount) : (Array.isArray(t) ? BigInt(t[0]) : 0n);
                         const lockTime = t?.lockUntil !== undefined ? Number(t.lockUntil) : (Array.isArray(t) ? Number(t[1]) : 0);
                         const isLocked = lockTime > currentTime;
