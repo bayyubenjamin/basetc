@@ -7,7 +7,7 @@ import Spin from "./Spin";
 import Leaderboard from "./Leaderboard";
 
 type EventTab = "spin" | "staking" | "leaderboard";
-const GIVEAWAY_URL = "https://forms.gle/BuJpf1UDFNGFvPgm8";
+const GIVEAWAY_URL = "https://forms.gle/1Pu81qU7rX7UyL3K7";
 
 const Event: FC = () => {
   const [activeTab, setActiveTab] = useState<EventTab>("spin");
@@ -79,7 +79,7 @@ const Event: FC = () => {
       >
         <div className="flex flex-col items-center text-center">
           <img
-            src="https://ik.imagekit.io/5spt6gb2z/92CA7558-4119-495F-9CFD-2E734B90F1D6.jpeg"
+            src="https://ik.imagekit.io/5spt6gb2z/7A164C96-08EE-4020-8A64-E68544C5D5CC.jpeg"
             alt="Giveaway Banner"
             className="w-full max-w-md rounded-xl mb-3"
             style={{
