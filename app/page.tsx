@@ -7,7 +7,7 @@ import { useAccount } from "wagmi";
 
 export const dynamic = "force-dynamic";
 
-// [BARU] Daftar browser yang diizinkan, termasuk lingkungan Base/Coinbase
+// [UPDATE PENTING] Tambahkan "Coinbase", "Ethereum", "Base" agar Base App dikenali
 const ALLOWED_CLIENTS = ["Warpcast", "Farcaster", "V2Frame", "Coinbase", "Ethereum", "Base"];
 
 function LoadingScreen() {
@@ -61,7 +61,7 @@ function RootHandler() {
             if (isKnownClient || hasWallet || isConnected) {
                 setIsAllowed(true);
                 const params = searchParams.toString();
-                // Redirect ke halaman launch
+                // Redirect ke halaman launch (masuk ke game)
                 router.replace(`/launch${params ? `?${params}` : ""}`);
             } else {
                 // Jika browser biasa tanpa wallet, hentikan loading dan tampilkan Landing Page
