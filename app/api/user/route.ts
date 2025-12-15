@@ -84,17 +84,27 @@ export async function POST(req: NextRequest) {
     if (pfp_url !== undefined) userData.pfp_url = pfp_url;
 
     // Eksekusi Upsert dengan Strategi Konflik yang Benar
-    let query = sb.from("users");
+    // FIX: Memisahkan eksekusi query ke variabel 'upsertResult' agar TypeScript tidak bingung tipe datanya.
+    let upsertResult;
 
     if (inviteeFidNum) {
         // JALUR FARCASTER: Conflict di 'fid' (Menjaga user lama)
-        query = query.upsert(userData, { onConflict: "fid" });
+        upsertResult = await sb
+            .from("users")
+            .upsert(userData, { onConflict: "fid" })
+            .select()
+            .single();
     } else {
         // JALUR BASE APP: Conflict di 'wallet' (User baru tanpa FID)
-        query = query.upsert(userData, { onConflict: "wallet" });
+        upsertResult = await sb
+            .from("users")
+            .upsert(userData, { onConflict: "wallet" })
+            .select()
+            .single();
     }
 
-    const { data: upsertedUser, error: upErr } = await query.select().single();
+    const { data: upsertedUser, error: upErr } = upsertResult;
+    
     if (upErr) throw new Error(`Failed to upsert user: ${upErr.message}`);
 
     const inviteeId: string | null = upsertedUser?.id ?? null;
@@ -147,8 +157,7 @@ export async function POST(req: NextRequest) {
           const { error: refErr } = await sb
             .from("referrals")
             .upsert(referralPayload, { 
-                // Jika pakai constraint 'inviter,invitee_fid', user tanpa FID mungkin butuh penanganan khusus
-                // atau biarkan default (tergantung setup DB Anda)
+                // Jika pakai constraint, sesuaikan. Defaultnya upsert akan update jika kena constraint.
                 onConflict: inviteeFidNum ? "inviter,invitee_fid" : undefined 
             });
             
