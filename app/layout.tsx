@@ -1,7 +1,9 @@
+// app/layout.tsx
 import "./globals.css";
 import type { Metadata } from "next";
 import Ticker from "./components/Ticker";
 import SilentAddMiniApp from "./components/SilentAddMiniApp";
+import { Providers } from "./Providers"; // Import component Providers yang baru
 
 const fcPayload = {
   version: "1",
@@ -47,9 +49,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body className="min-h-dvh antialiased pt-[calc(env(safe-area-inset-top)+36px)]">
-        <Ticker />
-        <SilentAddMiniApp />
-        {children}
+        {/* Wrap seluruh konten dengan Providers */}
+        <Providers>
+          <Ticker />
+          <SilentAddMiniApp />
+          {children}
+        </Providers>
       </body>
     </html>
   );
