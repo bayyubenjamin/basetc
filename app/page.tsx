@@ -1,29 +1,37 @@
 // app/page.tsx
 "use client";
 
-import { Suspense, useEffect, useMemo } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useAccount } from "wagmi";
 
 export const dynamic = "force-dynamic";
 
-const FARCASTER_HINTS = ["Warpcast", "Farcaster", "V2Frame"];
+// [BARU] Daftar browser yang diizinkan, termasuk lingkungan Base/Coinbase
+const ALLOWED_CLIENTS = ["Warpcast", "Farcaster", "V2Frame", "Coinbase", "Ethereum", "Base"];
 
 function LoadingScreen() {
     return (
-        <main style={{ minHeight: "100vh", background: "#0b0b0b", color: "#fff", display: "grid", placeItems: "center" }}>
-            <p style={{ opacity: 0.8 }}>Loading BaseTC Console...</p>
+        <main className="grid min-h-dvh place-items-center bg-zinc-950 text-white">
+            <div className="flex flex-col items-center gap-4">
+                <span className="loading loading-spinner loading-lg text-indigo-500"></span>
+                <p className="opacity-80">Loading BaseTC Console...</p>
+            </div>
         </main>
     );
 }
 
 function LandingPage() {
     return (
-        <main style={{ minHeight: "100dvh", background: "#0b0b0b", color: "#fff", display: "grid", placeItems: "center", padding: "24px", textAlign: "center" }}>
-            <div>
-                <img src="/img/logo.png" alt="BaseTC" width={96} height={96} style={{ margin: "0 auto 16px" }} />
-                <h1 style={{ fontSize: 28, marginBottom: 8 }}>BaseTC Console</h1>
-                <p style={{ opacity: 0.8, marginBottom: 20 }}>This is a Farcaster Mini App. Please open it within a Farcaster client like Warpcast.</p>
-                <a href="https://farcaster.xyz/miniapps/PkHG0AuDhXrd/basetc-console" style={{ padding: "12px 16px", borderRadius: 12, background: "#6EE7FF", color: "#000", textDecoration: "none", fontWeight: 600 }}>
+        <main className="grid min-h-dvh place-items-center bg-zinc-950 px-6 text-center text-white">
+            <div className="max-w-md">
+                <img src="/img/logo.png" alt="BaseTC" width={96} height={96} className="mx-auto mb-4" />
+                <h1 className="mb-2 text-2xl font-bold">BaseTC Console</h1>
+                <p className="mb-8 text-zinc-400">
+                    Please open this Mini App within Warpcast or Base App.
+                </p>
+                <a href="https://farcaster.xyz/miniapps/PkHG0AuDhXrd/basetc-console" 
+                   className="block w-full rounded-xl bg-[#6EE7FF] px-4 py-3 font-semibold text-black hover:bg-[#5CD6EF] transition">
                     Open in Farcaster
                 </a>
             </div>
@@ -34,26 +42,37 @@ function LandingPage() {
 function RootHandler() {
     const router = useRouter();
     const searchParams = useSearchParams();
+    const { isConnected } = useAccount(); // Cek status koneksi wallet
+    const [isAllowed, setIsAllowed] = useState(false);
+    const [checking, setChecking] = useState(true);
 
     useEffect(() => {
-        const ua = navigator.userAgent || "";
-        const isFarcasterClient = FARCASTER_HINTS.some((k) => ua.includes(k));
+        const checkEnvironment = () => {
+            const ua = navigator.userAgent || "";
+            
+            // 1. Cek User Agent (Apakah mengandung kata kunci Farcaster atau Base?)
+            const isKnownClient = ALLOWED_CLIENTS.some((k) => ua.includes(k));
 
-        // Jika terdeteksi di dalam Farcaster, pastikan pengguna berada di /launch
-        if (isFarcasterClient) {
-            const params = searchParams.toString();
-            router.replace(`/launch${params ? `?${params}` : ""}`);
-        }
-    }, [router, searchParams]);
+            // 2. Cek apakah ada Wallet Provider (Base App pasti punya window.ethereum)
+            // @ts-ignore
+            const hasWallet = typeof window !== "undefined" && window.ethereum !== undefined;
 
-    // Middleware sudah menangani redirect untuk mobile.
-    // Jadi, jika kode ini berjalan, berarti kita di desktop atau sudah di dalam Farcaster.
-    // Jika di dalam Farcaster, akan segera di-redirect ke /launch.
-    // Jika di desktop, tampilkan LandingPage.
-    const ua = (typeof window !== 'undefined') ? navigator.userAgent : "";
-    const isFarcasterClient = FARCASTER_HINTS.some((k) => ua.includes(k));
+            // Jika SALAH SATU benar (Klien dikenal ATAU ada Wallet ATAU sudah connect), izinkan masuk
+            if (isKnownClient || hasWallet || isConnected) {
+                setIsAllowed(true);
+                const params = searchParams.toString();
+                // Redirect ke halaman launch
+                router.replace(`/launch${params ? `?${params}` : ""}`);
+            } else {
+                // Jika browser biasa tanpa wallet, hentikan loading dan tampilkan Landing Page
+                setChecking(false);
+            }
+        };
 
-    if (isFarcasterClient) {
+        checkEnvironment();
+    }, [router, searchParams, isConnected]);
+
+    if (isAllowed || checking) {
         return <LoadingScreen />;
     }
 

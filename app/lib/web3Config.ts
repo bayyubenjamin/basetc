@@ -2,6 +2,7 @@
 import { http, createConfig } from "wagmi";
 import { base } from "wagmi/chains"; 
 import farcaster from "@farcaster/miniapp-wagmi-connector";
+import { coinbaseWallet, injected } from "wagmi/connectors"; // [BARU] Import konektor standar
 
 // ABIs
 import baseTcABI from "./abi/baseTc.json";
@@ -11,9 +12,9 @@ import gameCoreABI from "./abi/gameCore.json";
 import rewardsVaultABI from "./abi/rewardsVault.json";
 import treasuryVaultABI from "./abi/treasuryVault.json";
 import referralABI from "./abi/referralClaimer.json";
-import stakingVaultABI from "./abi/stakingVault.json"; // <-- ABI Baru
-import spinVaultABI from "./abi/spinVault.json"; // <-- ABI Baru
-import leaderboardAuthVaultABI from "./abi/leaderboardAuthVault.json"; // <-- ABI Baru
+import stakingVaultABI from "./abi/stakingVault.json";
+import spinVaultABI from "./abi/spinVault.json";
+import leaderboardAuthVaultABI from "./abi/leaderboardAuthVault.json";
 
 // Alamat kontrak
 export const ADDR = {
@@ -34,8 +35,8 @@ export const ADDR = {
 
 // Konfigurasi Chain untuk Base Mainnet
 export const CHAIN = {
-  id: 8453, // Chain ID Base Mainnet
-  rpcUrl: "https://mainnet.base.org", // RPC URL Base Mainnet
+  id: 8453, 
+  rpcUrl: "https://mainnet.base.org", 
 } as const;
 
 export const {
@@ -59,10 +60,14 @@ export {
 };
 
 export const config = createConfig({
-  chains: [base], // Ganti ke `base`
-  connectors: [farcaster()],
+  chains: [base],
+  connectors: [
+    farcaster(), // Tetap ada untuk user Warpcast
+    coinbaseWallet({ appName: "BaseTC Console" }), // [BARU] Untuk Base App
+    injected(), // [BARU] Fallback untuk browser lain
+  ],
   transports: {
-    [base.id]: http(), // Ganti ke `base.id`
+    [base.id]: http(),
   },
 });
 
