@@ -2,65 +2,58 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-const FARCASTER_HINTS = ["Warpcast", "Farcaster", "V2Frame"];
-const UNIVERSAL_LINK = "https://farcaster.xyz/miniapps/PkHG0AuDhXrd/basetc-console";
-
-export function middleware(req: NextRequest) {
-  const url = req.nextUrl;
-  const pathname = url.pathname;
-
-  // 0) BYPASS eksplisit untuk endpoint penting (jaga-jaga)
-  if (pathname.startsWith("/api/") || pathname.startsWith("/.well-known/")) {
+export function middleware(request: NextRequest) {
+  // 1. Lewati pemeriksaan untuk API, aset statis, dan gambar
+  //    (Agar gambar/logo tetap loading di Base App)
+  if (
+    request.nextUrl.pathname.startsWith("/api") ||
+    request.nextUrl.pathname.startsWith("/_next") ||
+    request.nextUrl.pathname.startsWith("/img") ||
+    request.nextUrl.pathname.startsWith("/favicon.ico")
+  ) {
     return NextResponse.next();
   }
 
-  // 1) Simpan fidref ke cookie (SEBELUM redirect apa pun)
-  const fidref = url.searchParams.get("fidref");
-  let res = NextResponse.next();
-  if (fidref && /^\d+$/.test(fidref)) {
-    res.cookies.set("fid_ref", fidref, {
-      path: "/",
-      httpOnly: true,
-      sameSite: "none",
-      secure: true,
-      maxAge: 60 * 60 * 24, // 1 hari
-    });
+  // 2. Cek User Agent
+  const ua = request.headers.get("user-agent") || "";
+  
+  // Jika User Agent adalah Base App atau Coinbase Wallet, JANGAN redirect.
+  // Biarkan masuk ke halaman (nanti app/page.tsx yang handle)
+  if (
+    ua.includes("Coinbase") || 
+    ua.includes("Ethereum") || 
+    ua.includes("Base")
+  ) {
+    return NextResponse.next();
   }
 
-  // 2) Canonical: www -> apex (jaga query)
-  if (url.hostname === "www.basetc.xyz") {
-    const to = new URL(req.url);
-    to.hostname = "basetc.xyz";
-    return NextResponse.redirect(to, 308);
+  // 3. Logic Redirect Lama (Opsional: Jika Anda ingin tetap memaksa user biasa ke Farcaster)
+  // Hati-hati: Base App kadang UA-nya mirip Chrome biasa.
+  // LEBIH AMAN: Hapus redirect paksa di middleware, serahkan semua ke app/page.tsx
+  // Kode di bawah ini saya komen agar aman:
+  
+  /*
+  const isMobile = /android|iphone|ipad|ipod/i.test(ua);
+  const isFarcaster = /warpcast|farcaster/i.test(ua);
+  
+  if (isMobile && !isFarcaster && request.nextUrl.pathname === "/") {
+      // INI YANG BIKIN TERLEMPAR. HAPUS ATAU KOMENTAR BAGIAN INI.
+      // return NextResponse.redirect("https://farcaster.xyz/miniapps/...");
   }
+  */
 
-  // 3) Mobile non-Farcaster → Universal Link (jaga query)
-  const ua = req.headers.get("user-agent") || "";
-  const isFarcasterClient = FARCASTER_HINTS.some((k) => ua.includes(k));
-  const isMobile = /iPhone|iPad|iPod|Android/i.test(ua);
-
-  if (!isFarcasterClient && isMobile && pathname === "/launch") {
-    const to = new URL(UNIVERSAL_LINK);
-    to.search = url.search;
-    const redirectRes = NextResponse.redirect(to, 307);
-
-    if (fidref && /^\d+$/.test(fidref)) {
-      redirectRes.cookies.set("fid_ref", fidref, {
-        path: "/",
-        httpOnly: true,
-        sameSite: "none",
-        secure: true,
-        maxAge: 60 * 60 * 24,
-      });
-    }
-    return redirectRes;
-  }
-
-  return res;
+  return NextResponse.next();
 }
 
 export const config = {
-  // tetap hanya match route ini; /api dan /.well-known sudah aman karena di-bypass di atas
-  matcher: ["/", "/launch"],
+  matcher: [
+    /*
+     * Match all request paths except for the ones starting with:
+     * - api (API routes)
+     * - _next/static (static files)
+     * - _next/image (image optimization files)
+     * - favicon.ico (favicon file)
+     */
+    '/((?!api|_next/static|_next/image|favicon.ico).*)',
+  ],
 };
-
