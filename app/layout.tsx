@@ -41,7 +41,7 @@ export const metadata: Metadata = {
   other: {
     "fc:miniapp": JSON.stringify(fcPayload),
     "fc:frame": JSON.stringify(fcPayload),
-    "base:app_id": "694084f8d19763ca26ddc32e",
+    "base:app_id": "6940c23cd77c069a945bdf3f",
   },
 };
 
