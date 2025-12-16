@@ -4,15 +4,6 @@
 import { useEffect, useRef } from "react";
 import { sdk } from "@farcaster/miniapp-sdk";
 
-/**
- * Komponen ini tidak merender UI.
- * Tugasnya:
- * 1) Cek ke server apakah user sudah "Add" Mini App (via /api/miniapp-status?fid=...).
- * 2) Kalau BELUM, coba panggil sdk.actions.addMiniApp() sekali per session.
- * 3) Tambah "pemicu halus" berbasis gesture (click/touchstart/focus/visibility) supaya lolos kebijakan klien yg butuh user gesture.
- * 4) Retry ringan ketika kembali ke foreground.
- */
-
 // flag modul agar tidak double-trigger kalau di-mount di layout + page
 let __SILENT_ADD_ATTEMPTED__ = false;
 
@@ -20,11 +11,23 @@ export default function SilentAddMiniApp() {
   const triedThisSession = useRef(false);
 
   useEffect(() => {
+    // 1. CEK LINGKUNGAN: Jika di Base App / Coinbase Wallet, JANGAN jalankan script ini.
+    // Base App (Wallet) tidak mendukung fitur "Add Mini App" ala Farcaster.
+    // Jika dipaksa, dia akan melempar user keluar ke Warpcast.
+    const isBaseApp = 
+      (typeof window !== "undefined" && (window as any).ethereum) || 
+      (typeof navigator !== "undefined" && 
+        (navigator.userAgent.includes("Coinbase") || navigator.userAgent.includes("Base")));
+
+    if (isBaseApp) return;
+
+    // --- BATAS AMAN: Kode di bawah hanya jalan di Farcaster Client (Warpcast/Supercast) ---
+
     // cegah double attempt lintas mount
     if (__SILENT_ADD_ATTEMPTED__) return;
     __SILENT_ADD_ATTEMPTED__ = true;
 
-    // helper: get fid dari localStorage (kamu sudah set di AppInitializer)
+    // helper: get fid dari localStorage
     const getFid = () => {
       try {
         const s = localStorage.getItem("basetc_fid");
@@ -44,7 +47,6 @@ export default function SilentAddMiniApp() {
         const j = await r.json();
         return Boolean(j?.added);
       } catch {
-        // kalau gagal cek, anggap belum supaya kita tetap coba memicu
         return false;
       }
     }
@@ -54,7 +56,6 @@ export default function SilentAddMiniApp() {
       if (triedThisSession.current) return;
       triedThisSession.current = true;
 
-      // kalau server sudah bilang "added", jangan ganggu
       const serverAdded = await isAddedOnServer();
       if (serverAdded) return;
 
@@ -63,23 +64,19 @@ export default function SilentAddMiniApp() {
         const add = actions?.addMiniApp as undefined | (() => Promise<void>);
         if (typeof add === "function") {
           await add();
-          // tidak perlu set apa-apa; pada bukaan berikutnya server harus sudah "added=true"
         }
       } catch {
-        // user cancel / domain mismatch / dll → cukup diam. Gesture berikutnya akan coba lagi.
+        // user cancel / domain mismatch / dll → diam.
       }
     }
 
-    // 1) attempt segera (auto)
-    //   — bisa saja diabaikan klien, tidak apa-apa; gesture akan jadi back-up
+    // Eksekusi logic add
     void tryAdd();
 
-    // 2) attempt lagi setelah sedikit jeda (kadang context siap setelah render)
     const t = window.setTimeout(() => {
       void tryAdd();
     }, 400);
 
-    // 3) saat kembali ke foreground / visibility berubah → coba lagi sekali
     const onVis = () => {
       if (document.visibilityState === "visible") {
         void tryAdd();
@@ -87,7 +84,6 @@ export default function SilentAddMiniApp() {
     };
     document.addEventListener("visibilitychange", onVis);
 
-    // 4) tangkap GESTURE pertama (klik/tap/focus) → coba panggil (tanpa UI)
     const fireOnce = () => {
       void tryAdd();
     };
@@ -98,7 +94,6 @@ export default function SilentAddMiniApp() {
     return () => {
       clearTimeout(t);
       document.removeEventListener("visibilitychange", onVis);
-      // listeners "once: true" akan otomatis hilang setelah satu kali, tapi aman juga kalau dibersihkan:
       window.removeEventListener("click", fireOnce, { capture: true } as any);
       window.removeEventListener("touchstart", fireOnce, { capture: true } as any);
       window.removeEventListener("focus", fireOnce, { capture: true } as any);
@@ -107,4 +102,3 @@ export default function SilentAddMiniApp() {
 
   return null;
 }
-
