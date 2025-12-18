@@ -53,12 +53,10 @@ const Leaderboard = () => {
       setMyRankData(foundInTop100);
     } else {
       // Jika TIDAK ada di Top 100, panggil API khusus user
-      // Pastikan backend Anda support endpoint seperti: /api/leaderboard/user?fid=XXX
       try {
         const response = await fetch(`/api/leaderboard/user?fid=${currentUserFid}&_t=${Date.now()}`);
         if (response.ok) {
             const userData = await response.json();
-            // Pastikan format response userData sesuai tipe LeaderboardItem
             if (userData && userData.rank) {
                 setMyRankData(userData);
             }
@@ -102,6 +100,8 @@ const Leaderboard = () => {
           <div className="relative w-4 h-4">
             <Image src="https://cryptologos.cc/logos/usd-coin-usdc-logo.png" alt="USDC" fill className="object-contain" />
           </div>
+          {/* Penambahan tanda + */}
+          <span className="text-[10px] font-bold text-gray-400">+</span>
           <span className="text-[10px] font-bold text-blue-600 uppercase tracking-tight">
             basetc
           </span>
@@ -122,7 +122,7 @@ const Leaderboard = () => {
       
       <div className="max-w-md mx-auto p-4 space-y-4">
         
-        {/* --- BAGIAN MY RANK (Bisa Rank 150, 1000, dst) --- */}
+        {/* --- BAGIAN MY RANK --- */}
         {myRankData && (
             <div className="rounded-xl bg-white p-4 border border-gray-200 shadow-sm ring-1 ring-gray-100">
                 <div className="flex items-center justify-between mb-2">
@@ -195,7 +195,6 @@ const Leaderboard = () => {
                 )}
 
                 {leaderboardData.map((item) => {
-                    // Logic Styling Rank 1, 2, 3
                     let rankIcon = <span className="text-gray-500 font-mono font-medium">#{item.rank}</span>;
                     let rankBg = "hover:bg-gray-50";
                     
