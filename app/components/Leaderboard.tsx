@@ -122,6 +122,24 @@ const Leaderboard = () => {
       
       <div className="max-w-md mx-auto p-4 space-y-4">
         
+        {/* --- WARNING / INFO BANNER --- */}
+        <div className="rounded-xl bg-amber-50 p-4 border border-amber-200 shadow-sm text-center relative overflow-hidden">
+             {/* Decorative background element */}
+            <div className="absolute top-0 right-0 -mt-2 -mr-2 w-8 h-8 bg-amber-100 rounded-full blur-xl opacity-50"></div>
+            
+            <h3 className="text-xs font-extrabold text-amber-700 uppercase tracking-wider mb-2 flex items-center justify-center gap-2">
+                ⚠️ Trial Mode / Beta Testing
+            </h3>
+            <p className="text-[11px] text-amber-800/80 leading-relaxed font-medium">
+                Rewards distribution has not started yet. The official start date will be announced soon.
+            </p>
+            <div className="mt-2 inline-block bg-amber-100 px-3 py-1 rounded-md">
+                 <p className="text-[10px] font-bold text-amber-700">
+                    NOTE: ALL POINTS WILL BE RESET
+                </p>
+            </div>
+        </div>
+
         {/* --- BAGIAN MY RANK --- */}
         {myRankData && (
             <div className="rounded-xl bg-white p-4 border border-gray-200 shadow-sm ring-1 ring-gray-100">
