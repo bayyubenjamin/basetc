@@ -100,7 +100,7 @@ const Leaderboard = () => {
       return (
         <div className="flex items-center justify-end gap-1">
           <div className="relative w-4 h-4">
-            <Image src="/usdc-logo.png" alt="USDC" fill className="object-contain" />
+            <Image src="https://cryptologos.cc/logos/usd-coin-usdc-logo.png" alt="USDC" fill className="object-contain" />
           </div>
           <span className="text-[10px] font-bold text-blue-600 uppercase tracking-tight">
             basetc
