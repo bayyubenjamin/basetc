@@ -23,34 +23,48 @@ const Leaderboard = () => {
   // 1. Fungsi Fetch Data
   const fetchLeaderboard = useCallback(async () => {
     try {
-      const response = await fetch(`/api/leaderboard?t=${new Date().getTime()}`, {
+      // Tambahkan parameter waktu '_t' agar browser tidak menggunakan cache lama
+      const response = await fetch(`/api/leaderboard?_t=${Date.now()}`, {
         cache: "no-store",
+        headers: {
+            "Pragma": "no-cache"
+        }
       });
 
       if (!response.ok) throw new Error("Gagal mengambil data leaderboard");
       
       const json = await response.json();
       setData(json.items || []);
+      
+      // Matikan loading setelah data pertama berhasil dimuat
+      setLoading(false);
     } catch (err: any) {
       console.error("Leaderboard Error:", err);
+      // Jangan set error state jika data lama masih ada (agar UI tidak flickering)
       if (data.length === 0) setError(err.message);
-    } finally {
       setLoading(false);
     }
-  }, [data.length]);
+  }, []); // Dependency kosong agar fungsi stabil dan tidak mereset interval
 
   // 2. Setup Lifecycle & Realtime Listener
   useEffect(() => {
+    // Panggil langsung saat komponen mount
     fetchLeaderboard();
 
+    // Listener untuk event custom "leaderboardUpdate" (bisa dipicu dari komponen lain)
     const handleRealtimeUpdate = () => {
       console.log("⚡ Leaderboard Refresh Triggered!");
       fetchLeaderboard();
     };
 
     window.addEventListener("leaderboardUpdate", handleRealtimeUpdate);
-    const interval = setInterval(fetchLeaderboard, 15000);
+    
+    // Polling otomatis setiap 10 detik
+    const interval = setInterval(() => {
+        fetchLeaderboard();
+    }, 10000);
 
+    // Cleanup saat komponen unmount
     return () => {
       window.removeEventListener("leaderboardUpdate", handleRealtimeUpdate);
       clearInterval(interval);
