@@ -6,8 +6,9 @@ import { supabaseAdmin } from '../../lib/supabase/server';
 
 export async function GET() {
   try {
+    // Select semua kolom dari view (rank, fid, username, display_name, pfp_url, total_points)
     const { data, error } = await supabaseAdmin
-      .from('view_leaderboard_realtime') // <-- Nama View dari langkah 1
+      .from('leaderboard_view')
       .select('*')
       .limit(100); // Ambil Top 100
 
