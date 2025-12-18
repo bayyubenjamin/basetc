@@ -6,7 +6,7 @@ import { useAccount } from "wagmi";
 
 // Tipe data disesuaikan dengan output View SQL Anda
 type LeaderboardItem = {
-  rank: number;        // Kolom rank dari view
+  rank: number;
   fid: number;
   username: string | null;
   display_name: string | null;
@@ -15,7 +15,7 @@ type LeaderboardItem = {
 };
 
 const Leaderboard = () => {
-  const { address } = useAccount(); // Opsional: jika ingin highlight user berdasar wallet (perlu mapping fid->wallet di masa depan)
+  const { address } = useAccount(); 
   const [data, setData] = useState<LeaderboardItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -23,7 +23,6 @@ const Leaderboard = () => {
   // 1. Fungsi Fetch Data
   const fetchLeaderboard = useCallback(async () => {
     try {
-      // Tambahkan timestamp 't' agar browser tidak men-cache request (selalu fresh)
       const response = await fetch(`/api/leaderboard?t=${new Date().getTime()}`, {
         cache: "no-store",
       });
@@ -42,19 +41,14 @@ const Leaderboard = () => {
 
   // 2. Setup Lifecycle & Realtime Listener
   useEffect(() => {
-    // Load pertama
     fetchLeaderboard();
 
-    // Event Handler: Dipanggil saat Spin/Mining selesai
     const handleRealtimeUpdate = () => {
       console.log("⚡ Leaderboard Refresh Triggered!");
       fetchLeaderboard();
     };
 
-    // Pasang 'telinga' untuk mendengar event 'leaderboardUpdate'
     window.addEventListener("leaderboardUpdate", handleRealtimeUpdate);
-
-    // Auto-refresh interval (backup setiap 15 detik)
     const interval = setInterval(fetchLeaderboard, 15000);
 
     return () => {
@@ -64,14 +58,14 @@ const Leaderboard = () => {
   }, [fetchLeaderboard]);
 
   return (
-    <div className="w-full">
-      <div className="space-y-4 rounded-lg bg-neutral-900/50 p-4 border border-neutral-700 backdrop-blur-sm">
+    // Tambahkan pb-20 (padding bottom) agar bagian bawah tidak tertutup nav bar HP
+    <div className="w-full pb-20"> 
+      <div className="space-y-4 rounded-lg bg-neutral-900/50 p-3 sm:p-4 border border-neutral-700 backdrop-blur-sm">
         
         {/* Header */}
         <div className="text-center mb-4 flex flex-col items-center justify-center">
           <h2 className="text-lg font-bold text-white tracking-wide flex items-center gap-2">
             🏆 Global Leaderboard
-            {/* Indikator Live Pulse */}
             <span className="relative flex h-2 w-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
@@ -82,14 +76,14 @@ const Leaderboard = () => {
           </p>
         </div>
 
-        {/* Tabel */}
-        <div className="overflow-hidden rounded-md border border-neutral-800">
-          <table className="min-w-full text-sm text-left">
+        {/* Tabel Wrapper: Gunakan overflow-x-auto agar bisa discroll menyamping */}
+        <div className="overflow-x-auto rounded-md border border-neutral-800">
+          <table className="min-w-full text-sm text-left whitespace-nowrap">
             <thead className="bg-neutral-800 text-neutral-400 font-medium">
               <tr>
-                <th className="px-4 py-3 text-center w-14">Rank</th>
-                <th className="px-4 py-3">User</th>
-                <th className="px-4 py-3 text-right">Points</th>
+                <th className="px-3 py-3 text-center w-12">#</th>
+                <th className="px-3 py-3">User</th>
+                <th className="px-3 py-3 text-right">Points</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-800 bg-neutral-900/30">
@@ -119,7 +113,6 @@ const Leaderboard = () => {
               )}
 
               {data.map((item) => {
-                // Styling Rank berdasarkan kolom 'rank' dari DB
                 let rankIcon = <span className="text-neutral-500 font-mono">#{item.rank}</span>;
                 let rankBg = "hover:bg-neutral-800/30";
                 
@@ -136,11 +129,11 @@ const Leaderboard = () => {
 
                 return (
                   <tr key={item.fid} className={`transition-colors duration-300 ${rankBg}`}>
-                    <td className="px-4 py-3 text-center font-bold">
+                    <td className="px-3 py-3 text-center font-bold">
                       {rankIcon}
                     </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-3">
+                    <td className="px-3 py-3">
+                      <div className="flex items-center gap-2 sm:gap-3">
                         {/* Avatar */}
                         <div className="relative h-8 w-8 flex-shrink-0 overflow-hidden rounded-full border border-neutral-700 bg-neutral-800">
                           {item.pfp_url ? (
@@ -162,7 +155,8 @@ const Leaderboard = () => {
                         </div>
                         {/* Nama */}
                         <div className="flex flex-col">
-                          <span className="font-medium text-neutral-200 truncate max-w-[140px]">
+                          {/* Batasi lebar nama agar tidak merusak tabel di HP kecil */}
+                          <span className="font-medium text-neutral-200 truncate max-w-[100px] sm:max-w-[140px]">
                             {item.display_name || "Unknown"}
                           </span>
                           <span className="text-[10px] text-neutral-500">
@@ -171,7 +165,7 @@ const Leaderboard = () => {
                         </div>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-right font-bold text-white tabular-nums">
+                    <td className="px-3 py-3 text-right font-bold text-white tabular-nums">
                       {item.total_points.toLocaleString()}
                     </td>
                   </tr>
