@@ -1,247 +1,130 @@
-"use client";
+'use client';
 
-import { useState, useEffect, type FC, useMemo } from "react";
-import Image from "next/image";
-import {
-  useAccount,
-  useReadContract,
-  useWriteContract,
-  useWaitForTransactionReceipt,
-} from "wagmi";
-import { formatEther } from "viem";
-import { base, baseSepolia } from "viem/chains"; // <— tambahkan ini
-import { fetchCurrentSnapshot, type Snapshot } from "../utils/snapshot";
-import { VAULT_ADDRESS, vaultABI } from "../lib/vault";
+import { useEffect, useState } from 'react';
+import { useAccount } from 'wagmi';
 
-// === pilih chain TX ===
-// - pakai base untuk mainnet
-// - pakai baseSepolia untuk testnet
-const TX_CHAIN = base;
-
-type LeaderboardEntry = {
-  rank: number;
-  fid: number;
-  display_name: string | null;
-  username: string | null;
-  pfp_url: string | null;
-  total_points: number;
+// Tipe data sesuai return dari API leaderboard Anda
+type LeaderboardItem = {
+  user_address: string;
+  daily_score: number; // atau 'points' tergantung nama kolom di view database Anda
 };
 
-const Leaderboard: FC = () => {
-  const [leaderboardData, setLeaderboardData] = useState<LeaderboardEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  // ====== Snapshot & Wallet ======
+export default function Leaderboard() {
   const { address } = useAccount();
-  const [snap, setSnap] = useState<Snapshot | null>(null);
-  const [claiming, setClaiming] = useState(false);
+  const [data, setData] = useState<LeaderboardItem[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // Fetch leaderboard
+  // Fungsi untuk memendekkan address (0x1234...abcd)
+  const shortenAddress = (addr: string) => {
+    if (!addr) return '';
+    return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+  };
+
+  // Fetch data dari API
   useEffect(() => {
     const fetchLeaderboard = async () => {
       try {
-        setLoading(true);
-        const response = await fetch("/api/leaderboard");
-        if (!response.ok) throw new Error("Failed to fetch leaderboard data.");
-        const data = await response.json();
-        setLeaderboardData(data.items);
-      } catch (err: any) {
-        setError(err.message);
+        const res = await fetch('/api/leaderboard');
+        const json = await res.json();
+        
+        if (json.items) {
+          setData(json.items);
+        }
+      } catch (error) {
+        console.error('Gagal memuat leaderboard', error);
       } finally {
         setLoading(false);
       }
     };
+
     fetchLeaderboard();
   }, []);
 
-  // Fetch snapshot
-  useEffect(() => {
-    fetchCurrentSnapshot().then(setSnap);
-  }, []);
-
-  // Entitlement user dari JSON
-  const entitlement = useMemo(() => {
-    if (!snap || !address) return null;
-    return snap.entries[(address.toLowerCase() as `0x${string}`)] || null;
-  }, [snap, address]);
-
-  // Status claimed on-chain
-  const { data: isClaimed } = useReadContract({
-    abi: vaultABI,
-    address: VAULT_ADDRESS,
-    functionName: "claimed",
-    args: [
-      BigInt(snap?.snapshotId || 0),
-      (address ??
-        "0x0000000000000000000000000000000000000000") as `0x${string}`,
-    ],
-    // beberapa versi wagmi tidak butuh query.enabled — biarkan default
-  });
-
-  // Write claim
-  const { data: txHash, writeContract, isPending } = useWriteContract();
-  const { isLoading: txLoading, isSuccess: txSuccess } =
-    useWaitForTransactionReceipt({ hash: txHash });
-
-  const onClaim = async () => {
-    if (!snap || !entitlement || !address) return;
-    try {
-      setClaiming(true);
-      await writeContract({
-        // ====== FIX INTI: sertakan chain & account ======
-        chain: TX_CHAIN,
-        account: address as `0x${string}`,
-        abi: vaultABI,
-        address: VAULT_ADDRESS,
-        functionName: "claim",
-        args: [
-          BigInt(snap.snapshotId),
-          BigInt(entitlement.amount),
-          entitlement.proof,
-        ],
-      });
-    } finally {
-      setClaiming(false);
-    }
-  };
-
-  const claimDisabled =
-    !snap ||
-    !address ||
-    !entitlement ||
-    entitlement.amount === "0" ||
-    isPending ||
-    txLoading ||
-    Boolean(isClaimed);
-
   return (
-    <div className="relative">
-      {/* OVERLAY SOON */}
-      <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center bg-black/40 backdrop-blur-sm">
-        <span className="text-4xl md:text-5xl font-extrabold tracking-widest text-white/90 drop-shadow">
-          SOON!
-        </span>
+    <div className="w-full max-w-md mx-auto p-4">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h2 className="text-xl font-bold text-white">Daily Leaderboard</h2>
+          <p className="text-xs text-gray-400">Reset pukul 07:00 WIB</p>
+        </div>
+        <div className="text-right">
+          <span className="text-xs bg-blue-900 text-blue-200 px-2 py-1 rounded border border-blue-700">
+            Top 100
+          </span>
+        </div>
       </div>
 
-      {/* ASLI (DIBIARKAN, HANYA DIBUAT BLUR & NON-INTERAKTIF) */}
-      <div className="blur-sm select-none pointer-events-none">
-        <div className="space-y-4 rounded-lg bg-neutral-900/50 p-4 border border-neutral-700">
-          <h2 className="text-lg font-semibold text-center">Leaderboard</h2>
-          <p className="text-sm text-neutral-400 text-center">
-            Peringkat poin untuk ronde saat ini.
-          </p>
-
-          {/* ====== Halving Reward box ====== */}
-          <div className="rounded-md border border-neutral-700 bg-neutral-800/50 p-3 flex items-center justify-between gap-3">
-            <div className="text-sm">
-              <div className="font-semibold">Halving Reward</div>
-              {snap ? (
-                <div className="text-neutral-300">
-                  Snapshot #{snap.snapshotId}{" "}
-                  {isClaimed
-                    ? "• ✅ Claimed"
-                    : entitlement
-                    ? "• Eligible"
-                    : "• Not eligible"}
-                </div>
-              ) : (
-                <div className="text-neutral-400">No active snapshot</div>
-              )}
-              {entitlement && (
-                <div className="text-xs text-neutral-400">
-                  Your allocation: {formatEther(BigInt(entitlement.amount))} $BaseTC
-                </div>
-              )}
+      {/* List Leaderboard */}
+      <div className="bg-black/40 border border-white/10 rounded-xl overflow-hidden backdrop-blur-md">
+        {loading ? (
+          <div className="p-8 text-center text-gray-400 animate-pulse">
+            Memuat data...
+          </div>
+        ) : data.length === 0 ? (
+          <div className="p-8 text-center text-gray-500">
+            Belum ada aktivitas hari ini.
+            <br />
+            <span className="text-sm">Jadilah yang pertama!</span>
+          </div>
+        ) : (
+          <div className="divide-y divide-white/5">
+            {/* Header Kolom */}
+            <div className="grid grid-cols-12 gap-2 p-3 text-xs font-semibold text-gray-500 uppercase tracking-wider bg-white/5">
+              <div className="col-span-2 text-center">Rank</div>
+              <div className="col-span-7">User</div>
+              <div className="col-span-3 text-right">Poin</div>
             </div>
 
-            <button
-              onClick={onClaim}
-              disabled={claimDisabled}
-              className="px-3 py-2 rounded-md bg-white/10 hover:bg-white/15 disabled:opacity-50 text-sm"
-            >
-              {isPending || txLoading || claiming
-                ? "Claiming..."
-                : isClaimed
-                ? "Claimed"
-                : "Claim"}
-            </button>
-          </div>
+            {/* Baris Data */}
+            {data.map((item, index) => {
+              const isMe = address && item.user_address.toLowerCase() === address.toLowerCase();
+              const rank = index + 1;
+              
+              // Warna khusus untuk Top 3
+              let rankColor = "text-gray-400";
+              if (rank === 1) rankColor = "text-yellow-400 font-bold";
+              if (rank === 2) rankColor = "text-gray-300 font-bold";
+              if (rank === 3) rankColor = "text-orange-400 font-bold";
 
-          {/* ====== Tabel leaderboard ====== */}
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
-              <thead className="text-neutral-400">
-                <tr>
-                  <th className="px-4 py-2 text-left">Rank</th>
-                  <th className="px-4 py-2 text-left">User</th>
-                  <th className="px-4 py-2 text-right">Points</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading && (
-                  <tr>
-                    <td colSpan={3} className="text-center py-4 text-neutral-500">
-                      Loading...
-                    </td>
-                  </tr>
-                )}
-                {error && (
-                  <tr>
-                    <td colSpan={3} className="text-center py-4 text-red-400">
-                      {error}
-                    </td>
-                  </tr>
-                )}
-                {!loading &&
-                  !error &&
-                  leaderboardData.map((entry) => (
-                    <tr
-                      key={entry.fid}
-                      className="border-b border-neutral-800 hover:bg-neutral-800/50"
-                    >
-                      <td className="px-4 py-2 font-medium">{entry.rank}</td>
-                      <td className="px-4 py-2 flex items-center gap-3">
-                        {entry.pfp_url ? (
-                          <Image
-                            src={entry.pfp_url}
-                            alt={entry.display_name || ""}
-                            width={24}
-                            height={24}
-                            className="rounded-full"
-                          />
-                        ) : (
-                          <div className="w-6 h-6 rounded-full bg-neutral-700" />
-                        )}
-                        <span className="font-semibold">
-                          {entry.display_name ||
-                            `@${entry.username}` ||
-                            `FID: ${entry.fid}`}
-                        </span>
-                      </td>
-                      <td className="px-4 py-2 text-right font-semibold">
-                        {entry.total_points}
-                      </td>
-                    </tr>
-                  ))}
-              </tbody>
-            </table>
-          </div>
+              return (
+                <div 
+                  key={item.user_address} 
+                  className={`grid grid-cols-12 gap-2 p-3 items-center text-sm hover:bg-white/5 transition-colors ${
+                    isMe ? "bg-blue-500/20 border-l-2 border-blue-500" : ""
+                  }`}
+                >
+                  {/* Rank */}
+                  <div className={`col-span-2 text-center ${rankColor}`}>
+                    {rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : `#${rank}`}
+                  </div>
 
-          {/* feedback tx */}
-          {txSuccess && (
-            <p className="text-green-400 text-xs">Claim success. 🎉</p>
-          )}
-          {isClaimed && (
-            <p className="text-neutral-400 text-xs">
-              You have already claimed for this snapshot.
-            </p>
-          )}
-        </div>
+                  {/* Address */}
+                  <div className="col-span-7 font-mono text-gray-200 truncate">
+                    {isMe ? (
+                      <span className="text-blue-400 font-semibold">YOU</span>
+                    ) : (
+                      shortenAddress(item.user_address)
+                    )}
+                  </div>
+
+                  {/* Poin */}
+                  <div className="col-span-3 text-right font-medium text-white">
+                    {item.daily_score} <span className="text-xs text-gray-500">XP</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+      
+      {/* Footer Info */}
+      <div className="mt-3 text-center">
+        <p className="text-[10px] text-gray-500">
+          *1 Poin per Claim/Spin. Spin tersedia setiap 8 jam.
+        </p>
       </div>
     </div>
   );
-};
-
-export default Leaderboard;
-
+}
