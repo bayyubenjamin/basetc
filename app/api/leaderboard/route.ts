@@ -6,19 +6,19 @@ import { supabaseAdmin } from '../../lib/supabase/server';
 
 export async function GET() {
   try {
-    // Query langsung ke view yang sudah kita buat
     const { data, error } = await supabaseAdmin
-      .from('leaderboard_view') // <-- Menggunakan VIEW, bukan tabel
+      .from('view_leaderboard_realtime') // <-- Nama View dari langkah 1
       .select('*')
-      .limit(100); // Ambil 100 teratas
+      .limit(100); // Ambil Top 100
 
     if (error) {
+      console.error("Supabase error:", error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
     return NextResponse.json({ items: data });
 
   } catch (e: any) {
-    return NextResponse.json({ error: e?.message ?? 'leaderboard_error' }, { status: 400 });
+    return NextResponse.json({ error: e?.message ?? 'Internal Server Error' }, { status: 500 });
   }
 }

@@ -1,130 +1,175 @@
-'use client';
+"use client";
 
-import { useEffect, useState } from 'react';
-import { useAccount } from 'wagmi';
+import { useState, useEffect } from "react";
+import Image from "next/image";
 
-// Tipe data sesuai return dari API leaderboard Anda
+// Tipe data sesuai output dari API (View Database)
 type LeaderboardItem = {
-  user_address: string;
-  daily_score: number; // atau 'points' tergantung nama kolom di view database Anda
+  fid: number;
+  display_name: string | null;
+  username: string | null;
+  pfp_url: string | null;
+  total_points: number;
 };
 
-export default function Leaderboard() {
-  const { address } = useAccount();
+const Leaderboard = () => {
   const [data, setData] = useState<LeaderboardItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Fungsi untuk memendekkan address (0x1234...abcd)
-  const shortenAddress = (addr: string) => {
-    if (!addr) return '';
-    return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
-  };
-
-  // Fetch data dari API
+  // Fetch data real-time
   useEffect(() => {
     const fetchLeaderboard = async () => {
       try {
-        const res = await fetch('/api/leaderboard');
-        const json = await res.json();
+        setLoading(true);
+        // Tambahkan timestamp agar tidak dicache browser
+        const response = await fetch(`/api/leaderboard?t=${new Date().getTime()}`, {
+          cache: "no-store",
+        });
+
+        if (!response.ok) throw new Error("Gagal mengambil data");
         
-        if (json.items) {
-          setData(json.items);
-        }
-      } catch (error) {
-        console.error('Gagal memuat leaderboard', error);
+        const json = await response.json();
+        setData(json.items || []);
+      } catch (err: any) {
+        console.error(err);
+        setError(err.message);
       } finally {
         setLoading(false);
       }
     };
 
     fetchLeaderboard();
+    
+    // Auto refresh setiap 30 detik (Real-time feel)
+    const interval = setInterval(fetchLeaderboard, 30000);
+    return () => clearInterval(interval);
   }, []);
 
   return (
-    <div className="w-full max-w-md mx-auto p-4">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h2 className="text-xl font-bold text-white">Daily Leaderboard</h2>
-          <p className="text-xs text-gray-400">Reset pukul 07:00 WIB</p>
+    <div className="w-full">
+      <div className="space-y-4 rounded-lg bg-neutral-900/50 p-4 border border-neutral-700 backdrop-blur-sm">
+        
+        {/* Header */}
+        <div className="text-center mb-4">
+          <h2 className="text-lg font-bold text-white tracking-wide">
+            🏆 Global Leaderboard
+          </h2>
+          <p className="text-xs text-neutral-400 mt-1">
+            Real-time Updates
+          </p>
         </div>
-        <div className="text-right">
-          <span className="text-xs bg-blue-900 text-blue-200 px-2 py-1 rounded border border-blue-700">
-            Top 100
-          </span>
-        </div>
-      </div>
 
-      {/* List Leaderboard */}
-      <div className="bg-black/40 border border-white/10 rounded-xl overflow-hidden backdrop-blur-md">
-        {loading ? (
-          <div className="p-8 text-center text-gray-400 animate-pulse">
-            Memuat data...
-          </div>
-        ) : data.length === 0 ? (
-          <div className="p-8 text-center text-gray-500">
-            Belum ada aktivitas hari ini.
-            <br />
-            <span className="text-sm">Jadilah yang pertama!</span>
-          </div>
-        ) : (
-          <div className="divide-y divide-white/5">
-            {/* Header Kolom */}
-            <div className="grid grid-cols-12 gap-2 p-3 text-xs font-semibold text-gray-500 uppercase tracking-wider bg-white/5">
-              <div className="col-span-2 text-center">Rank</div>
-              <div className="col-span-7">User</div>
-              <div className="col-span-3 text-right">Poin</div>
-            </div>
-
-            {/* Baris Data */}
-            {data.map((item, index) => {
-              const isMe = address && item.user_address.toLowerCase() === address.toLowerCase();
-              const rank = index + 1;
+        {/* Tabel */}
+        <div className="overflow-hidden rounded-md border border-neutral-800">
+          <table className="min-w-full text-sm text-left">
+            <thead className="bg-neutral-800 text-neutral-400 font-medium">
+              <tr>
+                <th className="px-4 py-3 text-center w-12">#</th>
+                <th className="px-4 py-3">User</th>
+                <th className="px-4 py-3 text-right">Points</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-neutral-800 bg-neutral-900/30">
               
-              // Warna khusus untuk Top 3
-              let rankColor = "text-gray-400";
-              if (rank === 1) rankColor = "text-yellow-400 font-bold";
-              if (rank === 2) rankColor = "text-gray-300 font-bold";
-              if (rank === 3) rankColor = "text-orange-400 font-bold";
+              {loading && (
+                <tr>
+                  <td colSpan={3} className="px-4 py-8 text-center text-neutral-500 animate-pulse">
+                    Memuat data peringkat...
+                  </td>
+                </tr>
+              )}
 
-              return (
-                <div 
-                  key={item.user_address} 
-                  className={`grid grid-cols-12 gap-2 p-3 items-center text-sm hover:bg-white/5 transition-colors ${
-                    isMe ? "bg-blue-500/20 border-l-2 border-blue-500" : ""
-                  }`}
-                >
-                  {/* Rank */}
-                  <div className={`col-span-2 text-center ${rankColor}`}>
-                    {rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : `#${rank}`}
-                  </div>
+              {error && (
+                <tr>
+                  <td colSpan={3} className="px-4 py-4 text-center text-red-400 text-xs">
+                    {error}
+                  </td>
+                </tr>
+              )}
 
-                  {/* Address */}
-                  <div className="col-span-7 font-mono text-gray-200 truncate">
-                    {isMe ? (
-                      <span className="text-blue-400 font-semibold">YOU</span>
-                    ) : (
-                      shortenAddress(item.user_address)
-                    )}
-                  </div>
+              {!loading && !error && data.length === 0 && (
+                <tr>
+                  <td colSpan={3} className="px-4 py-8 text-center text-neutral-500">
+                    Belum ada data poin.
+                  </td>
+                </tr>
+              )}
 
-                  {/* Poin */}
-                  <div className="col-span-3 text-right font-medium text-white">
-                    {item.daily_score} <span className="text-xs text-gray-500">XP</span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-      
-      {/* Footer Info */}
-      <div className="mt-3 text-center">
-        <p className="text-[10px] text-gray-500">
-          *1 Poin per Claim/Spin. Spin tersedia setiap 8 jam.
-        </p>
+              {!loading && !error && data.map((item, index) => {
+                const rank = index + 1;
+                
+                // Styling Ranking
+                let rankIcon = <span className="text-neutral-500 font-mono">#{rank}</span>;
+                let rankBg = "hover:bg-neutral-800/30";
+                
+                if (rank === 1) {
+                  rankIcon = <span className="text-xl">🥇</span>;
+                  rankBg = "bg-yellow-900/10 hover:bg-yellow-900/20";
+                } else if (rank === 2) {
+                  rankIcon = <span className="text-xl">🥈</span>;
+                  rankBg = "bg-neutral-700/20 hover:bg-neutral-700/30";
+                } else if (rank === 3) {
+                  rankIcon = <span className="text-xl">🥉</span>;
+                  rankBg = "bg-orange-900/10 hover:bg-orange-900/20";
+                }
+
+                return (
+                  <tr key={item.fid} className={`transition-colors ${rankBg}`}>
+                    {/* Kolom Rank */}
+                    <td className="px-4 py-3 text-center font-bold">
+                      {rankIcon}
+                    </td>
+
+                    {/* Kolom User (PFP + Nama) */}
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        {/* Avatar */}
+                        <div className="relative h-8 w-8 flex-shrink-0 overflow-hidden rounded-full border border-neutral-700 bg-neutral-800">
+                          {item.pfp_url ? (
+                            <Image
+                              src={item.pfp_url}
+                              alt={item.username || "User"}
+                              fill
+                              sizes="32px"
+                              className="object-cover"
+                              onError={(e) => {
+                                // Fallback jika gambar error (opsional)
+                                (e.target as HTMLImageElement).style.display = 'none';
+                              }}
+                            />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center text-[10px] text-neutral-500">
+                              ?
+                            </div>
+                          )}
+                        </div>
+                        
+                        {/* Nama & Username */}
+                        <div className="flex flex-col">
+                          <span className="font-medium text-neutral-200 truncate max-w-[120px]">
+                            {item.display_name || "Unknown"}
+                          </span>
+                          <span className="text-[10px] text-neutral-500">
+                            @{item.username || item.fid}
+                          </span>
+                        </div>
+                      </div>
+                    </td>
+
+                    {/* Kolom Poin */}
+                    <td className="px-4 py-3 text-right font-bold text-white">
+                      {item.total_points.toLocaleString()}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
-}
+};
+
+export default Leaderboard;
