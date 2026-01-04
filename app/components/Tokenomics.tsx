@@ -2,9 +2,13 @@
 
 import { useEffect, useRef } from "react";
 
+// Helper untuk format angka (opsional, agar ribuan ada komanya)
+const fmt = (n: string) => n.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+
 export default function TokenomicsLite() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
+  // --- LOGIC CANVAS TETAP SAMA (Hanya container yang berubah) ---
   useEffect(() => {
     const el = canvasRef.current;
     if (!el) return;
@@ -12,38 +16,38 @@ export default function TokenomicsLite() {
     if (!ctx) return;
 
     const width = el.width;
-    const height = el.height; // (tersisa kalau nanti perlu)
+    const height = el.height;
     const cx = width / 2;
     const cy = height / 2;
-    const radius = Math.min(cx, cy) - 8;
+    const radius = Math.min(cx, cy) - 10; // Sedikit padding ekstra
 
-    // Premium palette (mewah & konsisten)
     const parts = [
-      { label: "Mining Rewards", value: 85.2, color: "#4F7CFF" },    // royal cobalt
-      { label: "Ecosystem & Liquidity", value: 10.0, color: "#1CC7A0" }, // emerald
-      { label: "Treasury (Satoshi Wallet)", value: 4.8, color: "#FFB23D" }, // warm amber
+      { label: "Mining Rewards", value: 85.2, color: "#3B82F6" },    // Blue-500 equivalent
+      { label: "Ecosystem & Liquidity", value: 10.0, color: "#10B981" }, // Emerald-500
+      { label: "Treasury", value: 4.8, color: "#F59E0B" }, // Amber-500
     ];
 
     ctx.clearRect(0, 0, width, height);
 
-    // Background ring (deep navy) + subtle shadow
+    // Glow Effect di belakang Chart
+    ctx.shadowBlur = 20;
+    ctx.shadowColor = "rgba(59, 130, 246, 0.15)";
+
+    // Background ring
     ctx.save();
     ctx.beginPath();
     ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-    ctx.fillStyle = "#0a0f1a";
-    ctx.shadowColor = "rgba(0,0,0,0.35)";
-    ctx.shadowBlur = 16;
+    ctx.fillStyle = "#0f172a"; // Slate-900
     ctx.fill();
     ctx.restore();
 
+    ctx.shadowBlur = 0; // Reset shadow untuk elemen tajam
 
-    // Slices + labels di atas tiap slice
     let start = -Math.PI / 2;
     parts.forEach((p) => {
       const slice = (p.value / 100) * Math.PI * 2;
       const mid = start + slice / 2;
 
-      // segmen
       ctx.beginPath();
       ctx.moveTo(cx, cy);
       ctx.arc(cx, cy, radius, start, start + slice);
@@ -51,255 +55,249 @@ export default function TokenomicsLite() {
       ctx.fillStyle = p.color;
       ctx.fill();
 
-      // divider tipis
-      ctx.lineWidth = 1;
-      ctx.strokeStyle = "rgba(255,255,255,0.05)";
+      // Divider lebih tajam
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = "#020617"; // Slate-950 (Background color)
       ctx.stroke();
 
-      // label persen di atas slice
-      const labelRadius = radius * 0.78;
+      // Label Persentase
+      const labelRadius = radius * 0.75;
       const lx = cx + Math.cos(mid) * labelRadius;
       const ly = cy + Math.sin(mid) * labelRadius;
 
-      ctx.fillStyle = "#f3f4f6";
-      ctx.font = "500 12px Inter, ui-sans-serif";
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "600 13px Inter, sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.fillText(`${p.value}%`, lx, ly);
 
       start += slice;
-    })
+    });
 
-    // Donut hole (graphite)
+    // Donut hole
     ctx.beginPath();
-    ctx.arc(cx, cy, radius * 0.58, 0, Math.PI * 2);
-    ctx.fillStyle = "#0c111d";
+    ctx.arc(cx, cy, radius * 0.6, 0, Math.PI * 2);
+    ctx.fillStyle = "#020617"; // Match background
     ctx.fill();
 
-    // === Center Text (diturunkan dikit + font 1px lebih kecil) ===
-ctx.textAlign = "center";
-ctx.textBaseline = "middle";
+    // Center Text
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = "#94a3b8"; // Slate-400
+    ctx.font = "500 12px Inter, sans-serif";
+    ctx.fillText("Total Supply", cx, cy - 8);
+    
+    ctx.fillStyle = "#f8fafc"; // Slate-50
+    ctx.font = "700 16px Inter, sans-serif";
+    ctx.fillText("21,000,000", cx, cy + 10);
 
-// Judul
-ctx.fillStyle = "#e6ebf5";
-ctx.font = "600 14px Inter, ui-sans-serif";
-ctx.fillText("Token Distribution", cx, cy - 6);
-
-// Label per sektor (warna mengikuti pie) — diturunkan 6px total
-ctx.font = "500 11px Inter, ui-sans-serif";
-const labels = [
-  { text: "Mining", color: "#4F7CFF", offset: 8 },
-  { text: "Eco & LP", color: "#1CC7A0", offset: 22 },
-  { text: "Treasury", color: "#FFB23D", offset: 36 },
-] as const;
-
-labels.forEach((l) => {
-  ctx.fillStyle = l.color;
-  ctx.fillText(l.text, cx, cy + l.offset);
-});
-  }, []); // ⬅️ PENTING: tutup useEffect di sini
+  }, []);
 
   return (
-    <div className="mx-auto w-full max-w-[1120px]">
-      {/* Pie Chart (container premium) */}
-      <div className="rounded-xl border border-white/10 bg-gradient-to-b from-[#0b0f1a]/85 to-[#0b0f1a]/60 p-3 sm:p-4 shadow-[0_6px_24px_rgba(0,0,0,0.25)]">
-        <canvas
-          ref={canvasRef}
-          width={400}
-          height={400}
-          className="h-[280px] w-[280px] mx-auto sm:h-[340px] sm:w-[340px]"
-          aria-label="Token distribution pie chart"
-        />
-      </div>
-
-      {/* Main Distribution */}
-      <Section
-        title="Main Distribution"
-        desc={
-          <>
-            Fixed supply <b>21,000,000</b> (18 decimals). Rewards reduce by <b>50%</b> every <b>30 days</b> (halving).
-          </>
-        }
-      >
-        <table className="w-full min-w-[720px] border-separate border-spacing-0">
-          <TableHead cols={["Category", "Amount", "Share", "Notes"]} />
-          <tbody className="text-zinc-300">
-            <Row
-              cat="Mining Rewards"
-              amount="17,900,000"
-              share="85.2%"
-              note="Distributed via NFT mining; halving every 30 days (~2 years)."
+    <div className="w-full max-w-5xl mx-auto space-y-8 p-4 md:p-0">
+      
+      {/* --- TOP SECTION: CHART & SUMMARY --- */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        
+        {/* Left: Visualization */}
+        <div className="col-span-1 bg-slate-950 border border-slate-800 rounded-2xl p-6 flex flex-col items-center justify-center relative overflow-hidden">
+            <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-blue-500/20 to-transparent" />
+            <canvas
+              ref={canvasRef}
+              width={280}
+              height={280}
+              className="w-[240px] h-[240px] md:w-[260px] md:h-[260px]"
             />
-            <Row
-              cat="Ecosystem & Liquidity Reserve"
-              amount="2,100,000"
-              share="10%"
-              note="Presale, LP seeding, partnerships, campaigns."
-            />
-            <Row
-              cat="Treasury (Satoshi Wallet)"
-              amount="1,000,000"
-              share="4.8%"
-              note="Team reserve for development, operations, marketing."
-            />
-            <tr className="border-t border-white/10">
-              <td className="px-4 py-3 font-semibold">Total Supply</td>
-              <td className="px-4 py-3 font-semibold tabular-nums">21,000,000 $BaseTC</td>
-              <td className="px-4 py-3 font-semibold">100%</td>
-              <td className="px-4 py-3 text-zinc-400">18 decimals — fixed.</td>
-            </tr>
-          </tbody>
-        </table>
-      </Section>
-
-      {/* NFT Mechanics */}
-      <Section
-        title="NFT Mining Mechanics"
-        desc={
-          <>
-            Rewards reduce by <b>50%</b> every <b>30 days</b>. Upgrades and repairs require $BaseTC (burn or LP sink).
-          </>
-        }
-      >
-        <table className="w-full min-w-[820px] border-separate border-spacing-0">
-          <TableHead cols={["Tier", "Max Slots / User", "Reward per Day", "ROI (approx)", "Upgrade Path"]} />
-          <tbody className="text-zinc-300">
-            <RowNFT
-              tier="Basic Rig"
-              slots="10"
-              reward="1 Basic = 0.333 $BaseTC / day (≈ 3.33 with 10 slots)"
-              roi="~35 days"
-              path="-"
-            />
-            <RowNFT
-              tier="Pro Rig"
-              slots="5"
-              reward="1 Pro = 8 $BaseTC / day (≈ 40 with 5 slots)"
-              roi="~30 days"
-              path="🔹 10 Basic → 1 Pro (+$BaseTC fee)"
-            />
-            <RowNFT
-              tier="Legend Rig"
-              slots="3"
-              reward="1 Legend = 100 $BaseTC / day (≈ 300 with 3 slots)"
-              roi="~25 days"
-              path="🔹 5 Pro → 1 Legend (+$BaseTC fee)"
-            />
-            <tr className="border-t border-white/10">
-              <td className="px-4 py-3 font-medium">Supreme (Status)</td>
-              <td className="px-4 py-3">1</td>
-              <td className="px-4 py-3">Bonus reward tier (Full Farm)</td>
-              <td className="px-4 py-3">—</td>
-              <td className="px-4 py-3">3 Legend → Supreme status</td>
-            </tr>
-          </tbody>
-        </table>
-
-        <div className="px-4 py-4">
-  <div className="rounded-lg border border-sky-400/20 bg-gradient-to-br from-[#0d141f] to-[#0a101a] px-4 py-3 text-[13.5px] leading-relaxed text-zinc-200 shadow-[0_0_12px_rgba(0,0,0,0.3)]">
-    <b className="text-sky-300">Legend Supply</b> is strictly limited to{" "}
-    <span className="font-semibold text-white">3,000 NFTs</span> —{" "}
-    <span className="text-sky-400/90">1,500 Market Sale</span> +{" "}
-    <span className="text-sky-400/90">1,500 via Merge</span>.{" "}
-    <span className="text-zinc-400">
-      This cap will <u className="text-sky-300/90">never</u> increase.
-    </span>
-  </div>
-</div>
-      </Section>
-
-      {/* Leftover Rewards */}
-      <Section title="Leftover Rewards (every 30 days)">
-        <table className="w-full min-w-[680px] border-separate border-spacing-0">
-          <TableHead cols={["Category", "Share", "Description"]} />
-          <tbody className="text-zinc-300">
-            <Row2 cat="Burn" share="50%" desc="Unmined portion is burned to enforce deflation." />
-            <Row2 cat="Staking Vault" share="30%" desc="Extra rewards for active stakers." />
-            <Row2 cat="Spin Pool" share="10%" desc="Daily check-in (Roulette Spin)." />
-            <Row2 cat="Leaderboard" share="10%" desc="Top 1,000 miners at the end of each 30-day period." />
-          </tbody>
-        </table>
-
-        {/* Example */}
-        <div className="mt-3 rounded-lg bg-[#0e1424]/70 ring-1 ring-white/10 px-4 py-3 text-sm text-zinc-300">
-          <span className="opacity-90 font-semibold">Example:</span>{" "}
-          If 100,000 $BaseTC remain unmined → <span className="text-red-300">50,000 burned</span>,{" "}
-          <span className="text-emerald-300">30,000 to staking rewards</span>, 10,000 to Spin Pool, 10,000 to Leaderboard.
+            {/* Legend di bawah chart */}
+            <div className="flex flex-wrap justify-center gap-3 mt-4 w-full">
+                <LegendItem color="bg-blue-500" label="Mining" />
+                <LegendItem color="bg-emerald-500" label="Eco & LP" />
+                <LegendItem color="bg-amber-500" label="Treasury" />
+            </div>
         </div>
-      </Section>
-    </div>
-  );
-}
 
-/* === Components === */
+        {/* Right: Main Stats List */}
+        <div className="col-span-1 md:col-span-2 flex flex-col gap-4">
+            <div className="bg-slate-950 border border-slate-800 rounded-2xl p-6 relative">
+                 <h3 className="text-lg font-bold text-white mb-1">Token Distribution</h3>
+                 <p className="text-sm text-slate-400 mb-5">
+                    Fixed supply <b>21,000,000</b> (18 decimals). Deflationary halving model.
+                 </p>
 
-function Section({ title, desc, children }: { title: string; desc?: React.ReactNode; children?: React.ReactNode }) {
-  return (
-    <div className="mt-4 rounded-xl border border-white/10 bg-gradient-to-b from-[#0b0f1a]/80 to-[#0b0f1a]/55">
-      <div className="border-b border-white/10 px-4 py-3">
-        <h2 className="text-base font-semibold text-zinc-100">{title}</h2>
-        {desc && <p className="text-sm text-zinc-400">{desc}</p>}
+                 <div className="space-y-3">
+                    <DistributionBar 
+                        label="Mining Rewards" 
+                        amount="17,900,000" 
+                        percent="85.2%" 
+                        color="bg-blue-500"
+                        desc="Distributed via NFT mining; halving every 30 days."
+                    />
+                    <DistributionBar 
+                        label="Ecosystem & Liquidity" 
+                        amount="2,100,000" 
+                        percent="10.0%" 
+                        color="bg-emerald-500"
+                        desc="Presale, LP seeding, partnerships."
+                    />
+                    <DistributionBar 
+                        label="Treasury (Satoshi)" 
+                        amount="1,000,000" 
+                        percent="4.8%" 
+                        color="bg-amber-500"
+                        desc="Team reserve for dev & operations."
+                    />
+                 </div>
+            </div>
+        </div>
       </div>
-      <div className="overflow-x-auto">{children}</div>
+
+      {/* --- MIDDLE SECTION: NFT MECHANICS --- */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between px-1">
+            <h3 className="text-xl font-bold text-white">NFT Mining Mechanics</h3>
+            <span className="text-xs font-medium px-2 py-1 rounded bg-slate-900 text-slate-400 border border-slate-800">
+                Reward Halving: -50% / 30 Days
+            </span>
+        </div>
+
+        <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-950/50">
+            <table className="w-full text-left text-sm">
+                <thead>
+                    <tr className="border-b border-slate-800 bg-slate-900/50 text-slate-400">
+                        <th className="px-6 py-4 font-semibold">Rig Tier</th>
+                        <th className="px-6 py-4 font-semibold">Max Slots</th>
+                        <th className="px-6 py-4 font-semibold">Reward Potential</th>
+                        <th className="px-6 py-4 font-semibold">Est. ROI</th>
+                        <th className="px-6 py-4 font-semibold">Upgrade Path</th>
+                    </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/50 text-slate-300">
+                    <tr className="hover:bg-slate-900/40 transition-colors">
+                        <td className="px-6 py-4 font-medium text-white">Basic Rig</td>
+                        <td className="px-6 py-4 tabular-nums">10</td>
+                        <td className="px-6 py-4">0.33 $BaseTC / day</td>
+                        <td className="px-6 py-4 text-emerald-400">~35 days</td>
+                        <td className="px-6 py-4 text-slate-500">-</td>
+                    </tr>
+                    <tr className="hover:bg-slate-900/40 transition-colors bg-blue-500/[0.02]">
+                        <td className="px-6 py-4 font-medium text-blue-200">Pro Rig</td>
+                        <td className="px-6 py-4 tabular-nums">5</td>
+                        <td className="px-6 py-4">8 $BaseTC / day</td>
+                        <td className="px-6 py-4 text-emerald-400">~30 days</td>
+                        <td className="px-6 py-4 text-xs">
+                           Merge <b className="text-white">10 Basic</b> → 1 Pro
+                        </td>
+                    </tr>
+                    <tr className="hover:bg-slate-900/40 transition-colors bg-amber-500/[0.02]">
+                        <td className="px-6 py-4 font-medium text-amber-200">Legend Rig</td>
+                        <td className="px-6 py-4 tabular-nums">3</td>
+                        <td className="px-6 py-4 font-bold text-white">100 $BaseTC / day</td>
+                        <td className="px-6 py-4 text-emerald-400 font-bold">~25 days</td>
+                        <td className="px-6 py-4 text-xs">
+                            Merge <b className="text-white">5 Pro</b> → 1 Legend
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+            
+            {/* Warning Box */}
+            <div className="bg-slate-900/80 border-t border-slate-800 p-4 flex items-start gap-3">
+                <div className="mt-0.5 w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0 shadow-[0_0_8px_rgba(245,158,11,0.5)]" />
+                <p className="text-sm text-slate-400 leading-relaxed">
+                    <span className="text-amber-400 font-semibold">Legend Supply Cap:</span> Strictly limited to <strong className="text-white">3,000 NFTs</strong> (1,500 Market + 1,500 Merge). This cap will never increase.
+                </p>
+            </div>
+        </div>
+      </div>
+
+      {/* --- BOTTOM SECTION: LEFTOVER REWARDS --- */}
+      <div>
+        <h3 className="text-xl font-bold text-white mb-4">Leftover Rewards Allocation</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <StatCard 
+                title="Burn" 
+                value="50%" 
+                desc="Unmined tokens are burned forever." 
+                accent="border-red-500/50" 
+                textColor="text-red-400"
+            />
+            <StatCard 
+                title="Staking Vault" 
+                value="30%" 
+                desc="Bonus for active stakers." 
+                accent="border-indigo-500/50" 
+                textColor="text-indigo-400"
+            />
+            <StatCard 
+                title="Spin Pool" 
+                value="10%" 
+                desc="Daily roulette rewards." 
+                accent="border-purple-500/50" 
+                textColor="text-purple-400"
+            />
+            <StatCard 
+                title="Leaderboard" 
+                value="10%" 
+                desc="Top 1,000 miners bonus." 
+                accent="border-pink-500/50" 
+                textColor="text-pink-400"
+            />
+        </div>
+        
+        {/* Example Box */}
+        <div className="mt-4 p-4 rounded-xl border border-dashed border-slate-700 bg-slate-900/30 text-sm text-slate-400 text-center">
+            Example: If 100,000 $BaseTC unmined → <span className="text-red-400">50k Burned</span>, <span className="text-indigo-400">30k Staking</span>, 10k Spin, 10k Leaderboard.
+        </div>
+      </div>
+
     </div>
   );
 }
 
-function TableHead({ cols }: { cols: string[] }) {
-  return (
-    <thead>
-      <tr className="bg-white/[.06] text-left text-zinc-200">
-        {cols.map((c, i) => (
-          <th key={i} className="px-4 py-3 font-semibold">
-            {c}
-          </th>
-        ))}
-      </tr>
-    </thead>
-  );
+/* === SUB-COMPONENTS (Modern Style) === */
+
+function LegendItem({ color, label }: { color: string, label: string }) {
+    return (
+        <div className="flex items-center gap-2">
+            <span className={`w-2.5 h-2.5 rounded-full ${color} shadow-sm`} />
+            <span className="text-xs text-slate-400 font-medium uppercase tracking-wide">{label}</span>
+        </div>
+    )
 }
 
-function Row({ cat, amount, share, note }: { cat: string; amount: string; share: string; note: string }) {
-  return (
-    <tr className="border-b border-white/10 last:border-b-0 hover:bg-white/5 transition-colors">
-      <td className="px-4 py-3">{cat}</td>
-      <td className="px-4 py-3 tabular-nums">{amount}</td>
-      <td className="px-4 py-3 font-semibold text-[#7FB2FF]">{share}</td>
-      <td className="px-4 py-3 text-zinc-400">{note}</td>
-    </tr>
-  );
+function DistributionBar({ label, amount, percent, color, desc }: any) {
+    return (
+        <div className="group p-3 rounded-xl bg-slate-900/40 hover:bg-slate-900/80 border border-transparent hover:border-slate-800 transition-all">
+            <div className="flex justify-between items-center mb-2">
+                <div className="flex items-center gap-2">
+                    <div className={`w-1 h-8 rounded-full ${color}`} />
+                    <div>
+                        <div className="text-sm font-semibold text-slate-200">{label}</div>
+                        <div className="text-xs text-slate-500">{desc}</div>
+                    </div>
+                </div>
+                <div className="text-right">
+                    <div className={`font-bold tabular-nums text-lg leading-tight ${color.replace('bg-', 'text-').replace('500', '400')}`}>{percent}</div>
+                    <div className="text-xs text-slate-400 tabular-nums">{fmt(amount)}</div>
+                </div>
+            </div>
+            {/* Progress Bar Visual */}
+            <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                <div className={`h-full ${color}`} style={{ width: percent }} />
+            </div>
+        </div>
+    )
 }
 
-function Row2({ cat, share, desc }: { cat: string; share: string; desc: string }) {
-  return (
-    <tr className="border-b border-white/10 last:border-b-0 hover:bg-white/5 transition-colors">
-      <td className="px-4 py-3">{cat}</td>
-      <td className="px-4 py-3 font-semibold text-[#FACC6B]">{share}</td>
-      <td className="px-4 py-3 text-zinc-400">{desc}</td>
-    </tr>
-  );
-}
-
-function RowNFT({
-  tier,
-  slots,
-  reward,
-  roi,
-  path,
-}: {
-  tier: string;
-  slots: string;
-  reward: string;
-  roi: string;
-  path: string;
-}) {
-  return (
-    <tr className="border-b border-white/10 last:border-b-0 hover:bg-white/5 transition-colors">
-      <td className="px-4 py-3">{tier}</td>
-      <td className="px-4 py-3 tabular-nums">{slots}</td>
-      <td className="px-4 py-3 text-zinc-300">{reward}</td>
-      <td className="px-4 py-3 text-zinc-300">{roi}</td>
-      <td className="px-4 py-3 text-zinc-400">{path}</td>
-    </tr>
-  );
+function StatCard({ title, value, desc, accent, textColor }: any) {
+    return (
+        <div className={`bg-slate-950 border border-slate-800 p-4 rounded-xl hover:border-slate-700 transition-all group relative overflow-hidden`}>
+            <div className={`absolute top-0 left-0 w-full h-0.5 ${accent.replace('border-', 'bg-')}`} />
+            <div className="flex justify-between items-start mb-2">
+                <span className="text-slate-400 text-sm font-medium">{title}</span>
+                <span className={`text-2xl font-bold ${textColor}`}>{value}</span>
+            </div>
+            <p className="text-xs text-slate-500 leading-snug">{desc}</p>
+        </div>
+    )
 }
