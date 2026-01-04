@@ -11,7 +11,7 @@ import {
   rigNftAddress,
   rigNftABI,
   gameCoreAddress,
-  gameCoreABI,
+  gameCoreABI, // Pastikan ABI ini sudah mencakup function miningUsage
   rigSaleAddress,
   rigSaleABI,
 } from "../lib/web3Config";
@@ -48,22 +48,7 @@ export default function Profil() {
     if (r && /^0x[0-9a-fA-F]{40}$/.test(r)) setRefAddr(r);
   }, []);
 
-  const { data: BASIC } = useReadContract({ address: rigNftAddress, abi: rigNftABI as any, functionName: "BASIC" });
-  const { data: PRO } = useReadContract({ address: rigNftAddress, abi: rigNftABI as any, functionName: "PRO" });
-  const { data: LEGEND } = useReadContract({ address: rigNftAddress, abi: rigNftABI as any, functionName: "LEGEND" });
-
-  const { data: countBasic = 0n } = useReadContract({
-    address: rigNftAddress, abi: rigNftABI as any, functionName: "balanceOf",
-    args: address && BASIC ? [address, BASIC] : undefined, query: { enabled: !!(address && BASIC) },
-  });
-  const { data: countPro = 0n } = useReadContract({
-    address: rigNftAddress, abi: rigNftABI as any, functionName: "balanceOf",
-    args: address && PRO ? [address, PRO] : undefined, query: { enabled: !!(address && PRO) },
-  });
-  const { data: countLegend = 0n } = useReadContract({
-    address: rigNftAddress, abi: rigNftABI as any, functionName: "balanceOf",
-    args: address && LEGEND ? [address, LEGEND] : undefined, query: { enabled: !!(address && LEGEND) },
-  });
+  // --- CONTRACT READS ---
 
   const { data: baseBal } = useReadContract({
     address: baseTcAddress, abi: baseTcABI as any, functionName: "balanceOf",
@@ -76,10 +61,26 @@ export default function Profil() {
     args: address ? [address] : undefined, query: { enabled: !!address },
   });
 
+  // UPDATE: Read Mining Usage from GameCore to show Caps Efficiency
+  const { data: usageData } = useReadContract({
+    address: gameCoreAddress,
+    abi: gameCoreABI as any,
+    functionName: "miningUsage",
+    args: address ? [address] : undefined,
+    query: { enabled: !!address },
+  });
+  
+  // Destructure usage data (handling potential undefined during loading)
+  // return: bOwned, bUsed, bIdle, pOwned, pUsed, pIdle, lOwned, lUsed, lIdle
+  const [bOwned, bUsed, bIdle, pOwned, pUsed, pIdle, lOwned, lUsed, lIdle] = useMemo(() => {
+    if (!usageData || !Array.isArray(usageData)) return [0n,0n,0n,0n,0n,0n,0n,0n,0n];
+    return usageData.map(v => BigInt(v));
+  }, [usageData]);
+
   const achievements: Achievement[] = [
-    ...((countBasic as bigint) > 0n ? [{ name: "Early Miner", icon: "M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" }] : []),
-    ...((countPro as bigint) > 0n ? [{ name: "Pro Upgrader", icon: "M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-3.75-2.25M21 18l-3.75-2.25" }] : []),
-    ...((countLegend as bigint) > 0n ? [{ name: "First Legend", icon: "M15.362 5.214A8.252 8.252 0 0112 21 8.25 8.25 0 016.038 7.048 8.287 8.287 0 009 9.6a8.983 8.983 0 013.362-3.797z" }] : []),
+    ...(bOwned > 0n ? [{ name: "Early Miner", icon: "M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" }] : []),
+    ...(pOwned > 0n ? [{ name: "Pro Upgrader", icon: "M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-3.75-2.25M21 18l-3.75-2.25" }] : []),
+    ...(lOwned > 0n ? [{ name: "First Legend", icon: "M15.362 5.214A8.252 8.252 0 0112 21 8.25 8.25 0 016.038 7.048 8.287 8.287 0 009 9.6a8.983 8.983 0 013.362-3.797z" }] : []),
     ...(isSupreme ? [{ name: "Supreme", icon: "M10.5 6a7.5 7.5 0 100 15 7.5 7.5 0 000-15zM2.25 9h19.5" }] : []),
   ];
 
@@ -189,6 +190,45 @@ export default function Profil() {
           </div>
         </div>
         {isSupreme && <div className="fin-badge fin-badge-active neu-chip text-[11px]">Supreme</div>}
+      </section>
+
+      {/* NEW: Rig Efficiency Stats (Impact Update) */}
+      <section className="fin-card fin-card-pad neu space-y-3">
+        <div className="flex items-center justify-between">
+            <h2 className="font-semibold text-[14px] text-[var(--text)]">Rig Efficiency</h2>
+            <span className="text-[10px] text-[var(--muted)] bg-black/5 px-2 py-0.5 rounded">GameCore Caps</span>
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+            {/* Basic Tier */}
+            <div className="neu-inner p-2 rounded flex flex-col items-center">
+                <span className="text-[10px] text-[var(--muted)] font-bold mb-1">BASIC</span>
+                <div className="text-sm font-bold text-[var(--text)]">
+                    {bUsed.toString()}<span className="text-[var(--muted)]">/{bOwned.toString()}</span>
+                </div>
+                {bIdle > 0n && <span className="text-[9px] text-red-500 font-bold mt-1">{bIdle.toString()} IDLE</span>}
+            </div>
+            {/* Pro Tier */}
+            <div className="neu-inner p-2 rounded flex flex-col items-center">
+                <span className="text-[10px] text-[var(--muted)] font-bold mb-1 text-blue-600">PRO</span>
+                <div className="text-sm font-bold text-[var(--text)]">
+                    {pUsed.toString()}<span className="text-[var(--muted)]">/{pOwned.toString()}</span>
+                </div>
+                 {pIdle > 0n && <span className="text-[9px] text-red-500 font-bold mt-1">{pIdle.toString()} IDLE</span>}
+            </div>
+            {/* Legend Tier */}
+            <div className="neu-inner p-2 rounded flex flex-col items-center">
+                <span className="text-[10px] text-[var(--muted)] font-bold mb-1 text-yellow-600">LEGEND</span>
+                <div className="text-sm font-bold text-[var(--text)]">
+                    {lUsed.toString()}<span className="text-[var(--muted)]">/{lOwned.toString()}</span>
+                </div>
+                 {lIdle > 0n && <span className="text-[9px] text-red-500 font-bold mt-1">{lIdle.toString()} IDLE</span>}
+            </div>
+        </div>
+        {(bIdle > 0n || pIdle > 0n) && (
+             <div className="text-[11px] text-orange-600 bg-orange-500/10 p-2 rounded text-center">
+                ⚠️ You have idle rigs exceeding the cap. Merge them to boost efficiency!
+             </div>
+        )}
       </section>
 
       {/* Invites Summary */}
