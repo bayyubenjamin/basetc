@@ -71,6 +71,7 @@ The repository includes Solidity source code (`app/api/solidity/`) which forms t
 | **SpinVault.sol** | Probabilistic logic for the "Spin" feature. |
 | **ReferralClaimer.sol** | On-chain referral reward distribution. |
 | **TreasuryVault.sol** | Management of protocol treasury and revenue. |
+| **AFADailyCheckIn.sol** | Daily activity tracking for builder reputation (New Feature). |
 
 ## 📂 Project Structure
 
