@@ -9,6 +9,7 @@ import {
   useWriteContract,
   useWaitForTransactionReceipt,
   useWatchContractEvent,
+  useGasPrice, // UPDATE: Import hook gas price
 } from "wagmi";
 import { base } from "viem/chains";
 import {
@@ -128,6 +129,15 @@ const Monitoring: FC = () => {
   // Pre-launch countdown state
   const [prelaunchTimeLeft, setPrelaunchTimeLeft] = useState<string>("");
 
+  // UPDATE: Gas Price Hook (Fitur Pro)
+  const { data: gasPriceData } = useGasPrice({ chainId: BASE_CHAIN_ID, query: { refetchInterval: 10_000 } });
+  
+  // Formatter Gas (Gwei)
+  const gasGwei = useMemo(() => {
+    if (!gasPriceData) return "—";
+    return (Number(gasPriceData) / 1e9).toFixed(2);
+  }, [gasPriceData]);
+
   // 1s ticker
   useEffect(() => {
     const t = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 1000);
@@ -232,7 +242,6 @@ const Monitoring: FC = () => {
     address: gameCoreAddress as `0x${string}`,
     abi: gameCoreABI as any,
     functionName: "epochNow",
-    // keep UI fresh
     query: { refetchInterval: 10_000 },
   });
   const epochLength = useReadContract({
@@ -278,7 +287,6 @@ const Monitoring: FC = () => {
     functionName: "toggleCooldown",
   });
 
-  // legacy hashrate (kept for compatibility)
   const hashrate = useReadContract({
     address: gameCoreAddress as `0x${string}`,
     abi: gameCoreABI as any,
@@ -287,7 +295,6 @@ const Monitoring: FC = () => {
     query: { enabled: Boolean(address) },
   });
 
-  // ✅ Pastikan Base Unit / Epoch muncul & selalu kebaca dari kontrak
   const baseUnit = useReadContract({
     address: gameCoreAddress as `0x${string}`,
     abi: gameCoreABI as any,
@@ -360,7 +367,6 @@ const Monitoring: FC = () => {
         if (timeLeft <= 0) {
           setPrelaunchTimeLeft("Live!");
           clearInterval(interval);
-          // Auto-refresh data when countdown finishes
           refreshAll("Pre-launch ended. Refreshing state.");
         } else {
           const days = Math.floor(timeLeft / (3600 * 24));
@@ -375,12 +381,6 @@ const Monitoring: FC = () => {
     }
   }, [prelaunch, goLiveOn, sTime, eLen]);
 
-  const _hrLegacy = useMemo(() => {
-    const v = hashrate.data as bigint | undefined;
-    return v ? Number(v) : 0;
-  }, [hashrate.data]);
-
-  // Safe formatter untuk Base Unit / Epoch (18 desimal)
   const baseUnitPerEpoch = useMemo(() => {
     const v = baseUnit.data as bigint | undefined;
     if (!v) return 0;
@@ -472,7 +472,6 @@ const Monitoring: FC = () => {
 
   const busy = Boolean(writePending || receiptLoading);
 
-  // Stop manual overlay once tx is broadcast
   const [loggedHash, setLoggedHash] = useState<string | null>(null);
   useEffect(() => {
     if (txHash && txHash !== loggedHash) {
@@ -483,7 +482,6 @@ const Monitoring: FC = () => {
     }
   }, [txHash, loggedHash]);
 
-  // Waiting receipt logs
   const [wasWaiting, setWasWaiting] = useState(false);
   useEffect(() => {
     if (receiptLoading && !wasWaiting) {
@@ -494,7 +492,6 @@ const Monitoring: FC = () => {
     if (!receiptLoading && wasWaiting) setWasWaiting(false);
   }, [receiptLoading, wasWaiting]);
 
-  // Helper: refetch all & reset baseline to real chain values
   const refreshAll = async (note?: string) => {
     await Promise.allSettled([
       refetchEpochNow?.(),
@@ -514,7 +511,6 @@ const Monitoring: FC = () => {
     if (note) addLog(note);
   };
 
-  // Success
   useEffect(() => {
     if (!isSuccess) return;
     setStatusText("Transaction confirmed.");
@@ -523,10 +519,8 @@ const Monitoring: FC = () => {
     refreshAll(lastAction === "start" ? "Mining session started." : "State updated after tx.");
     setLastAction(null);
     setLoggedHash(null);
-  }, [isSuccess]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isSuccess]);
 
-  // Errors
-  // (tambahan: tip singkat jika klaim gagal)
   const prettyTip = (msg?: string) => {
     const m = (msg || "").toLowerCase();
     if (!m) return "";
@@ -553,7 +547,7 @@ const Monitoring: FC = () => {
     setLoading(false);
     setLoggedHash(null);
     setLastAction(null);
-  }, [writeError]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [writeError]);
 
   useEffect(() => {
     if (!receiptError) return;
@@ -565,10 +559,10 @@ const Monitoring: FC = () => {
     setLoading(false);
     setLoggedHash(null);
     setLastAction(null);
-  }, [receiptError]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [receiptError]);
 
   /* ======================
-     Events: Claimed (ground truth amount)
+     Events: Claimed
      ====================== */
   useWatchContractEvent({
     address: gameCoreAddress as `0x${string}`,
@@ -594,7 +588,7 @@ const Monitoring: FC = () => {
   });
 
   /* ======================
-     Actions (WithSig)
+     Actions
      ====================== */
   const onStart = async () => {
     if (!address) { setStatusText("Please connect your wallet."); return; }
@@ -706,7 +700,7 @@ const Monitoring: FC = () => {
   };
 
   /* ======================
-     Realtime meter + heartbeat
+     Realtime meter
      ====================== */
   const perSecRate = useMemo(() => {
     if (!eLen || !baseUnitPerEpoch) return 0;
@@ -719,7 +713,7 @@ const Monitoring: FC = () => {
     const p = pendingAmt;
     setLiveBaseStart(p);
     setLiveStartTs(Math.floor(Date.now() / 1000));
-  }, [active]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [active]);
 
   const liveMiningNow = useMemo(() => {
     if (!active) return 0;
@@ -735,7 +729,7 @@ const Monitoring: FC = () => {
       await Promise.allSettled([refetchPending?.(), refetchEpochNow?.(), refetchUsage?.()]);
     }, 5000);
     return () => clearInterval(id);
-  }, [active]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [active]);
 
   const [lastBeatTs, setLastBeatTs] = useState<number>(0);
   useEffect(() => {
@@ -743,14 +737,12 @@ const Monitoring: FC = () => {
     const t = Math.floor(Date.now() / 1000);
     if (t - lastBeatTs >= 2) {
       setLastBeatTs(t);
-      // Log ringkas "Mining now"
       addLog(
         `⛏ Mining now: ${liveMiningNow.toFixed(6)} $BaseTC | +${perSecRate.toFixed(6)}/s | left ${leftMMSS} | rigs B${usedBasic}/P${usedPro}/L${usedLegend}`
       );
     }
   }, [now, active, liveMiningNow, perSecRate, usedBasic, usedPro, usedLegend, leftMMSS, lastBeatTs]);
 
-  // Log periodik saat paused (biar gak sepi)
   const [lastPausedLogTs, setLastPausedLogTs] = useState<number>(0);
   useEffect(() => {
     if (active) return;
@@ -761,9 +753,6 @@ const Monitoring: FC = () => {
     }
   }, [now, active, lastPausedLogTs]);
 
-  /* ======================
-     Persentase Minted (TEKS SAJA, TANPA BAR)
-     ====================== */
   const miningPct = useMemo(() => {
     if (!active) return 0;
     if (!baseUnitPerEpoch || baseUnitPerEpoch <= 0) return 0;
@@ -771,7 +760,6 @@ const Monitoring: FC = () => {
     return Math.max(0, Math.min(100, pct));
   }, [active, liveMiningNow, baseUnitPerEpoch]);
 
-  // FULL progress notifier (sekali saja per sesi aktif)
   const [hasLoggedFull, setHasLoggedFull] = useState(false);
   useEffect(() => {
     if (!active) { setHasLoggedFull(false); return; }
@@ -781,7 +769,6 @@ const Monitoring: FC = () => {
     }
   }, [active, miningPct, hasLoggedFull]);
 
-  // Start/Stop notifier via perubahan miningActive
   const prevActiveRef = useRef<boolean | undefined>(undefined);
   useEffect(() => {
     const prev = prevActiveRef.current;
@@ -794,7 +781,6 @@ const Monitoring: FC = () => {
     prevActiveRef.current = active;
   }, [active, eNowBn, perSecRate, baseUnitPerEpoch]);
 
-  // CTA: cooldown selesai (hanya saat tidak prelaunch & belum aktif)
   const [wasToggleReady, setWasToggleReady] = useState(false);
   useEffect(() => {
     if (canToggle && !wasToggleReady && !(prelaunch && goLiveOn) && !active) {
@@ -844,14 +830,12 @@ const Monitoring: FC = () => {
           <div className="fin-bar"><i style={{ width: `${epochProgress.pct}%` }} /></div>
         </div>
 
-        {/* Divider antara Epoch/Progress dan Mining now */}
         <div
           aria-hidden
           className="my-3 -mx-4"
           style={{ height: 1, background: "var(--stroke)" }}
         />
 
-        {/* Realtime $BaseTC meter + Persentase Minted (text only) */}
         <div className="fin-actions">
           <div className="fin-cooldown">
             <span className="opacity-80">Mining now:</span>{" "}
@@ -859,7 +843,6 @@ const Monitoring: FC = () => {
               {liveMiningNow.toLocaleString("en-US", { minimumFractionDigits: 6, maximumFractionDigits: 6 })} $BaseTC
             </b>
 
-            {/* === Persentase Minted (teks hitam, tanpa bar) === */}
             <div className="mt-2">
               <div
                 className="text-[13px] font-bold"
@@ -871,22 +854,22 @@ const Monitoring: FC = () => {
                   : `${miningPct.toFixed(1)}%`}
               </div>
             </div>
-            {/* === END Persentase Minted === */}
           </div>
 
           {active ? (
             <button
               onClick={onClaim}
               disabled={!address || busy || !canClaim}
-              className={`fin-btn neu-btn transition-transform active:scale-[0.98] ${(!address || busy || !canClaim) ? "opacity-50 cursor-not-allowed" : ""}`}
-              title={canClaim ? "Claim rewards" : "No rewards available yet"}
+              // UPDATE: Style tombol claim agar terlihat seperti "Harvest"
+              className={`fin-btn neu-btn transition-transform active:scale-[0.98] ${(!address || busy || !canClaim) ? "opacity-50 cursor-not-allowed" : ""} border-green-500/50 bg-green-500/10 text-green-700`}
+              title={canClaim ? "Harvest Rewards" : "No rewards available yet"}
             >
               {busy ? (
                 <span className="inline-flex items-center gap-2">
                   <span className="h-3 w-3 rounded-full border-2 border-white/30 border-t-transparent animate-spin" />
                   Claiming…
                 </span>
-              ) : ("Claim")}
+              ) : ("Harvest Rewards")}
             </button>
           ) : (
             <button
@@ -906,7 +889,7 @@ const Monitoring: FC = () => {
         </div>
       </section>
 
-      {/* ===== Mac-like Terminal ===== */}
+      {/* Terminal Section (Keep As Is) */}
       <section
         aria-label="Terminal"
         className="neu"
@@ -919,7 +902,6 @@ const Monitoring: FC = () => {
           boxShadow: "0 10px 24px rgba(0,0,0,0.20)",
         }}
       >
-        {/* Title bar with traffic lights */}
         <div
           style={{
             height: 28,
@@ -931,36 +913,12 @@ const Monitoring: FC = () => {
             borderBottom: "1px solid rgba(0,0,0,0.06)",
           }}
         >
-          <span
-            aria-hidden
-            style={{
-              width: 12, height: 12, borderRadius: 999,
-              background: "#ff5f56", border: "1px solid #e04940",
-              boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.6)",
-            }}
-          />
-          <span
-            aria-hidden
-            style={{
-              width: 12, height: 12, borderRadius: 999,
-              background: "#ffbd2e", border: "1px solid #e0a922",
-              boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.6)",
-            }}
-          />
-          <span
-            aria-hidden
-            style={{
-              width: 12, height: 12, borderRadius: 999,
-              background: "#28c840", border: "1px solid #1ea233",
-              boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.6)",
-            }}
-          />
-          <div style={{ marginLeft: 8, fontSize: 12, color: "var(--muted)", fontWeight: 600 }}>
-            Terminal
-          </div>
+          <span style={{ width: 12, height: 12, borderRadius: 999, background: "#ff5f56", border: "1px solid #e04940" }} />
+          <span style={{ width: 12, height: 12, borderRadius: 999, background: "#ffbd2e", border: "1px solid #e0a922" }} />
+          <span style={{ width: 12, height: 12, borderRadius: 999, background: "#28c840", border: "1px solid #1ea233" }} />
+          <div style={{ marginLeft: 8, fontSize: 12, color: "var(--muted)", fontWeight: 600 }}>Terminal</div>
         </div>
 
-        {/* Log area (scrollable) */}
         <div
           ref={terminalRef}
           style={{
@@ -968,8 +926,7 @@ const Monitoring: FC = () => {
             background: "#ffffff",
             color: "#0a1833",
             padding: 12,
-            fontFamily:
-              'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+            fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
             fontSize: 12,
             lineHeight: 1.5,
             overflow: "auto",
@@ -984,33 +941,26 @@ const Monitoring: FC = () => {
         </div>
       </section>
 
-      {/* Stats */}
+      {/* Stats - UPDATE: Tambahkan Network Gas */}
       <section className="fin-stats border-none bg-transparent">
         <div className="fin-stat neu">
           <div className="fin-val">{formatNumber(effectiveHashrate)}</div>
-          <div className="fin-cap">Effective Hashrate</div>
-        </div>
-        <div className="fin-stat neu">
-          <div className="fin-tooltip">
-            <div className="fin-val">
-              {baseUnitPerEpoch.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </div>
-            <div className="fin-tip">
-              Exact: {baseUnitPerEpoch.toLocaleString("en-US", { minimumFractionDigits: 12 })}
-            </div>
-          </div>
-          <div className="fin-cap">Base Unit / Epoch</div>
+          <div className="fin-cap">Hashrate</div>
         </div>
         <div className="fin-stat neu">
           <div className="fin-tooltip">
             <div className="fin-val">{tokenShort}</div>
-            <div className="fin-tip">Exact: {tokenExact}</div>
+            <div className="fin-cap">$BaseTC</div>
           </div>
-          <div className="fin-cap">$BaseTC</div>
+        </div>
+        {/* NEW STAT: Network Gas */}
+        <div className="fin-stat neu">
+            <div className="fin-val text-blue-600">{gasGwei}</div>
+            <div className="fin-cap">Gas (Gwei)</div>
         </div>
       </section>
 
-      {/* Rigs */}
+      {/* Rigs (Keep As Is) */}
       <section className="fin-card fin-rigs neu">
         <div className="fin-rig-head">
           <h2>Your Rigs</h2>
@@ -1034,7 +984,7 @@ const Monitoring: FC = () => {
 
 export default Monitoring;
 
-/* ---------- Subcomponent: RigBox ---------- */
+/* ---------- Subcomponent: RigBox (Keep As Is) ---------- */
 function RigBox({
   tier,
   count,
