@@ -1,8 +1,8 @@
 {
   "accountAssociation": {
-    "header": "eyJmaWQiOjg2ODc2NywidHlwZSI6ImN1c3RvZHkiLCJrZXkiOiIweDJmNUU1RDc5MGQ3Mzg4N2Y2NjcxQ0Y4NmZhNGNkNzAxMkEzNUQ1NzQifQ",
+    "header": "eyJmaWQiOjg2ODc2NywidHlwZSI6ImF1dGgiLCJrZXkiOiIweEIyMURhNDg1NTVlNDQwYkFjMmREMzBmMTM1MDUzNkQ4OWVFOEFmMmYifQ",
     "payload": "eyJkb21haW4iOiJiYXNldGMueHl6In0",
-    "signature": "MHg1ZDdiNDYzZjM0NTk5MzY3YjFjMThlYjc3YmM3MGU4YTkyM2E4ZjY4Y2QwYzQ3YzFkYjIwMWU1OTM3N2ZiMzZmMmFlOGVjMjFmZjhmNDI2M2EzMzBjY2RjYTNkNjI2MWY3MjAwMzVlY2E0NTgwMzk4YmI3ZTA4ODFkZjIyMDRmZTFj"
+    "signature": "DfyrkAr98wVbb3teA+9UFnCeY5pYvM522m0wQX09+EMgm6+IE3NlLhtDogEPMM3Ajc2sMXyZaD/Idt1eTHsCFRw="
   },
   "frame": {
     "version": "1",
@@ -19,7 +19,13 @@
     "description": "BaseTC Console is a Farcaster Mini App for mining NFT rigs on the Base network. Claim a free rig, merge into Pro and Legend tiers, and earn BaseTC tokens onchain.",
     "tagline": "Mine BaseTC onchain with NFTs",
     "primaryCategory": "games",
-    "tags": ["base", "nft", "mining", "game", "crypto"],
+    "tags": [
+      "base",
+      "nft",
+      "mining",
+      "game",
+      "crypto"
+    ],
     "heroImageUrl": "https://basetc.xyz/img/feed.png",
     "screenshotUrls": [
       "https://basetc.xyz/img/screenshot1.png",
@@ -45,7 +51,13 @@
     "description": "BaseTC Console is a Farcaster Mini App for mining NFT rigs on the Base network. Claim a free rig, merge into Pro and Legend tiers, and earn BaseTC tokens onchain.",
     "tagline": "Mine BaseTC onchain with NFTs",
     "primaryCategory": "games",
-    "tags": ["base", "nft", "mining", "game", "crypto"],
+    "tags": [
+      "base",
+      "nft",
+      "mining",
+      "game",
+      "crypto"
+    ],
     "heroImageUrl": "https://basetc.xyz/img/feed.png",
     "screenshotUrls": [
       "https://basetc.xyz/img/screenshot1.png",
@@ -57,4 +69,3 @@
     "castShareUrl": "https://basetc.xyz/launch"
   }
 }
-
