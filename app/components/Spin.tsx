@@ -90,24 +90,13 @@ const Spin: FC = () => {
     [vaultBalance]
   );
 
-  // [UPDATE] Helper Haptic Feedback
-  const triggerHaptic = (type: "light" | "success" | "error") => {
-    if (typeof navigator !== "undefined" && navigator.vibrate) {
-      if (type === "light") navigator.vibrate(50); // Getar pendek (klik)
-      if (type === "success") navigator.vibrate([100, 50, 100]); // Getar panjang (menang)
-      if (type === "error") navigator.vibrate([50, 50, 50]); // Getar putus-putus (error)
-    }
-  };
-
   // ---------- Action ----------
   const handleSpin = async () => {
     if (!canClaim || !address || !fcUser?.fid) {
-      triggerHaptic("error");
       setStatus("Cannot spin now. Check connection or tickets.");
       return;
     }
 
-    triggerHaptic("light");
     setLoading(true);
     setIsSpinning(true);
     setFinalResult(null);
@@ -171,10 +160,8 @@ const Spin: FC = () => {
       setFinalResult(wonStr);
       setStatus(`Spin successful!`);
 
-      triggerHaptic("success"); // Trigger haptic kemenangan
       await Promise.all([refetchClaimed(), refetchNonces(), refetchVaultBalance()]);
     } catch (e: any) {
-      triggerHaptic("error");
       setStatus(`Error: ${e?.shortMessage || e?.message || "Unknown error"}`);
       setIsSpinning(false);
     } finally {
@@ -182,7 +169,7 @@ const Spin: FC = () => {
     }
   };
 
-  /* ====== UI ====== */
+  /* ====== UI (Neumorphism only, logic tidak diubah) ====== */
   return (
     <div className="fin-card fin-card-trans fin-card-pad neu text-center">
       <h2 className="text-lg font-semibold">Free Spin (every 8 hours)</h2>
@@ -202,22 +189,16 @@ const Spin: FC = () => {
       <div className="py-4 min-h-[120px] flex flex-col justify-center items-center">
         {isSpinning ? (
           <div className="text-4xl font-bold text-yellow-400">
-             {/* Animasi pulse saat berputar */}
-             <div className="animate-pulse">
-                <SpinningNumbers />
-             </div>
+            <SpinningNumbers />
           </div>
         ) : finalResult ? (
-          <div className="text-2xl font-bold text-yellow-400 animate-bounce">
-            You won {finalResult} $BaseTC!
-          </div>
+          <div className="text-2xl font-bold text-yellow-400">You won {finalResult} $BaseTC!</div>
         ) : (
           <button
             onClick={handleSpin}
             disabled={!canClaim}
-            // Tambahkan efek tekan (active:scale) dan shadow
-            className={`px-8 py-4 rounded-full fin-btn neu-btn text-lg font-bold disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-100 active:scale-95 ${
-              !canClaim ? "" : "hover:translate-y-[-2px] shadow-lg"
+            className={`px-8 py-4 rounded-full fin-btn neu-btn text-lg font-bold disabled:opacity-50 disabled:cursor-not-allowed transition-transform active:scale-[0.98] ${
+              !canClaim ? "" : "hover:translate-y-[-1px]"
             }`}
           >
             {loading ? "Processing…" : canClaim ? "Spin Now!" : "No spins available"}
