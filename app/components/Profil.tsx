@@ -11,7 +11,7 @@ import {
   rigNftAddress,
   rigNftABI,
   gameCoreAddress,
-  gameCoreABI, // Pastikan ABI ini sudah mencakup function miningUsage
+  gameCoreABI,
   rigSaleAddress,
   rigSaleABI,
 } from "../lib/web3Config";
@@ -27,6 +27,16 @@ type InvitedUser = {
   display_name?: string | null;
   pfp_url?: string | null;
   status?: "valid" | "pending";
+};
+
+// [UPDATE] Helper Haptic
+const triggerHaptic = (type: "light" | "success") => {
+  if (typeof navigator !== "undefined" && navigator.vibrate) {
+    try {
+      if (type === "light") navigator.vibrate(50);
+      if (type === "success") navigator.vibrate([50, 50]);
+    } catch {}
+  }
 };
 
 const Icon: FC<{ path: string; className?: string }> = ({ path, className = "w-5 h-5" }) => (
@@ -49,7 +59,6 @@ export default function Profil() {
   }, []);
 
   // --- CONTRACT READS ---
-
   const { data: baseBal } = useReadContract({
     address: baseTcAddress, abi: baseTcABI as any, functionName: "balanceOf",
     args: address ? [address] : undefined, query: { enabled: !!address },
@@ -61,7 +70,6 @@ export default function Profil() {
     args: address ? [address] : undefined, query: { enabled: !!address },
   });
 
-  // UPDATE: Read Mining Usage from GameCore to show Caps Efficiency
   const { data: usageData } = useReadContract({
     address: gameCoreAddress,
     abi: gameCoreABI as any,
@@ -70,8 +78,6 @@ export default function Profil() {
     query: { enabled: !!address },
   });
   
-  // Destructure usage data (handling potential undefined during loading)
-  // return: bOwned, bUsed, bIdle, pOwned, pUsed, pIdle, lOwned, lUsed, lIdle
   const [bOwned, bUsed, bIdle, pOwned, pUsed, pIdle, lOwned, lUsed, lIdle] = useMemo(() => {
     if (!usageData || !Array.isArray(usageData)) return [0n,0n,0n,0n,0n,0n,0n,0n,0n];
     return usageData.map(v => BigInt(v));
@@ -93,9 +99,7 @@ export default function Profil() {
   const [loadingInvites, setLoadingInvites] = useState(false);
 
   useEffect(() => {
-    if (!address) {
-      setInvites([]); setTotalValidCount(0); return;
-    }
+    if (!address) { setInvites([]); setTotalValidCount(0); return; }
     (async () => {
       setLoadingInvites(true);
       try {
@@ -113,11 +117,8 @@ export default function Profil() {
         const apiValid = Number(j?.validInvites ?? 0);
         if (apiValid > 0) setTotalValidCount(apiValid);
         else setTotalValidCount((j?.list || []).filter((u: any) => u?.status === "valid").length);
-      } catch {
-        setTotalValidCount(0); setInvites([]);
-      } finally {
-        setLoadingInvites(false);
-      }
+      } catch { setTotalValidCount(0); setInvites([]); } 
+      finally { setLoadingInvites(false); }
     })();
   }, [address]);
 
@@ -141,8 +142,10 @@ export default function Profil() {
 
   const buildCastText = useCallback(() => "BaseTC Console: mine onchain, upgrade rigs, and earn $BaseTC.", []);
   const [shareLoading, setShareLoading] = useState(false);
+  
   const onShareReferral = useCallback(async () => {
     if (!inviteLink) return;
+    triggerHaptic("light"); // Haptic Share
     const castText = buildCastText();
     setShareLoading(true);
     try {
@@ -159,6 +162,7 @@ export default function Profil() {
 
   const copyInviteLink = useCallback(() => {
     if (!inviteLink) return;
+    triggerHaptic("success"); // Haptic Copy
     navigator.clipboard.writeText(inviteLink).then(() => {
       setCopied(true); setTimeout(() => setCopied(false), 1500);
     }).catch(() => {});
@@ -192,35 +196,26 @@ export default function Profil() {
         {isSupreme && <div className="fin-badge fin-badge-active neu-chip text-[11px]">Supreme</div>}
       </section>
 
-      {/* NEW: Rig Efficiency Stats (Impact Update) */}
+      {/* Rig Efficiency Stats */}
       <section className="fin-card fin-card-pad neu space-y-3">
         <div className="flex items-center justify-between">
             <h2 className="font-semibold text-[14px] text-[var(--text)]">Rig Efficiency</h2>
             <span className="text-[10px] text-[var(--muted)] bg-black/5 px-2 py-0.5 rounded">GameCore Caps</span>
         </div>
         <div className="grid grid-cols-3 gap-2">
-            {/* Basic Tier */}
             <div className="neu-inner p-2 rounded flex flex-col items-center">
                 <span className="text-[10px] text-[var(--muted)] font-bold mb-1">BASIC</span>
-                <div className="text-sm font-bold text-[var(--text)]">
-                    {bUsed.toString()}<span className="text-[var(--muted)]">/{bOwned.toString()}</span>
-                </div>
+                <div className="text-sm font-bold text-[var(--text)]">{bUsed.toString()}<span className="text-[var(--muted)]">/{bOwned.toString()}</span></div>
                 {bIdle > 0n && <span className="text-[9px] text-red-500 font-bold mt-1">{bIdle.toString()} IDLE</span>}
             </div>
-            {/* Pro Tier */}
             <div className="neu-inner p-2 rounded flex flex-col items-center">
                 <span className="text-[10px] text-[var(--muted)] font-bold mb-1 text-blue-600">PRO</span>
-                <div className="text-sm font-bold text-[var(--text)]">
-                    {pUsed.toString()}<span className="text-[var(--muted)]">/{pOwned.toString()}</span>
-                </div>
+                <div className="text-sm font-bold text-[var(--text)]">{pUsed.toString()}<span className="text-[var(--muted)]">/{pOwned.toString()}</span></div>
                  {pIdle > 0n && <span className="text-[9px] text-red-500 font-bold mt-1">{pIdle.toString()} IDLE</span>}
             </div>
-            {/* Legend Tier */}
             <div className="neu-inner p-2 rounded flex flex-col items-center">
                 <span className="text-[10px] text-[var(--muted)] font-bold mb-1 text-yellow-600">LEGEND</span>
-                <div className="text-sm font-bold text-[var(--text)]">
-                    {lUsed.toString()}<span className="text-[var(--muted)]">/{lOwned.toString()}</span>
-                </div>
+                <div className="text-sm font-bold text-[var(--text)]">{lUsed.toString()}<span className="text-[var(--muted)]">/{lOwned.toString()}</span></div>
                  {lIdle > 0n && <span className="text-[9px] text-red-500 font-bold mt-1">{lIdle.toString()} IDLE</span>}
             </div>
         </div>
@@ -245,35 +240,28 @@ export default function Profil() {
           </div>
         </div>
 
-        {/* Invite link and actions */}
         <div className="flex flex-col gap-2">
           <div className="relative neu-inner rounded-md px-2 py-1">
-            <input
-              readOnly
-              value={inviteLink}
-              className="w-full text-xs bg-transparent outline-none text-[var(--text)] select-all"
-            />
+            <input readOnly value={inviteLink} className="w-full text-xs bg-transparent outline-none text-[var(--text)] select-all" />
             <button
               type="button"
               onClick={copyInviteLink}
-              className="absolute right-1 top-1/2 -translate-y-1/2 text-[10px] px-2 py-0.5 rounded neu-btn"
+              // [UPDATE] Visual feedback lebih jelas saat dicopy
+              className={`absolute right-1 top-1/2 -translate-y-1/2 text-[10px] px-2 py-0.5 rounded transition-colors ${copied ? 'bg-green-500 text-white' : 'neu-btn'}`}
             >
-              {copied ? "Copied" : "Copy"}
+              {copied ? "Copied!" : "Copy"}
             </button>
           </div>
           <button
             disabled={!inviteLink || shareLoading}
             onClick={onShareReferral}
-            className={`fin-btn w-full neu-btn ${(!inviteLink || shareLoading) ? "opacity-50 cursor-not-allowed" : ""}`}
+            className={`fin-btn w-full neu-btn active:scale-[0.98] transition-transform ${(!inviteLink || shareLoading) ? "opacity-50 cursor-not-allowed" : ""}`}
           >
             {shareLoading ? "Opening…" : "Share to Farcaster"}
           </button>
-          <p className="text-[11px] text-[var(--muted)] font-semibold text-center">
-            Only users who claimed the free rig are counted as valid.
-          </p>
+          <p className="text-[11px] text-[var(--muted)] font-semibold text-center">Only users who claimed the free rig are counted as valid.</p>
         </div>
 
-        {/* Invited users table */}
         <div className="space-y-2">
           <div className="overflow-hidden rounded-md neu-inner border border-white/[0.06]">
             <div className="max-h-44 overflow-y-auto">
@@ -283,42 +271,23 @@ export default function Profil() {
                     <th className="text-left px-2 py-1.5 font-semibold">User (FID)</th>
                     <th className="text-left px-2 py-1.5 font-semibold">Valid ({totalValidCount})</th>
                     <th className="text-left px-2 py-1.5 font-semibold">Pending ({totalInvitedPending})</th>
-                    <th className="text-left px-2 py-1.5 font-semibold">Total ({totalInvitedAll})</th>
                   </tr>
                 </thead>
                 <tbody className="text-[var(--text)]">
                   {loadingInvites ? (
-                    <tr>
-                      <td className="px-2 py-2 text-[var(--muted)]" colSpan={4}>Loading…</td>
-                    </tr>
+                    <tr><td className="px-2 py-2 text-[var(--muted)]" colSpan={4}>Loading…</td></tr>
                   ) : invites.length === 0 ? (
-                    <tr>
-                      <td className="px-2 py-2 text-[var(--muted)]" colSpan={4}>No invites yet.</td>
-                    </tr>
+                    <tr><td className="px-2 py-2 text-[var(--muted)]" colSpan={4}>No invites yet.</td></tr>
                   ) : (
                     invites.map((u, i) => (
                       <tr key={`${u.fid ?? "x"}-${i}`} className="border-t border-[rgba(0,0,0,.08)]">
+                        <td className="px-2 py-1.5">{u.fid ?? "—"}{u.wallet && (<span className="text-[var(--muted)] ml-1">({`${u.wallet.slice(0, 6)}…`})</span>)}</td>
                         <td className="px-2 py-1.5">
-                          {u.fid ?? "—"}
-                          {u.wallet && (
-                            <span className="text-[var(--muted)] ml-1">({`${u.wallet.slice(0, 6)}…`})</span>
-                          )}
+                          {u.status === "valid" && <span className="px-2 py-0.5 rounded neu-chip text-[#137a3f] text-[10px]" style={{ background: "rgba(29,185,84,.12)" }}>valid</span>}
                         </td>
                         <td className="px-2 py-1.5">
-                          {u.status === "valid" && (
-                            <span className="px-2 py-0.5 rounded neu-chip text-[#137a3f] text-[10px]" style={{ background: "rgba(29,185,84,.12)" }}>
-                              valid
-                            </span>
-                          )}
+                          {u.status !== "valid" && <span className="px-2 py-0.5 rounded neu-chip text-[#6b5306] text-[10px]" style={{ background: "rgba(234,179,8,.12)" }}>pending</span>}
                         </td>
-                        <td className="px-2 py-1.5">
-                          {u.status !== "valid" && (
-                            <span className="px-2 py-0.5 rounded neu-chip text-[#6b5306] text-[10px]" style={{ background: "rgba(234,179,8,.12)" }}>
-                              pending
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-2 py-1.5">{/* intentionally blank per-row */}</td>
                       </tr>
                     ))
                   )}
@@ -337,7 +306,8 @@ export default function Profil() {
         ) : (
           <div className="flex flex-wrap gap-2">
             {achievements.map((ach) => (
-              <div key={ach.name} className="flex items-center space-x-1 neu-chip px-2 py-1 text-xs">
+              // [UPDATE] Hover effect pada achievement
+              <div key={ach.name} className="flex items-center space-x-1 neu-chip px-2 py-1 text-xs hover:scale-105 transition-transform cursor-default">
                 <Icon path={ach.icon} className="w-4 h-4 text-yellow-500" />
                 <span className="text-[var(--text)]">{ach.name}</span>
               </div>
