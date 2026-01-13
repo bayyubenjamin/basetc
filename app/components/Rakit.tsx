@@ -11,6 +11,7 @@ import {
 } from "wagmi";
 import { base } from "viem/chains";
 import { formatUnits, parseUnits } from "viem";
+import confetti from "canvas-confetti"; 
 import {
   rigNftAddress,
   rigNftABI,
@@ -30,6 +31,19 @@ const erc20Abi = [
 /* ---------------- helpers ---------------- */
 const fmt2 = (n: number) =>
   n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+// [UPDATE] Safe Haptic Helper
+const triggerHaptic = (type: "light" | "success" | "error") => {
+  if (typeof navigator !== "undefined" && navigator.vibrate) {
+    try {
+      if (type === "light") navigator.vibrate(50);
+      if (type === "success") navigator.vibrate([50, 50, 50]);
+      if (type === "error") navigator.vibrate([50, 100, 50]);
+    } catch { 
+      // Silent fail agar tidak error di device yang tidak support
+    }
+  }
+};
 
 const TierImg: Record<"basic"|"pro"|"legend", string> = {
   basic: "/img/vga_basic.png",
@@ -233,11 +247,14 @@ export default function Rakit() {
     setStatus(label);
     setLoading(false);
     setPopupOpen(true);
+    triggerConfetti(); // Efek Visual
+    triggerHaptic("success"); // [UPDATE] Efek Fisik
   }
   function finishError(label: string) {
     setStatus(label);
     setLoading(false);
     setPopupOpen(true);
+    triggerHaptic("error"); // [UPDATE] Efek Error
   }
 
   function prettyErr(e: any): string {
@@ -246,6 +263,26 @@ export default function Rakit() {
     if (/insufficient funds/i.test(msg)) return "Insufficient ETH for gas.";
     if (/user rejected|denied transaction|rejected the request/i.test(msg)) return "Transaction rejected.";
     return msg || "Something went wrong.";
+  }
+
+  function triggerConfetti() {
+    const duration = 3 * 1000;
+    const animationEnd = Date.now() + duration;
+    const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 9999 };
+
+    const randomInRange = (min: number, max: number) => Math.random() * (max - min) + min;
+
+    const interval: any = setInterval(function() {
+      const timeLeft = animationEnd - Date.now();
+
+      if (timeLeft <= 0) {
+        return clearInterval(interval);
+      }
+
+      const particleCount = 50 * (timeLeft / duration);
+      confetti({ ...defaults, particleCount, origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 } });
+      confetti({ ...defaults, particleCount, origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 } });
+    }, 250);
   }
 
   async function ensureApprove(amount: bigint) {
@@ -285,6 +322,7 @@ export default function Rakit() {
   }
 
   async function onMergeBasicToPro() {
+    triggerHaptic("light"); // [UPDATE] Click Haptic
     if (!user) return finishError("Please connect your wallet.");
     if (!onBase) return finishError("Please switch network to Base Sepolia.");
     if (ownedBasic < needBP) return finishError(`You need ${String(needBP)} Basic to merge.`);
@@ -298,6 +336,7 @@ export default function Rakit() {
       setStatus("Refreshing balances…");
 
       await Promise.all([basicBal.refetch?.(), proBal.refetch?.(), miningUsage.refetch?.()]);
+      
       finishSuccess("Merge to Pro successful!. Please go to Monitoring and start mining to sync your RigNFT.");
     } catch (e: any) {
       finishError(prettyErr(e));
@@ -305,6 +344,7 @@ export default function Rakit() {
   }
 
   async function onMergeProToLegend() {
+    triggerHaptic("light"); // [UPDATE] Click Haptic
     if (!user) return finishError("Please connect your wallet.");
     if (!onBase) return finishError("Please switch network to Base Sepolia.");
     if (ownedPro < needPL) return finishError(`You need ${String(needPL)} Pro to merge.`);
@@ -318,6 +358,7 @@ export default function Rakit() {
       setStatus("Refreshing balances…");
 
       await Promise.all([proBal.refetch?.(), legendBal.refetch?.(), miningUsage.refetch?.()]);
+      
       finishSuccess("Merge to Legend successful!. Please go to Monitoring and start mining to sync your RigNFT.");
     } catch (e: any) {
       finishError(prettyErr(e));
@@ -387,7 +428,6 @@ export default function Rakit() {
           </div>
         </div>
 
-        {/* 🔥 FIX HERE ONLY — TAMBAH flex-wrap biar slot bisa lebih dari 5 */}
         <div className="mt-3 grid grid-cols-5 gap-2 flex-wrap content-start">
           {Array.from({ length: Math.max(1, caps.p) }).map((_, i) => (
             <NftSlot key={`p-${i}`} filled={i < Math.min(Number(ownedPro), caps.p)} tier="pro" />
