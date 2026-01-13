@@ -7,15 +7,46 @@ import { useAccount } from "wagmi";
 
 export const dynamic = "force-dynamic";
 
-// [UPDATE PENTING] Tambahkan "Coinbase", "Ethereum", "Base" agar Base App dikenali
+// [UPDATE] Helper untuk Loading Text animasi
+const BOOT_LOGS = [
+  "Initializing BaseTC Console...",
+  "Loading assets...",
+  "Syncing with Base Chain...",
+  "Verifying cryptographic proofs...",
+  "Establishing secure connection..."
+];
+
 const ALLOWED_CLIENTS = ["Warpcast", "Farcaster", "V2Frame", "Coinbase", "Ethereum", "Base"];
 
 function LoadingScreen() {
+    // State untuk animasi teks loading
+    const [logIndex, setLogIndex] = useState(0);
+
+    useEffect(() => {
+        const interval = setInterval(() => {
+            setLogIndex((prev) => (prev + 1) % BOOT_LOGS.length);
+        }, 800); // Ganti teks setiap 800ms
+        return () => clearInterval(interval);
+    }, []);
+
     return (
-        <main className="grid min-h-dvh place-items-center bg-zinc-950 text-white">
-            <div className="flex flex-col items-center gap-4">
-                <span className="loading loading-spinner loading-lg text-indigo-500"></span>
-                <p className="opacity-80">Loading BaseTC Console...</p>
+        <main className="grid min-h-dvh place-items-center bg-zinc-950 text-white font-mono">
+            <div className="flex flex-col items-center gap-6">
+                {/* Logo atau Spinner dengan efek pulse */}
+                <div className="relative h-16 w-16">
+                    <div className="absolute inset-0 rounded-full border-4 border-indigo-500/30 animate-ping"></div>
+                    <div className="relative h-full w-full rounded-full border-4 border-t-indigo-500 border-r-transparent border-b-indigo-500 border-l-transparent animate-spin"></div>
+                </div>
+                
+                {/* Text Boot Sequence */}
+                <div className="flex flex-col items-center gap-1 h-12">
+                     <p className="text-sm font-bold tracking-widest text-indigo-400 uppercase animate-pulse">
+                        {BOOT_LOGS[logIndex]}
+                    </p>
+                    <p className="text-xs text-zinc-500">
+                        Please wait...
+                    </p>
+                </div>
             </div>
         </main>
     );
@@ -42,7 +73,7 @@ function LandingPage() {
 function RootHandler() {
     const router = useRouter();
     const searchParams = useSearchParams();
-    const { isConnected } = useAccount(); // Cek status koneksi wallet
+    const { isConnected } = useAccount(); 
     const [isAllowed, setIsAllowed] = useState(false);
     const [checking, setChecking] = useState(true);
 
@@ -50,21 +81,18 @@ function RootHandler() {
         const checkEnvironment = () => {
             const ua = navigator.userAgent || "";
             
-            // 1. Cek User Agent (Apakah mengandung kata kunci Farcaster atau Base?)
+            // 1. Cek User Agent 
             const isKnownClient = ALLOWED_CLIENTS.some((k) => ua.includes(k));
 
-            // 2. Cek apakah ada Wallet Provider (Base App pasti punya window.ethereum)
+            // 2. Cek Wallet Provider
             // @ts-ignore
             const hasWallet = typeof window !== "undefined" && window.ethereum !== undefined;
 
-            // Jika SALAH SATU benar (Klien dikenal ATAU ada Wallet ATAU sudah connect), izinkan masuk
             if (isKnownClient || hasWallet || isConnected) {
                 setIsAllowed(true);
                 const params = searchParams.toString();
-                // Redirect ke halaman launch (masuk ke game)
                 router.replace(`/launch${params ? `?${params}` : ""}`);
             } else {
-                // Jika browser biasa tanpa wallet, hentikan loading dan tampilkan Landing Page
                 setChecking(false);
             }
         };
