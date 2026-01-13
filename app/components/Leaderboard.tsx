@@ -1,3 +1,4 @@
+// app/components/Leaderboard.tsx
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
@@ -92,6 +93,17 @@ const Leaderboard = () => {
     };
   }, [refreshAllData]);
 
+  // [UPDATE] Fungsi Share ke Warpcast
+  const handleShareRank = () => {
+    if (!myRankData) return;
+    const text = `I am ranked #${myRankData.rank} on BaseTC with ${myRankData.total_points} points! ⛏️\n\nCan you beat my rig?`;
+    // Ganti URL di bawah ini dengan URL frame/app Anda yang sebenarnya
+    const url = "https://basetc.vercel.app"; 
+    const warpcastUrl = `https://warpcast.com/~/compose?text=${encodeURIComponent(text)}&embeds[]=${encodeURIComponent(url)}`;
+    
+    window.open(warpcastUrl, "_blank");
+  };
+
   // Helper Render Reward
   const renderReward = (rank: number) => {
     if (rank <= 3) {
@@ -142,9 +154,17 @@ const Leaderboard = () => {
 
         {/* --- BAGIAN MY RANK --- */}
         {myRankData && (
-            <div className="rounded-xl bg-white p-4 border border-gray-200 shadow-sm ring-1 ring-gray-100">
+            <div className="rounded-xl bg-white p-4 border border-gray-200 shadow-sm ring-1 ring-gray-100 relative overflow-hidden">
                 <div className="flex items-center justify-between mb-2">
                     <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">My Rank</h3>
+                    
+                    {/* [UPDATE] Tombol Share */}
+                    <button 
+                      onClick={handleShareRank}
+                      className="text-[10px] font-bold bg-black text-white px-3 py-1.5 rounded-full hover:bg-gray-800 transition-transform active:scale-95 flex items-center gap-1 shadow-sm"
+                    >
+                      Share Rank 🚀
+                    </button>
                 </div>
                 
                 <div className="flex items-center justify-between">
