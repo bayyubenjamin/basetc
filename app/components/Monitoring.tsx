@@ -9,7 +9,7 @@ import {
   useWriteContract,
   useWaitForTransactionReceipt,
   useWatchContractEvent,
-  useGasPrice, // UPDATE: Import hook gas price
+  useGasPrice,
 } from "wagmi";
 import { base } from "viem/chains";
 import {
@@ -33,6 +33,19 @@ const formatNumber = (num: number) => {
   if (num >= 1_000_000) return (num / 1_000_000).toFixed(1) + "M";
   if (num >= 1_000) return (num / 1_000).toFixed(1) + "K";
   return num.toString();
+};
+
+// [UPDATE] Helper Haptic yang Aman
+const triggerHaptic = (type: "light" | "success" | "error") => {
+  if (typeof navigator !== "undefined" && navigator.vibrate) {
+    try {
+      if (type === "light") navigator.vibrate(50);
+      if (type === "success") navigator.vibrate([50, 50, 50]);
+      if (type === "error") navigator.vibrate([50, 100, 50]);
+    } catch (e) {
+      // Ignore if device doesn't support
+    }
+  }
 };
 
 async function getRelayerSig(params: {
@@ -61,7 +74,7 @@ async function getRelayerSig(params: {
 }
 
 /* ======================
-   UI helpers: overlay + popup
+   UI helpers
    ====================== */
 const LoadingOverlay: FC<{ show: boolean; label?: string }> = ({ show, label }) => {
   if (!show) return null;
@@ -121,18 +134,17 @@ const Monitoring: FC = () => {
   const [popupOpen, setPopupOpen] = useState(false);
   const [popupMsg, setPopupMsg] = useState("");
 
-  // Live mining (baseline + elapsed)
+  // Live mining
   const [liveBaseStart, setLiveBaseStart] = useState<number>(0);
   const [liveStartTs, setLiveStartTs] = useState<number>(0);
   const [lastAction, setLastAction] = useState<ActionType>(null);
   
-  // Pre-launch countdown state
+  // Pre-launch countdown
   const [prelaunchTimeLeft, setPrelaunchTimeLeft] = useState<string>("");
 
-  // UPDATE: Gas Price Hook (Fitur Pro)
+  // Gas Price
   const { data: gasPriceData } = useGasPrice({ chainId: BASE_CHAIN_ID, query: { refetchInterval: 10_000 } });
   
-  // Formatter Gas (Gwei)
   const gasGwei = useMemo(() => {
     if (!gasPriceData) return "—";
     return (Number(gasPriceData) / 1e9).toFixed(2);
@@ -150,7 +162,7 @@ const Monitoring: FC = () => {
   }, [terminalLogs]);
 
   const addLog = (message: string) => {
-    const timestamp = new Date().toLocaleTimeString();
+    const timestamp = new Date().toLocaleTimeString('en-US', { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
     setTerminalLogs((prev) => [...prev, `[${timestamp}] ${message}`].slice(-300));
   };
 
@@ -227,13 +239,6 @@ const Monitoring: FC = () => {
       }),
     [tokenReadable]
   );
-
-  const tokenExact = useMemo(() => {
-    const bal = baseBal.data as bigint | undefined;
-    const d = (tokenDecimalsRead.data as number | undefined) ?? 18;
-    if (!bal) return "0";
-    return formatUnits(bal, d);
-  }, [baseBal.data, tokenDecimalsRead.data]);
 
   /* ======================
      GameCore Reads
@@ -356,7 +361,7 @@ const Monitoring: FC = () => {
   const goLiveOn = Boolean((goLive.data as boolean | undefined) ?? false);
   const active = Boolean((miningActive.data as boolean | undefined) ?? false);
 
-  // Pre-launch countdown logic
+  // Pre-launch countdown
   useEffect(() => {
     if (prelaunch && goLiveOn && sTime && eLen) {
       const epoch1StartTime = Number(sTime + eLen);
@@ -398,18 +403,8 @@ const Monitoring: FC = () => {
 
   const canClaim = pendingAmt > 0;
 
-  const {
-    usedBasic,
-    idleBasic,
-    usedPro,
-    idlePro,
-    usedLegend,
-    idleLegend,
-    effectiveHashrate,
-  } = useMemo(() => {
-    const mu = miningUsage.data as
-      | readonly [bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint]
-      | undefined;
+  const { usedBasic, idleBasic, usedPro, idlePro, usedLegend, idleLegend, effectiveHashrate } = useMemo(() => {
+    const mu = miningUsage.data as readonly [bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint] | undefined;
     const uB = mu ? Number(mu[1]) : 0;
     const iB = mu ? Number(mu[2]) : 0;
     const uP = mu ? Number(mu[4]) : 0;
@@ -418,17 +413,14 @@ const Monitoring: FC = () => {
     const iL = mu ? Number(mu[8]) : 0;
     const eff = uB * 1 + uP * 5 + uL * 25;
     return {
-      usedBasic: uB,
-      idleBasic: iB,
-      usedPro: uP,
-      idlePro: iP,
-      usedLegend: uL,
-      idleLegend: iL,
+      usedBasic: uB, idleBasic: iB,
+      usedPro: uP, idlePro: iP,
+      usedLegend: uL, idleLegend: iL,
       effectiveHashrate: eff,
     };
   }, [miningUsage.data]);
 
-  // Epoch progress & ETA
+  // Epoch progress
   const epochProgress = useMemo(() => {
     if (!sTime || !eLen) return { pct: 0, leftSec: 0 };
     const sinceStart = BigInt(now) - sTime;
@@ -456,19 +448,10 @@ const Monitoring: FC = () => {
   }, [eNowBn, lastE, cd, prelaunch, goLiveOn]);
 
   /* ======================
-     TX (user pays gas)
+     TX
      ====================== */
-  const {
-    writeContract,
-    data: txHash,
-    isPending: writePending,
-    error: writeError,
-  } = useWriteContract();
-  const {
-    isLoading: receiptLoading,
-    isSuccess,
-    isError: receiptError,
-  } = useWaitForTransactionReceipt({ hash: txHash });
+  const { writeContract, data: txHash, isPending: writePending, error: writeError } = useWriteContract();
+  const { isLoading: receiptLoading, isSuccess, isError: receiptError } = useWaitForTransactionReceipt({ hash: txHash });
 
   const busy = Boolean(writePending || receiptLoading);
 
@@ -494,15 +477,9 @@ const Monitoring: FC = () => {
 
   const refreshAll = async (note?: string) => {
     await Promise.allSettled([
-      refetchEpochNow?.(),
-      refetchMiningActive?.(),
-      refetchBaseUnit?.(),
-      refetchBaseBal?.(),
-      refetchHashrate?.(),
-      refetchPending?.(),
-      refetchSessionEnd?.(),
-      refetchNonce?.(),
-      refetchUsage?.(),
+      refetchEpochNow?.(), refetchMiningActive?.(), refetchBaseUnit?.(),
+      refetchBaseBal?.(), refetchHashrate?.(), refetchPending?.(),
+      refetchSessionEnd?.(), refetchNonce?.(), refetchUsage?.(),
     ]);
     const freshPending = (await (refetchPending?.() || Promise.resolve({ data: pendingRw.data })))?.data as bigint | undefined;
     const pendingStart = freshPending ? Number(formatUnits(freshPending, 18)) : 0;
@@ -514,7 +491,8 @@ const Monitoring: FC = () => {
   useEffect(() => {
     if (!isSuccess) return;
     setStatusText("Transaction confirmed.");
-    addLog("✅Success: Transaction confirmed.");
+    addLog("✅ Success: Transaction confirmed.");
+    triggerHaptic("success"); // [UPDATE] Haptic Success
     setLoading(false);
     refreshAll(lastAction === "start" ? "Mining session started." : "State updated after tx.");
     setLastAction(null);
@@ -533,12 +511,10 @@ const Monitoring: FC = () => {
 
   useEffect(() => {
     if (!writeError) return;
-    const shortMsg =
-      (writeError as any)?.shortMessage ||
-      (writeError as any)?.message ||
-      "Transaction failed to send";
+    const shortMsg = (writeError as any)?.shortMessage || (writeError as any)?.message || "Transaction failed to send";
     setStatusText(shortMsg);
     addLog(`Error (write): ${shortMsg}`);
+    triggerHaptic("error"); // [UPDATE] Haptic Error
     if (lastAction === "claim") {
       addLog(`🚫 Claim rejected — ${shortMsg}`);
       const tip = prettyTip(shortMsg);
@@ -553,6 +529,7 @@ const Monitoring: FC = () => {
     if (!receiptError) return;
     setStatusText("Transaction reverted. Check the explorer for details.");
     addLog("Error: Transaction reverted at execution.");
+    triggerHaptic("error"); // [UPDATE] Haptic Error
     if (lastAction === "claim") {
       addLog("🚫 Claim rejected — reverted on-chain");
     }
@@ -562,7 +539,7 @@ const Monitoring: FC = () => {
   }, [receiptError]);
 
   /* ======================
-     Events: Claimed
+     Events
      ====================== */
   useWatchContractEvent({
     address: gameCoreAddress as `0x${string}`,
@@ -581,6 +558,7 @@ const Monitoring: FC = () => {
       setStatusText(`Claimed: +${amt.toFixed(6)} $BaseTC`);
       setPopupMsg(`Claim successful!\nYou received +${amt.toFixed(6)} $BaseTC.`);
       setPopupOpen(true);
+      triggerHaptic("success"); // [UPDATE] Haptic Success
 
       await refreshAll("State updated after claim.");
       setLastAction(null);
@@ -591,6 +569,7 @@ const Monitoring: FC = () => {
      Actions
      ====================== */
   const onStart = async () => {
+    triggerHaptic("light"); // [UPDATE] Haptic click
     if (!address) { setStatusText("Please connect your wallet."); return; }
     if (chainId && chainId !== BASE_CHAIN_ID) { setStatusText("Please switch to Base Sepolia."); return; }
     if (prelaunch && goLiveOn) { setStatusText("Prelaunch is active. Wait for epoch 1."); return; }
@@ -602,9 +581,7 @@ const Monitoring: FC = () => {
       setLastAction("start");
       addLog("⏩ Start requested…");
 
-      const nonce =
-        (await (refetchNonce?.() || Promise.resolve({ data: userNonce.data })))?.data ??
-        (userNonce.data as bigint | undefined) ?? 0n;
+      const nonce = (await (refetchNonce?.() || Promise.resolve({ data: userNonce.data })))?.data ?? (userNonce.data as bigint | undefined) ?? 0n;
       const deadline = BigInt(Math.floor(Date.now() / 1000) + 60 * 60);
       const { signature } = await getRelayerSig({ user: address as `0x${string}`, action: "start", nonce, deadline });
 
@@ -626,6 +603,7 @@ const Monitoring: FC = () => {
       setLiveBaseStart(pendingStart);
       setLiveStartTs(Math.floor(Date.now() / 1000));
     } catch (e: any) {
+      triggerHaptic("error");
       const m = e?.message || "Failed to start";
       setStatusText(m);
       addLog(`Error: ${m}`);
@@ -635,14 +613,13 @@ const Monitoring: FC = () => {
   };
 
   const onClaim = async () => {
+    triggerHaptic("light"); // [UPDATE] Haptic click
     if (!address) { setStatusText("Please connect your wallet."); return; }
     if (chainId && chainId !== BASE_CHAIN_ID) { setStatusText("Please switch to Base Sepolia."); return; }
     if (!canClaim) { setStatusText("No pending rewards to claim."); return; }
 
     const trySend = async () => {
-      const freshNonce =
-        (await (refetchNonce?.() || Promise.resolve({ data: userNonce.data })))?.data ??
-        (userNonce.data as bigint | undefined) ?? 0n;
+      const freshNonce = (await (refetchNonce?.() || Promise.resolve({ data: userNonce.data })))?.data ?? (userNonce.data as bigint | undefined) ?? 0n;
       const deadline = BigInt(Math.floor(Date.now() / 1000) + 60 * 60);
       const { signature } = await getRelayerSig({ user: address as `0x${string}`, action: "claim", nonce: freshNonce, deadline });
 
@@ -669,6 +646,7 @@ const Monitoring: FC = () => {
       addLog("⬆ Claim requested…");
       await trySend();
     } catch (e: any) {
+      triggerHaptic("error");
       const m = (e?.message || "").toLowerCase();
       const shouldRetry = m.includes("expired") || m.includes("deadline") || m.includes("bad_nonce") || m.includes("bad nonce") || m.includes("nonce");
       if (shouldRetry) {
@@ -681,8 +659,6 @@ const Monitoring: FC = () => {
           setStatusText(em);
           addLog(`Error (retry): ${em}`);
           addLog(`🚫 Claim rejected — ${em}`);
-          const tip = prettyTip(em);
-          if (tip) addLog(tip);
           setLoading(false);
           setLastAction(null);
         }
@@ -781,41 +757,23 @@ const Monitoring: FC = () => {
     prevActiveRef.current = active;
   }, [active, eNowBn, perSecRate, baseUnitPerEpoch]);
 
-  const [wasToggleReady, setWasToggleReady] = useState(false);
-  useEffect(() => {
-    if (canToggle && !wasToggleReady && !(prelaunch && goLiveOn) && !active) {
-      addLog("✅ Start now — cooldown finished");
-    }
-    setWasToggleReady(canToggle);
-  }, [canToggle, wasToggleReady, prelaunch, goLiveOn, active]);
-
   /* ======================
      UI
      ====================== */
   return (
     <div className="fin-wrap">
-      {/* Head */}
       <div className="fin-page-head">
         <h1>Mining Console</h1>
         <p>Real-time on-chain monitoring</p>
       </div>
 
-      {/* Console card */}
       <section className="fin-card fin-card-pad neu" aria-label="Console">
         <div className="fin-row">
           <div className="fin-epoch">
             <small>Epoch</small>
             <strong>{typeof eNowBn !== "undefined" ? String(eNowBn) : "—"}</strong>
           </div>
-          <span
-            className={
-              prelaunch && goLiveOn
-                ? "fin-badge fin-badge-pre neu-chip"
-                : active
-                ? "fin-badge fin-badge-active neu-chip"
-                : "fin-badge fin-badge-paused neu-chip"
-            }
-          >
+          <span className={prelaunch && goLiveOn ? "fin-badge fin-badge-pre neu-chip" : active ? "fin-badge fin-badge-active neu-chip" : "fin-badge fin-badge-paused neu-chip"}>
             {prelaunch && goLiveOn ? "Prelaunch" : active ? "Active" : "Paused"}
           </span>
         </div>
@@ -823,35 +781,22 @@ const Monitoring: FC = () => {
         <div className="fin-progress">
           <div className="fin-progress-head">
             <span>{prelaunch && goLiveOn ? "Mining starts in" : "Epoch progress"}</span>
-            <span>
-              {prelaunch && goLiveOn ? <b>{prelaunchTimeLeft}</b> : <>Next in <b>{leftMMSS}</b></>}
-            </span>
+            <span>{prelaunch && goLiveOn ? <b>{prelaunchTimeLeft}</b> : <>Next in <b>{leftMMSS}</b></>}</span>
           </div>
           <div className="fin-bar"><i style={{ width: `${epochProgress.pct}%` }} /></div>
         </div>
 
-        <div
-          aria-hidden
-          className="my-3 -mx-4"
-          style={{ height: 1, background: "var(--stroke)" }}
-        />
+        <div aria-hidden className="my-3 -mx-4" style={{ height: 1, background: "var(--stroke)" }} />
 
         <div className="fin-actions">
           <div className="fin-cooldown">
             <span className="opacity-80">Mining now:</span>{" "}
-            <b>
+            <b className={active ? "text-green-600 animate-pulse" : ""}>
               {liveMiningNow.toLocaleString("en-US", { minimumFractionDigits: 6, maximumFractionDigits: 6 })} $BaseTC
             </b>
-
             <div className="mt-2">
-              <div
-                className="text-[13px] font-bold"
-                style={{ color: "#000" }}
-              >
-                Progress:{" "}
-                {miningPct >= 100
-                  ? "FULL — Please claim your $BaseTC"
-                  : `${miningPct.toFixed(1)}%`}
+              <div className="text-[13px] font-bold" style={{ color: "#000" }}>
+                Progress: {miningPct >= 100 ? "FULL — Please claim your $BaseTC" : `${miningPct.toFixed(1)}%`}
               </div>
             </div>
           </div>
@@ -860,7 +805,6 @@ const Monitoring: FC = () => {
             <button
               onClick={onClaim}
               disabled={!address || busy || !canClaim}
-              // UPDATE: Style tombol claim agar terlihat seperti "Harvest"
               className={`fin-btn neu-btn transition-transform active:scale-[0.98] ${(!address || busy || !canClaim) ? "opacity-50 cursor-not-allowed" : ""} border-green-500/50 bg-green-500/10 text-green-700`}
               title={canClaim ? "Harvest Rewards" : "No rewards available yet"}
             >
@@ -889,30 +833,17 @@ const Monitoring: FC = () => {
         </div>
       </section>
 
-      {/* Terminal Section (Keep As Is) */}
+      {/* [UPDATE] Terminal dengan Warna */}
       <section
         aria-label="Terminal"
         className="neu"
         style={{
-          margin: "10px 16px 0",
-          borderRadius: 14,
-          overflow: "hidden",
-          border: "1px solid rgba(0,0,0,0.06)",
-          background: "rgba(255,255,255,0.9)",
+          margin: "10px 16px 0", borderRadius: 14, overflow: "hidden",
+          border: "1px solid rgba(0,0,0,0.06)", background: "rgba(255,255,255,0.9)",
           boxShadow: "0 10px 24px rgba(0,0,0,0.20)",
         }}
       >
-        <div
-          style={{
-            height: 28,
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            padding: "0 10px",
-            background: "linear-gradient(180deg,#f6f8ff,#eaf1ff)",
-            borderBottom: "1px solid rgba(0,0,0,0.06)",
-          }}
-        >
+        <div style={{ height: 28, display: "flex", alignItems: "center", gap: 8, padding: "0 10px", background: "linear-gradient(180deg,#f6f8ff,#eaf1ff)", borderBottom: "1px solid rgba(0,0,0,0.06)" }}>
           <span style={{ width: 12, height: 12, borderRadius: 999, background: "#ff5f56", border: "1px solid #e04940" }} />
           <span style={{ width: 12, height: 12, borderRadius: 999, background: "#ffbd2e", border: "1px solid #e0a922" }} />
           <span style={{ width: 12, height: 12, borderRadius: 999, background: "#28c840", border: "1px solid #1ea233" }} />
@@ -922,26 +853,30 @@ const Monitoring: FC = () => {
         <div
           ref={terminalRef}
           style={{
-            height: 150,
-            background: "#ffffff",
-            color: "#0a1833",
-            padding: 12,
+            height: 150, background: "#ffffff", color: "#0a1833", padding: 12,
             fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
-            fontSize: 12,
-            lineHeight: 1.5,
-            overflow: "auto",
+            fontSize: 11, lineHeight: 1.5, overflow: "auto",
           }}
         >
-          <p style={{ margin: "2px 0" }}>&gt; Terminal ready...</p>
-          {terminalLogs.map((log, i) => (
-            <p key={i} style={{ margin: "2px 0" }}>
-              &gt; {log}
-            </p>
-          ))}
+          <p style={{ margin: "2px 0", color: "#888" }}>&gt; System ready...</p>
+          {terminalLogs.map((log, i) => {
+            let color = "#333";
+            // Logic pewarnaan terminal
+            if (log.includes("CLAIM") || log.includes("Success") || log.includes("✅")) color = "#16a34a"; // Green
+            else if (log.includes("Error") || log.includes("rejected") || log.includes("🚫")) color = "#dc2626"; // Red
+            else if (log.includes("Mining started") || log.includes("▶️")) color = "#2563eb"; // Blue
+            else if (log.includes("paused")) color = "#ea580c"; // Orange
+
+            return (
+              <p key={i} style={{ margin: "2px 0", color }}>
+                &gt; {log}
+              </p>
+            );
+          })}
         </div>
       </section>
 
-      {/* Stats - UPDATE: Tambahkan Network Gas */}
+      {/* Stats */}
       <section className="fin-stats border-none bg-transparent">
         <div className="fin-stat neu">
           <div className="fin-val">{formatNumber(effectiveHashrate)}</div>
@@ -953,19 +888,15 @@ const Monitoring: FC = () => {
             <div className="fin-cap">$BaseTC</div>
           </div>
         </div>
-        {/* NEW STAT: Network Gas */}
         <div className="fin-stat neu">
             <div className="fin-val text-blue-600">{gasGwei}</div>
             <div className="fin-cap">Gas (Gwei)</div>
         </div>
       </section>
 
-      {/* Rigs (Keep As Is) */}
+      {/* Rigs */}
       <section className="fin-card fin-rigs neu">
-        <div className="fin-rig-head">
-          <h2>Your Rigs</h2>
-        </div>
-
+        <div className="fin-rig-head"><h2>Your Rigs</h2></div>
         <div className="fin-rig-grid">
           <RigBox tier="Basic"  count={String(countBasic)}  owned={countBasic > 0n}  badge={address ? `${Number(usedBasic)} used, ${Number(idleBasic)} idle` : undefined}  placeholder="/img/basic.png" />
           <RigBox tier="Pro"    count={String(countPro)}    owned={countPro > 0n}    badge={address ? `${Number(usedPro)} used, ${Number(idlePro)} idle` : undefined}    placeholder="/img/pro.png" />
@@ -974,8 +905,6 @@ const Monitoring: FC = () => {
       </section>
 
       <div className="fin-bottom-space" />
-
-      {/* Overlays */}
       <LoadingOverlay show={loading || busy} label={statusText || "Processing…"} />
       <CenterPopup open={popupOpen} message={popupMsg} onOK={() => setPopupOpen(false)} />
     </div>
@@ -984,37 +913,14 @@ const Monitoring: FC = () => {
 
 export default Monitoring;
 
-/* ---------- Subcomponent: RigBox (Keep As Is) ---------- */
-function RigBox({
-  tier,
-  count,
-  owned,
-  badge,
-  placeholder,
-}: {
-  tier: string;
-  count: string;
-  owned: boolean;
-  badge?: string;
-  placeholder: string;
-}) {
+function RigBox({ tier, count, owned, badge, placeholder }: { tier: string; count: string; owned: boolean; badge?: string; placeholder: string; }) {
   const [imgErr, setImgErr] = useState(false);
-
   return (
     <div className="fin-rig neu">
       <div className={`fin-rig-img neu-inner ${!owned ? "fin-blur" : ""}`}>
         {!imgErr ? (
-          <Image
-            src={placeholder}
-            alt={`${tier} Rig`}
-            fill
-            sizes="(max-width: 420px) 33vw, 140px"
-            style={{ objectFit: "contain" }}
-            onError={() => setImgErr(true)}
-          />
-        ) : (
-          <span>{tier} PNG</span>
-        )}
+          <Image src={placeholder} alt={`${tier} Rig`} fill sizes="(max-width: 420px) 33vw, 140px" style={{ objectFit: "contain" }} onError={() => setImgErr(true)} />
+        ) : (<span>{tier} PNG</span>)}
       </div>
       <div className="fin-tier">{tier}</div>
       <div className="fin-count">x{count}</div>
