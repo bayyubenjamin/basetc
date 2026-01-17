@@ -17,7 +17,8 @@ export default function BackfillNotification() {
 
         // Hindari masalah typing antar versi SDK
         const anyCtx = ctx as any;
-        const fid = Number(anyCtx?.user?.fid || 0);
+       const fid = Number(anyCtx?.user?.fid);
+       if (!Number.isInteger(fid) || fid <= 0) return;
 
         // Bentuk umum yang pernah muncul:
         // - anyCtx.client.notificationDetails
