@@ -92,3 +92,17 @@ basetc-console/
 │   └── config.toml
 ├── assets/              # Additional project assets
 └── package.json         # Project dependencies
+
+---
+
+## 🔵 Base Ecosystem Integration
+
+This project is proudly built on **Base L2** and designed for the **Farcaster** ecosystem.
+
+### Tech Stack Highlights
+- **Network:** Base Mainnet
+- **Framework:** Next.js 14 + Farcaster Frames
+- **Integration:** Coinbase Smart Wallet & Wagmi
+- **Track:** Base Builders January Sprint
+
+> *Deployed and verified for the Base Builders community.*
