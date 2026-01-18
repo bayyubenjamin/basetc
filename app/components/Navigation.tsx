@@ -1,16 +1,24 @@
-// app/components/Navigation.tsx (icon tanpa putih2)
+// app/components/Navigation.tsx
 "use client";
 import type { FC } from "react";
+import { Activity, Hammer, ShoppingCart, Calendar, User, LucideIcon } from "lucide-react";
 
 export type TabName = "monitoring" | "rakit" | "market" | "profil" | "event";
-interface NavItem { id: TabName; label: string; iconPath: string; }
+
+
+interface NavItem { 
+  id: TabName; 
+  label: string; 
+  Icon: LucideIcon; 
+}
+
 
 const NAV_ITEMS: NavItem[] = [
-  { id: "monitoring", label: "Monitoring", iconPath: "M3 15l4-6 4 8 4-12 4 6" },
-  { id: "rakit",      label: "Build",      iconPath: "M4 16l8-8m4 0l2 2m-6 6l2 2M14 6l4 4" },
-  { id: "market",     label: "Market",     iconPath: "M9 7a3 3 0 016 0M6 7h12l1 12H5L6 7z" },
-  { id: "event",      label: "Event",      iconPath: "M12 4.5l1.8 4.2 4.2 1.8-4.2 1.8-1.8 4.2-1.8-4.2L6 10.5l4.2-1.8L12 4.5z" },
-  { id: "profil",     label: "Profile",     iconPath: "M12 14a5 5 0 100-10 5 5 0 000 10zm-7 7a7 7 0 0114 0" },
+  { id: "monitoring", label: "Monitoring", Icon: Activity },
+  { id: "rakit",      label: "Build",      Icon: Hammer },
+  { id: "market",     label: "Market",     Icon: ShoppingCart },
+  { id: "event",      label: "Event",      Icon: Calendar },
+  { id: "profil",     label: "Profile",    Icon: User },
 ];
 
 const COLORS = {
@@ -20,9 +28,8 @@ const COLORS = {
   labelInactive: "var(--muted)",
 };
 
-const ICON_DIM = 16;
-const ICON_BOX = 26;
-
+const ICON_DIM = 18; 
+const ICON_BOX = 28; 
 const Navigation: FC<{ activeTab: TabName; setActiveTab: (t: TabName) => void; }>
 = ({ activeTab, setActiveTab }) => {
   return (
@@ -38,8 +45,8 @@ const Navigation: FC<{ activeTab: TabName; setActiveTab: (t: TabName) => void; }
         paddingLeft: "max(14px, env(safe-area-inset-left))",
         paddingRight: "max(14px, env(safe-area-inset-right))",
         alignItems: "center",
+        
 
-        // container tanpa white glow
         background: "linear-gradient(145deg,#ffffff,#eaf1ff)",
         border: "1px solid rgba(0,0,0,.06)",
         borderRadius: 28,
@@ -50,6 +57,8 @@ const Navigation: FC<{ activeTab: TabName; setActiveTab: (t: TabName) => void; }
     >
       {NAV_ITEMS.map((item) => {
         const isActive = item.id === activeTab;
+
+        const IconComponent = item.Icon;
 
         return (
           <button
@@ -66,15 +75,15 @@ const Navigation: FC<{ activeTab: TabName; setActiveTab: (t: TabName) => void; }
               color: isActive ? COLORS.labelActive : COLORS.labelInactive,
             }}
           >
-            {/* ICON PILL — no white highlight */}
+            {/* ICON PILL */}
             <span
               className="relative grid place-items-center rounded-full"
               style={{
                 width: ICON_BOX,
                 height: ICON_BOX,
                 background: isActive
-                  ? "rgba(43,123,255,.14)"          // biru transparan
-                  : "rgba(10,30,60,.05)",           // netral transparan
+                  ? "rgba(43,123,255,.14)"          
+                  : "rgba(10,30,60,.05)",           
                 border: isActive
                   ? "1px solid rgba(43,123,255,.30)"
                   : "1px solid rgba(0,0,0,.06)",
@@ -85,19 +94,15 @@ const Navigation: FC<{ activeTab: TabName; setActiveTab: (t: TabName) => void; }
                 transition: "transform .12s ease, box-shadow .12s ease, background .12s ease",
               }}
             >
-              {/* ⛔️ highlight putih DIHAPUS */}
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
+              {/* IMPLEMENTASI LUCIDE REACT */}
+              <IconComponent
+                size={ICON_DIM}
                 strokeWidth={1.7}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-                style={{ width: ICON_DIM, height: ICON_DIM, position: "relative", zIndex: 1 }}
-              >
-                <path d={item.iconPath} />
-              </svg>
+                style={{ 
+                    position: "relative", 
+                    zIndex: 1 
+                }}
+              />
             </span>
 
             <span
@@ -108,7 +113,6 @@ const Navigation: FC<{ activeTab: TabName; setActiveTab: (t: TabName) => void; }
                 fontSize: 12,
                 fontWeight: 700,
                 color: isActive ? COLORS.labelActive : COLORS.labelInactive,
-                // textShadow putih dihapus supaya gak ada bloom
                 letterSpacing: 0.1,
               }}
             >
