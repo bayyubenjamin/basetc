@@ -3,6 +3,8 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Image from "next/image";
+import EmptyState from "./EmptyState";
+
 
 type LeaderboardItem = {
   rank: number;
@@ -223,14 +225,17 @@ const Leaderboard = () => {
                         </td>
                     </tr>
                 )}
-                
-                {!loading && leaderboardData.length === 0 && (
-                    <tr>
-                        <td colSpan={4} className="px-4 py-8 text-center text-gray-500">
-                            No data available.
-                        </td>
-                    </tr>
+               {!loading && leaderboardData.length === 0 && (
+                   <tr>
+                        <td colSpan={4}>
+                             <EmptyState
+                               title="No builders found yet"
+                               description="Be the first to join the leaderboard"
+                                   />
+                         </td>
+                      </tr>
                 )}
+
 
                 {leaderboardData.map((item) => {
                     let rankIcon = <span className="text-gray-500 font-mono font-medium">#{item.rank}</span>;
