@@ -1,17 +1,16 @@
 // app/components/Navigation.tsx
 "use client";
 import type { FC } from "react";
-import { Activity, Hammer, ShoppingCart, Calendar, User, LucideIcon } from "lucide-react";
+// FIX: Tambahkan 'type' sebelum LucideIcon
+import { Activity, Hammer, ShoppingCart, Calendar, User, type LucideIcon } from "lucide-react";
 
 export type TabName = "monitoring" | "rakit" | "market" | "profil" | "event";
-
 
 interface NavItem { 
   id: TabName; 
   label: string; 
   Icon: LucideIcon; 
 }
-
 
 const NAV_ITEMS: NavItem[] = [
   { id: "monitoring", label: "Monitoring", Icon: Activity },
@@ -30,6 +29,7 @@ const COLORS = {
 
 const ICON_DIM = 18; 
 const ICON_BOX = 28; 
+
 const Navigation: FC<{ activeTab: TabName; setActiveTab: (t: TabName) => void; }>
 = ({ activeTab, setActiveTab }) => {
   return (
@@ -45,8 +45,6 @@ const Navigation: FC<{ activeTab: TabName; setActiveTab: (t: TabName) => void; }
         paddingLeft: "max(14px, env(safe-area-inset-left))",
         paddingRight: "max(14px, env(safe-area-inset-right))",
         alignItems: "center",
-        
-
         background: "linear-gradient(145deg,#ffffff,#eaf1ff)",
         border: "1px solid rgba(0,0,0,.06)",
         borderRadius: 28,
@@ -57,7 +55,6 @@ const Navigation: FC<{ activeTab: TabName; setActiveTab: (t: TabName) => void; }
     >
       {NAV_ITEMS.map((item) => {
         const isActive = item.id === activeTab;
-
         const IconComponent = item.Icon;
 
         return (
@@ -75,7 +72,6 @@ const Navigation: FC<{ activeTab: TabName; setActiveTab: (t: TabName) => void; }
               color: isActive ? COLORS.labelActive : COLORS.labelInactive,
             }}
           >
-            {/* ICON PILL */}
             <span
               className="relative grid place-items-center rounded-full"
               style={{
@@ -94,7 +90,6 @@ const Navigation: FC<{ activeTab: TabName; setActiveTab: (t: TabName) => void; }
                 transition: "transform .12s ease, box-shadow .12s ease, background .12s ease",
               }}
             >
-              {/* IMPLEMENTASI LUCIDE REACT */}
               <IconComponent
                 size={ICON_DIM}
                 strokeWidth={1.7}
