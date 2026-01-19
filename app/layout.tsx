@@ -55,7 +55,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <SilentAddMiniApp />
           {children}
         </Providers>
-      </body>
+      <footer className="fixed bottom-1 right-1 text-[10px] text-gray-500 opacity-50">v1.2-base-sprint</footer></body>
     </html>
   );
 }
