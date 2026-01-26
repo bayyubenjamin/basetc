@@ -22,9 +22,10 @@ import {
   chainId as BASE_CHAIN_ID,
 } from "../lib/web3Config";
 import { formatUnits } from "viem";
+
+// [INJECT] Import Confetti & Popup Baru
 import confetti from "canvas-confetti";
-// [FIX] Ganti import ke HarvestPopup agar tidak bentrok dengan popup Welcome
-import HarvestPopup from "./HarvestPopup"; 
+import HarvestPopup from "./HarvestPopup";
 
 /* ======================
    Utils & Constants
@@ -38,13 +39,16 @@ const formatNumber = (num: number) => {
   return num.toString();
 };
 
+// [UPDATE] Helper Haptic yang Aman
 const triggerHaptic = (type: "light" | "success" | "error") => {
   if (typeof navigator !== "undefined" && navigator.vibrate) {
     try {
       if (type === "light") navigator.vibrate(50);
       if (type === "success") navigator.vibrate([50, 50, 50]);
       if (type === "error") navigator.vibrate([50, 100, 50]);
-    } catch (e) { }
+    } catch (e) {
+      // Ignore if device doesn't support
+    }
   }
 };
 
@@ -134,7 +138,7 @@ const Monitoring: FC = () => {
   const [popupOpen, setPopupOpen] = useState(false);
   const [popupMsg, setPopupMsg] = useState("");
 
-  // [FIX] Gunakan state untuk HarvestPopup
+  // [INJECT] State untuk Viral Popup
   const [showHarvestPopup, setShowHarvestPopup] = useState(false);
   const [lastHarvestAmount, setLastHarvestAmount] = useState("0");
 
@@ -142,8 +146,11 @@ const Monitoring: FC = () => {
   const [liveBaseStart, setLiveBaseStart] = useState<number>(0);
   const [liveStartTs, setLiveStartTs] = useState<number>(0);
   const [lastAction, setLastAction] = useState<ActionType>(null);
+  
+  // Pre-launch countdown
   const [prelaunchTimeLeft, setPrelaunchTimeLeft] = useState<string>("");
 
+  // Gas Price
   const { data: gasPriceData } = useGasPrice({ chainId: BASE_CHAIN_ID, query: { refetchInterval: 10_000 } });
   
   const gasGwei = useMemo(() => {
@@ -151,11 +158,13 @@ const Monitoring: FC = () => {
     return (Number(gasPriceData) / 1e9).toFixed(2);
   }, [gasPriceData]);
 
+  // 1s ticker
   useEffect(() => {
     const t = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 1000);
     return () => clearInterval(t);
   }, []);
 
+  // Terminal autoscroll
   useEffect(() => {
     if (terminalRef.current) terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
   }, [terminalLogs]);
@@ -165,6 +174,7 @@ const Monitoring: FC = () => {
     setTerminalLogs((prev) => [...prev, `[${timestamp}] ${message}`].slice(-300));
   };
 
+  // [INJECT] Fungsi Confetti
   function fireConfetti() {
     const duration = 3000;
     const end = Date.now() + duration;
@@ -176,49 +186,181 @@ const Monitoring: FC = () => {
     }());
   }
 
-  // --- Contracts ---
+  /* ======================
+     NFT IDs & Balances
+     ====================== */
   const basicId = useReadContract({ address: rigNftAddress as `0x${string}`, abi: rigNftABI as any, functionName: "BASIC" });
   const proId = useReadContract({ address: rigNftAddress as `0x${string}`, abi: rigNftABI as any, functionName: "PRO" });
   const legendId = useReadContract({ address: rigNftAddress as `0x${string}`, abi: rigNftABI as any, functionName: "LEGEND" });
+
   const BASIC = basicId.data as bigint | undefined;
   const PRO = proId.data as bigint | undefined;
   const LEGEND = legendId.data as bigint | undefined;
 
-  const basicBal = useReadContract({ address: rigNftAddress as `0x${string}`, abi: rigNftABI as any, functionName: "balanceOf", args: address && BASIC !== undefined ? [address, BASIC] : undefined, query: { enabled: Boolean(address && BASIC !== undefined) } });
-  const proBal = useReadContract({ address: rigNftAddress as `0x${string}`, abi: rigNftABI as any, functionName: "balanceOf", args: address && PRO !== undefined ? [address, PRO] : undefined, query: { enabled: Boolean(address && PRO !== undefined) } });
-  const legendBal = useReadContract({ address: rigNftAddress as `0x${string}`, abi: rigNftABI as any, functionName: "balanceOf", args: address && LEGEND !== undefined ? [address, LEGEND] : undefined, query: { enabled: Boolean(address && LEGEND !== undefined) } });
+  const basicBal = useReadContract({
+    address: rigNftAddress as `0x${string}`,
+    abi: rigNftABI as any,
+    functionName: "balanceOf",
+    args: address && BASIC !== undefined ? [address, BASIC] : undefined,
+    query: { enabled: Boolean(address && BASIC !== undefined) },
+  });
+  const proBal = useReadContract({
+    address: rigNftAddress as `0x${string}`,
+    abi: rigNftABI as any,
+    functionName: "balanceOf",
+    args: address && PRO !== undefined ? [address, PRO] : undefined,
+    query: { enabled: Boolean(address && PRO !== undefined) },
+  });
+  const legendBal = useReadContract({
+    address: rigNftAddress as `0x${string}`,
+    abi: rigNftABI as any,
+    functionName: "balanceOf",
+    args: address && LEGEND !== undefined ? [address, LEGEND] : undefined,
+    query: { enabled: Boolean(address && LEGEND !== undefined) },
+  });
 
   const countBasic = (basicBal.data as bigint | undefined) ?? 0n;
   const countPro = (proBal.data as bigint | undefined) ?? 0n;
   const countLegend = (legendBal.data as bigint | undefined) ?? 0n;
 
-  const tokenDecimalsRead = useReadContract({ address: baseTcAddress as `0x${string}`, abi: baseTcABI as any, functionName: "decimals" });
-  const baseBal = useReadContract({ address: baseTcAddress as `0x${string}`, abi: baseTcABI as any, functionName: "balanceOf", args: address ? [address] : undefined, query: { enabled: Boolean(address) } });
+  /* ======================
+     $BaseTC Balance
+     ====================== */
+  const tokenDecimalsRead = useReadContract({
+    address: baseTcAddress as `0x${string}`,
+    abi: baseTcABI as any,
+    functionName: "decimals",
+  });
+
+  const baseBal = useReadContract({
+    address: baseTcAddress as `0x${string}`,
+    abi: baseTcABI as any,
+    functionName: "balanceOf",
+    args: address ? [address] : undefined,
+    query: { enabled: Boolean(address) },
+  });
 
   const tokenReadable = useMemo(() => {
     const bal = baseBal.data as bigint | undefined;
     const d = (tokenDecimalsRead.data as number | undefined) ?? 18;
     if (!bal) return 0;
-    try { return Number(formatUnits(bal, d)); } catch { return 0; }
+    try {
+      return Number(formatUnits(bal, d));
+    } catch {
+      return 0;
+    }
   }, [baseBal.data, tokenDecimalsRead.data]);
 
-  const tokenShort = useMemo(() => tokenReadable.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }), [tokenReadable]);
+  const tokenShort = useMemo(
+    () =>
+      tokenReadable.toLocaleString("en-US", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }),
+    [tokenReadable]
+  );
 
-  const epochNow = useReadContract({ address: gameCoreAddress as `0x${string}`, abi: gameCoreABI as any, functionName: "epochNow", query: { refetchInterval: 10_000 } });
-  const epochLength = useReadContract({ address: gameCoreAddress as `0x${string}`, abi: gameCoreABI as any, functionName: "epochLength" });
-  const startTime = useReadContract({ address: gameCoreAddress as `0x${string}`, abi: gameCoreABI as any, functionName: "startTime" });
-  const isPrelaunch = useReadContract({ address: gameCoreAddress as `0x${string}`, abi: gameCoreABI as any, functionName: "isPrelaunch" });
-  const goLive = useReadContract({ address: gameCoreAddress as `0x${string}`, abi: gameCoreABI as any, functionName: "goLive" });
-  const miningActive = useReadContract({ address: gameCoreAddress as `0x${string}`, abi: gameCoreABI as any, functionName: "miningActive", args: address ? [address] : undefined, query: { enabled: Boolean(address) } });
-  const lastToggleEpoch = useReadContract({ address: gameCoreAddress as `0x${string}`, abi: gameCoreABI as any, functionName: "lastToggleEpoch", args: address ? [address] : undefined, query: { enabled: Boolean(address) } });
-  const toggleCooldown = useReadContract({ address: gameCoreAddress as `0x${string}`, abi: gameCoreABI as any, functionName: "toggleCooldown" });
-  const hashrate = useReadContract({ address: gameCoreAddress as `0x${string}`, abi: gameCoreABI as any, functionName: "getHashrate", args: address ? [address] : undefined, query: { enabled: Boolean(address) } });
-  const baseUnit = useReadContract({ address: gameCoreAddress as `0x${string}`, abi: gameCoreABI as any, functionName: "getBaseUnit", args: address ? [address] : undefined, query: { enabled: Boolean(address), refetchInterval: 10_000 } });
-  const pendingRw = useReadContract({ address: gameCoreAddress as `0x${string}`, abi: gameCoreABI as any, functionName: "pending", args: address ? [address] : undefined, query: { enabled: Boolean(address) } });
-  const sessionEndAt = useReadContract({ address: gameCoreAddress as `0x${string}`, abi: gameCoreABI as any, functionName: "sessionEndAt", args: address ? [address] : undefined, query: { enabled: Boolean(address) } });
-  const userNonce = useReadContract({ address: gameCoreAddress as `0x${string}`, abi: gameCoreABI as any, functionName: "nonces", args: address ? [address] : undefined, query: { enabled: Boolean(address) } });
-  const miningUsage = useReadContract({ address: gameCoreAddress as `0x${string}`, abi: gameCoreABI as any, functionName: "miningUsage", args: address ? [address] : undefined, query: { enabled: Boolean(address) } });
+  /* ======================
+     GameCore Reads
+     ====================== */
+  const epochNow = useReadContract({
+    address: gameCoreAddress as `0x${string}`,
+    abi: gameCoreABI as any,
+    functionName: "epochNow",
+    query: { refetchInterval: 10_000 },
+  });
+  const epochLength = useReadContract({
+    address: gameCoreAddress as `0x${string}`,
+    abi: gameCoreABI as any,
+    functionName: "epochLength",
+  });
+  const startTime = useReadContract({
+    address: gameCoreAddress as `0x${string}`,
+    abi: gameCoreABI as any,
+    functionName: "startTime",
+  });
+  const isPrelaunch = useReadContract({
+    address: gameCoreAddress as `0x${string}`,
+    abi: gameCoreABI as any,
+    functionName: "isPrelaunch",
+  });
+  const goLive = useReadContract({
+    address: gameCoreAddress as `0x${string}`,
+    abi: gameCoreABI as any,
+    functionName: "goLive",
+  });
 
+  const miningActive = useReadContract({
+    address: gameCoreAddress as `0x${string}`,
+    abi: gameCoreABI as any,
+    functionName: "miningActive",
+    args: address ? [address] : undefined,
+    query: { enabled: Boolean(address) },
+  });
+
+  const lastToggleEpoch = useReadContract({
+    address: gameCoreAddress as `0x${string}`,
+    abi: gameCoreABI as any,
+    functionName: "lastToggleEpoch",
+    args: address ? [address] : undefined,
+    query: { enabled: Boolean(address) },
+  });
+
+  const toggleCooldown = useReadContract({
+    address: gameCoreAddress as `0x${string}`,
+    abi: gameCoreABI as any,
+    functionName: "toggleCooldown",
+  });
+
+  const hashrate = useReadContract({
+    address: gameCoreAddress as `0x${string}`,
+    abi: gameCoreABI as any,
+    functionName: "getHashrate",
+    args: address ? [address] : undefined,
+    query: { enabled: Boolean(address) },
+  });
+
+  const baseUnit = useReadContract({
+    address: gameCoreAddress as `0x${string}`,
+    abi: gameCoreABI as any,
+    functionName: "getBaseUnit",
+    args: address ? [address] : undefined,
+    query: { enabled: Boolean(address), refetchInterval: 10_000 },
+  });
+
+  const pendingRw = useReadContract({
+    address: gameCoreAddress as `0x${string}`,
+    abi: gameCoreABI as any,
+    functionName: "pending",
+    args: address ? [address] : undefined,
+    query: { enabled: Boolean(address) },
+  });
+
+  const sessionEndAt = useReadContract({
+    address: gameCoreAddress as `0x${string}`,
+    abi: gameCoreABI as any,
+    functionName: "sessionEndAt",
+    args: address ? [address] : undefined,
+    query: { enabled: Boolean(address) },
+  });
+
+  const userNonce = useReadContract({
+    address: gameCoreAddress as `0x${string}`,
+    abi: gameCoreABI as any,
+    functionName: "nonces",
+    args: address ? [address] : undefined,
+    query: { enabled: Boolean(address) },
+  });
+
+  const miningUsage = useReadContract({
+    address: gameCoreAddress as `0x${string}`,
+    abi: gameCoreABI as any,
+    functionName: "miningUsage",
+    args: address ? [address] : undefined,
+    query: { enabled: Boolean(address) },
+  });
+
+  // Refetch handles
   const { refetch: refetchEpochNow } = epochNow as any;
   const { refetch: refetchMiningActive } = miningActive as any;
   const { refetch: refetchBaseUnit } = baseUnit as any;
@@ -229,6 +371,7 @@ const Monitoring: FC = () => {
   const { refetch: refetchNonce } = userNonce as any;
   const { refetch: refetchUsage } = miningUsage as any;
 
+  // Normalize
   const eNowBn = epochNow.data as bigint | undefined;
   const eLen = (epochLength.data as bigint | undefined) ?? undefined;
   const sTime = (startTime.data as bigint | undefined) ?? undefined;
@@ -238,12 +381,14 @@ const Monitoring: FC = () => {
   const goLiveOn = Boolean((goLive.data as boolean | undefined) ?? false);
   const active = Boolean((miningActive.data as boolean | undefined) ?? false);
 
+  // Pre-launch countdown
   useEffect(() => {
     if (prelaunch && goLiveOn && sTime && eLen) {
       const epoch1StartTime = Number(sTime + eLen);
       const interval = setInterval(() => {
         const currentSeconds = Math.floor(Date.now() / 1000);
         const timeLeft = epoch1StartTime - currentSeconds;
+
         if (timeLeft <= 0) {
           setPrelaunchTimeLeft("Live!");
           clearInterval(interval);
@@ -256,6 +401,7 @@ const Monitoring: FC = () => {
           setPrelaunchTimeLeft(`${days}d ${hours}h ${minutes}m ${seconds}s`);
         }
       }, 1000);
+
       return () => clearInterval(interval);
     }
   }, [prelaunch, goLiveOn, sTime, eLen]);
@@ -263,7 +409,11 @@ const Monitoring: FC = () => {
   const baseUnitPerEpoch = useMemo(() => {
     const v = baseUnit.data as bigint | undefined;
     if (!v) return 0;
-    try { return Number(formatUnits(v, 18)); } catch { return 0; }
+    try {
+      return Number(formatUnits(v, 18));
+    } catch {
+      return 0;
+    }
   }, [baseUnit.data]);
 
   const pendingAmt = useMemo(() => {
@@ -275,13 +425,22 @@ const Monitoring: FC = () => {
 
   const { usedBasic, idleBasic, usedPro, idlePro, usedLegend, idleLegend, effectiveHashrate } = useMemo(() => {
     const mu = miningUsage.data as readonly [bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint] | undefined;
-    const uB = mu ? Number(mu[1]) : 0; const iB = mu ? Number(mu[2]) : 0;
-    const uP = mu ? Number(mu[4]) : 0; const iP = mu ? Number(mu[5]) : 0;
-    const uL = mu ? Number(mu[7]) : 0; const iL = mu ? Number(mu[8]) : 0;
+    const uB = mu ? Number(mu[1]) : 0;
+    const iB = mu ? Number(mu[2]) : 0;
+    const uP = mu ? Number(mu[4]) : 0;
+    const iP = mu ? Number(mu[5]) : 0;
+    const uL = mu ? Number(mu[7]) : 0;
+    const iL = mu ? Number(mu[8]) : 0;
     const eff = uB * 1 + uP * 5 + uL * 25;
-    return { usedBasic: uB, idleBasic: iB, usedPro: uP, idlePro: iP, usedLegend: uL, idleLegend: iL, effectiveHashrate: eff };
+    return {
+      usedBasic: uB, idleBasic: iB,
+      usedPro: uP, idlePro: iP,
+      usedLegend: uL, idleLegend: iL,
+      effectiveHashrate: eff,
+    };
   }, [miningUsage.data]);
 
+  // Epoch progress
   const epochProgress = useMemo(() => {
     if (!sTime || !eLen) return { pct: 0, leftSec: 0 };
     const sinceStart = BigInt(now) - sTime;
@@ -308,8 +467,12 @@ const Monitoring: FC = () => {
     return eNow >= lastE + cd;
   }, [eNowBn, lastE, cd, prelaunch, goLiveOn]);
 
+  /* ======================
+     TX
+     ====================== */
   const { writeContract, data: txHash, isPending: writePending, error: writeError } = useWriteContract();
   const { isLoading: receiptLoading, isSuccess, isError: receiptError } = useWaitForTransactionReceipt({ hash: txHash });
+
   const busy = Boolean(writePending || receiptLoading);
 
   const [loggedHash, setLoggedHash] = useState<string | null>(null);
@@ -349,21 +512,33 @@ const Monitoring: FC = () => {
     if (!isSuccess) return;
     setStatusText("Transaction confirmed.");
     addLog("✅ Success: Transaction confirmed.");
-    triggerHaptic("success");
+    triggerHaptic("success"); // [UPDATE] Haptic Success
     setLoading(false);
     refreshAll(lastAction === "start" ? "Mining session started." : "State updated after tx.");
     setLastAction(null);
     setLoggedHash(null);
   }, [isSuccess]);
 
+  const prettyTip = (msg?: string) => {
+    const m = (msg || "").toLowerCase();
+    if (!m) return "";
+    if (m.includes("expired")) return "💡 Tip: signature expired — sign ulang.";
+    if (m.includes("nonce")) return "💡 Tip: bad nonce — refresh nonce lalu coba lagi.";
+    if (m.includes("allowance")) return "💡 Tip: allowance kurang — approve/permit dulu.";
+    if (m.includes("balance")) return "💡 Tip: saldo tidak cukup.";
+    return "";
+  };
+
   useEffect(() => {
     if (!writeError) return;
     const shortMsg = (writeError as any)?.shortMessage || (writeError as any)?.message || "Transaction failed to send";
     setStatusText(shortMsg);
     addLog(`Error (write): ${shortMsg}`);
-    triggerHaptic("error");
+    triggerHaptic("error"); // [UPDATE] Haptic Error
     if (lastAction === "claim") {
       addLog(`🚫 Claim rejected — ${shortMsg}`);
+      const tip = prettyTip(shortMsg);
+      if (tip) addLog(tip);
     }
     setLoading(false);
     setLoggedHash(null);
@@ -372,32 +547,40 @@ const Monitoring: FC = () => {
 
   useEffect(() => {
     if (!receiptError) return;
-    setStatusText("Transaction reverted.");
-    addLog("Error: Transaction reverted.");
-    triggerHaptic("error");
-    if (lastAction === "claim") addLog("🚫 Claim rejected — reverted");
+    setStatusText("Transaction reverted. Check the explorer for details.");
+    addLog("Error: Transaction reverted at execution.");
+    triggerHaptic("error"); // [UPDATE] Haptic Error
+    if (lastAction === "claim") {
+      addLog("🚫 Claim rejected — reverted on-chain");
+    }
     setLoading(false);
     setLoggedHash(null);
     setLastAction(null);
   }, [receiptError]);
 
+  /* ======================
+     Events
+     ====================== */
   useWatchContractEvent({
     address: gameCoreAddress as `0x${string}`,
     abi: gameCoreABI as any,
     eventName: "Claimed",
     onLogs: async (logsRaw) => {
       const logs = logsRaw as Array<{ args?: { e?: bigint; user?: `0x${string}`; amount?: bigint } }>;
-      const mine = logs.find((l) => (l?.args?.user ?? "").toLowerCase() === (address ?? "").toLowerCase());
+      const mine = logs.find(
+        (l) => (l?.args?.user ?? "").toLowerCase() === (address ?? "").toLowerCase()
+      );
       if (!mine || !mine.args) return;
 
       const amt = Number(formatUnits(mine.args.amount ?? 0n, 18));
       addLog(`⬆ CLAIM +${amt.toFixed(6)} $BaseTC (epoch #${String(mine.args.e)})`);
+
       setStatusText(`Claimed: +${amt.toFixed(6)} $BaseTC`);
       
-      // [FIX] Tampilkan HarvestPopup, bukan ClaimPopup
+      // [INJECT] Logic Viral Popup
       setLastHarvestAmount(`${amt.toFixed(6)} $BaseTC`);
-      fireConfetti();
-      setShowHarvestPopup(true);
+      fireConfetti(); 
+      setShowHarvestPopup(true); // Panggil Popup Harvest, BUKAN generic popup
       triggerHaptic("success");
 
       await refreshAll("State updated after claim.");
@@ -405,8 +588,11 @@ const Monitoring: FC = () => {
     },
   });
 
+  /* ======================
+     Actions
+     ====================== */
   const onStart = async () => {
-    triggerHaptic("light");
+    triggerHaptic("light"); // [UPDATE] Haptic click
     if (!address) { setStatusText("Please connect your wallet."); return; }
     if (chainId && chainId !== BASE_CHAIN_ID) { setStatusText("Please switch to Base Sepolia."); return; }
     if (prelaunch && goLiveOn) { setStatusText("Prelaunch is active. Wait for epoch 1."); return; }
@@ -450,7 +636,7 @@ const Monitoring: FC = () => {
   };
 
   const onClaim = async () => {
-    triggerHaptic("light");
+    triggerHaptic("light"); // [UPDATE] Haptic click
     if (!address) { setStatusText("Please connect your wallet."); return; }
     if (chainId && chainId !== BASE_CHAIN_ID) { setStatusText("Please switch to Base Sepolia."); return; }
     if (!canClaim) { setStatusText("No pending rewards to claim."); return; }
@@ -459,9 +645,20 @@ const Monitoring: FC = () => {
       const freshNonce = (await (refetchNonce?.() || Promise.resolve({ data: userNonce.data })))?.data ?? (userNonce.data as bigint | undefined) ?? 0n;
       const deadline = BigInt(Math.floor(Date.now() / 1000) + 60 * 60);
       const { signature } = await getRelayerSig({ user: address as `0x${string}`, action: "claim", nonce: freshNonce, deadline });
+
       setStatusText("Sending claimWithSig …");
       addLog("Sending claimWithSig …");
-      writeContract({ address: gameCoreAddress as `0x${string}`, abi: gameCoreABI as any, functionName: "claimWithSig", args: [address, freshNonce, deadline, signature], account: address as `0x${string}`, chain: base, chainId: BASE_CHAIN_ID });
+
+      writeContract({
+        address: gameCoreAddress as `0x${string}`,
+        abi: gameCoreABI as any,
+        functionName: "claimWithSig",
+        args: [address, freshNonce, deadline, signature],
+        account: address as `0x${string}`,
+        chain: base,
+        chainId: BASE_CHAIN_ID,
+      });
+
       setLoading(false);
     };
 
@@ -474,28 +671,36 @@ const Monitoring: FC = () => {
     } catch (e: any) {
       triggerHaptic("error");
       const m = (e?.message || "").toLowerCase();
-      if (m.includes("expired") || m.includes("deadline") || m.includes("nonce")) {
-         try {
-           addLog("Retrying claim with refreshed nonce …");
-           setStatusText("Retrying claim …");
-           await trySend();
-         } catch(e2:any) {
-           const em = e2?.message || "Retry failed";
-           setStatusText(em);
-           addLog(`Error (retry): ${em}`);
-           setLoading(false);
-           setLastAction(null);
-         }
-         return;
+      const shouldRetry = m.includes("expired") || m.includes("deadline") || m.includes("bad_nonce") || m.includes("bad nonce") || m.includes("nonce");
+      if (shouldRetry) {
+        try {
+          addLog("Retrying claim with refreshed nonce/deadline …");
+          setStatusText("Retrying claim …");
+          await trySend();
+        } catch (e2: any) {
+          const em = e2?.message || "Failed to claim (retry)";
+          setStatusText(em);
+          addLog(`Error (retry): ${em}`);
+          addLog(`🚫 Claim rejected — ${em}`);
+          setLoading(false);
+          setLastAction(null);
+        }
+        return;
       }
       const em = e?.message || "Failed to claim";
       setStatusText(em);
       addLog(`Error: ${em}`);
+      addLog(`🚫 Claim rejected — ${em}`);
+      const tip = prettyTip(em);
+      if (tip) addLog(tip);
       setLoading(false);
       setLastAction(null);
     }
   };
 
+  /* ======================
+     Realtime meter
+     ====================== */
   const perSecRate = useMemo(() => {
     if (!eLen || !baseUnitPerEpoch) return 0;
     const seconds = Number(eLen);
@@ -504,9 +709,10 @@ const Monitoring: FC = () => {
 
   useEffect(() => {
     if (!active) return;
-    setLiveBaseStart(pendingAmt);
+    const p = pendingAmt;
+    setLiveBaseStart(p);
     setLiveStartTs(Math.floor(Date.now() / 1000));
-  }, [active, pendingAmt]);
+  }, [active]);
 
   const liveMiningNow = useMemo(() => {
     if (!active) return 0;
@@ -524,6 +730,28 @@ const Monitoring: FC = () => {
     return () => clearInterval(id);
   }, [active]);
 
+  const [lastBeatTs, setLastBeatTs] = useState<number>(0);
+  useEffect(() => {
+    if (!active) return;
+    const t = Math.floor(Date.now() / 1000);
+    if (t - lastBeatTs >= 2) {
+      setLastBeatTs(t);
+      addLog(
+        `⛏ Mining now: ${liveMiningNow.toFixed(6)} $BaseTC | +${perSecRate.toFixed(6)}/s | left ${leftMMSS} | rigs B${usedBasic}/P${usedPro}/L${usedLegend}`
+      );
+    }
+  }, [now, active, liveMiningNow, perSecRate, usedBasic, usedPro, usedLegend, leftMMSS, lastBeatTs]);
+
+  const [lastPausedLogTs, setLastPausedLogTs] = useState<number>(0);
+  useEffect(() => {
+    if (active) return;
+    const t = Math.floor(Date.now() / 1000);
+    if (t - lastPausedLogTs >= 60) {
+      setLastPausedLogTs(t);
+      addLog("⏸️ Mining paused — press Start");
+    }
+  }, [now, active, lastPausedLogTs]);
+
   const miningPct = useMemo(() => {
     if (!active) return 0;
     if (!baseUnitPerEpoch || baseUnitPerEpoch <= 0) return 0;
@@ -531,6 +759,30 @@ const Monitoring: FC = () => {
     return Math.max(0, Math.min(100, pct));
   }, [active, liveMiningNow, baseUnitPerEpoch]);
 
+  const [hasLoggedFull, setHasLoggedFull] = useState(false);
+  useEffect(() => {
+    if (!active) { setHasLoggedFull(false); return; }
+    if (!hasLoggedFull && miningPct >= 100) {
+      addLog("⚡ FULL — Please claim your $BaseTC");
+      setHasLoggedFull(true);
+    }
+  }, [active, miningPct, hasLoggedFull]);
+
+  const prevActiveRef = useRef<boolean | undefined>(undefined);
+  useEffect(() => {
+    const prev = prevActiveRef.current;
+    if (prev === undefined) { prevActiveRef.current = active; return; }
+    if (!prev && active) {
+      addLog(`▶️ Mining started @ epoch #${typeof eNowBn !== "undefined" ? String(eNowBn) : "—"} | rate ${perSecRate.toFixed(6)}/s | per-epoch ${baseUnitPerEpoch.toFixed(2)}`);
+    } else if (prev && !active) {
+      addLog(`⏹ Mining stopped @ epoch #${typeof eNowBn !== "undefined" ? String(eNowBn) : "—"}`);
+    }
+    prevActiveRef.current = active;
+  }, [active, eNowBn, perSecRate, baseUnitPerEpoch]);
+
+  /* ======================
+     UI
+     ====================== */
   return (
     <div className="fin-wrap">
       <div className="fin-page-head">
@@ -604,6 +856,7 @@ const Monitoring: FC = () => {
         </div>
       </section>
 
+      {/* [UPDATE] Terminal dengan Warna */}
       <section
         aria-label="Terminal"
         className="neu"
@@ -619,6 +872,7 @@ const Monitoring: FC = () => {
           <span style={{ width: 12, height: 12, borderRadius: 999, background: "#28c840", border: "1px solid #1ea233" }} />
           <div style={{ marginLeft: 8, fontSize: 12, color: "var(--muted)", fontWeight: 600 }}>Terminal</div>
         </div>
+
         <div
           ref={terminalRef}
           style={{
@@ -630,15 +884,22 @@ const Monitoring: FC = () => {
           <p style={{ margin: "2px 0", color: "#888" }}>&gt; System ready...</p>
           {terminalLogs.map((log, i) => {
             let color = "#333";
-            if (log.includes("CLAIM") || log.includes("Success") || log.includes("✅")) color = "#16a34a";
-            else if (log.includes("Error") || log.includes("rejected") || log.includes("🚫")) color = "#dc2626";
-            else if (log.includes("Mining started") || log.includes("▶️")) color = "#2563eb";
-            else if (log.includes("paused")) color = "#ea580c";
-            return ( <p key={i} style={{ margin: "2px 0", color }}> &gt; {log} </p> );
+            // Logic pewarnaan terminal
+            if (log.includes("CLAIM") || log.includes("Success") || log.includes("✅")) color = "#16a34a"; // Green
+            else if (log.includes("Error") || log.includes("rejected") || log.includes("🚫")) color = "#dc2626"; // Red
+            else if (log.includes("Mining started") || log.includes("▶️")) color = "#2563eb"; // Blue
+            else if (log.includes("paused")) color = "#ea580c"; // Orange
+
+            return (
+              <p key={i} style={{ margin: "2px 0", color }}>
+                &gt; {log}
+              </p>
+            );
           })}
         </div>
       </section>
 
+      {/* Stats */}
       <section className="fin-stats border-none bg-transparent">
         <div className="fin-stat neu">
           <div className="fin-val">{formatNumber(effectiveHashrate)}</div>
@@ -656,6 +917,7 @@ const Monitoring: FC = () => {
         </div>
       </section>
 
+      {/* Rigs */}
       <section className="fin-card fin-rigs neu">
         <div className="fin-rig-head"><h2>Your Rigs</h2></div>
         <div className="fin-rig-grid">
@@ -669,7 +931,7 @@ const Monitoring: FC = () => {
       <LoadingOverlay show={loading || busy} label={statusText || "Processing…"} />
       <CenterPopup open={popupOpen} message={popupMsg} onOK={() => setPopupOpen(false)} />
       
-      {/* [FIX] Gunakan HarvestPopup untuk notifikasi viral */}
+      {/* [INJECT] Component Popup Viral */}
       <HarvestPopup 
         open={showHarvestPopup} 
         amount={lastHarvestAmount} 
