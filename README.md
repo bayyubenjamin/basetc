@@ -56,6 +56,10 @@ Based on the codebase structure, here are the system's core capabilities:
 4.  **Staking**: Asset locking mechanisms for additional yields (`StakingVault`).
 5.  **Social Referral**: A referral system integrated with Farcaster IDs (`ReferralClaimer`).
 6.  **Environment Gating**: Automatic client detection (Warpcast, Base, Ethereum) to restrict access from bots or standard browsers.
+### 🚀 New Features (v1.1.0)
+
+- **Social Viral Loop:** Integrated Farcaster Frames SDK to allow users to share their "Rig Upgrade" achievements directly to Warpcast, creating an organic viral loop.
+- **Onchain Identity:** Replaced standard wallet addresses with **Basename** resolution (e.g., `user.base.eth`), aligning with the Base Ecosystem identity standard.
 
 ## ⛓ Smart Contracts
 
