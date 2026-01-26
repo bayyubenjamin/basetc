@@ -2,73 +2,81 @@
 "use client";
 
 import { type FC } from "react";
-import { sdk } from "@farcaster/miniapp-sdk";
+import Image from "next/image";
 
 interface ClaimPopupProps {
-  open: boolean;
-  amount: string;
-  txHash?: string;
   onClose: () => void;
+  onClaim: () => void;
 }
 
-export const ClaimPopup: FC<ClaimPopupProps> = ({ open, amount, txHash, onClose }) => {
-  if (!open) return null;
-
-  const handleShare = () => {
-    // KATA-KATA VIRAL UNTUK POST
-    const text = `I just harvested ${amount} $BaseTC from my mining rig! ⛏️💰\n\nReal yield on Base. Start your factory now! 👇\n\n#BaseTC #BuildOnBase #HarvestDay`;
-    const embed = "https://basetc.vercel.app"; // Ganti dengan URL frame kamu
-    const url = `https://warpcast.com/~/compose?text=${encodeURIComponent(text)}&embeds[]=${encodeURIComponent(embed)}`;
-
-    try {
-      sdk.actions.openUrl(url);
-    } catch {
-      window.open(url, "_blank");
-    }
-  };
-
+const ClaimPopup: FC<ClaimPopupProps> = ({ onClose, onClaim }) => {
   return (
     <>
-      {/* Backdrop */}
-      <div 
-        className="fixed inset-0 z-[1100] bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
+      <div
+        className="fixed inset-0 z-40"
         onClick={onClose}
+        style={{
+          background: "rgba(0,0,0,.45)",
+          backdropFilter: "blur(2px)",
+          WebkitBackdropFilter: "blur(2px)",
+        }}
       />
-      
-      {/* Modal Content */}
-      <div className="fixed inset-0 z-[1200] grid place-items-center p-4 pointer-events-none">
-        <div className="pointer-events-auto w-full max-w-sm rounded-3xl bg-white text-[var(--text)] shadow-2xl border border-[color:rgba(0,0,0,.06)] scale-100 animate-in zoom-in-95 duration-200 overflow-hidden">
-          
-          {/* Header Image / Icon */}
-          <div className="bg-gradient-to-b from-green-50 to-white p-6 pb-2 grid place-items-center">
-             <div className="h-20 w-20 rounded-full bg-green-100 text-green-600 grid place-items-center text-4xl shadow-inner border-4 border-white">
-                🤑
-             </div>
-          </div>
-
-          <div className="p-6 pt-2 flex flex-col items-center text-center">
-            <h3 className="text-2xl font-black text-gray-800 mb-1">HARVESTED!</h3>
-            <p className="text-sm text-gray-500 font-medium mb-4">Rewards secured in your wallet</p>
-            
-            <div className="bg-green-50/50 border border-green-100 rounded-xl py-3 px-6 mb-6 w-full">
-              <span className="block text-xs text-green-600 font-bold uppercase tracking-wider mb-1">Total Amount</span>
-              <span className="block text-3xl font-black text-green-700 tracking-tight">{amount}</span>
-            </div>
-            
-            <div className="flex flex-col gap-3 w-full">
-              {/* TOMBOL SHARE (VIRAL) */}
-              <button
-                onClick={handleShare}
-                className="w-full px-4 py-3.5 rounded-xl bg-[#855DCD] text-white font-bold text-sm hover:opacity-90 active:scale-[0.98] shadow-lg shadow-purple-200 flex items-center justify-center gap-2"
+      <div className="fixed inset-0 z-50 grid place-items-center p-4">
+        <div
+          className="w-full max-w-sm fin-card fin-card-trans neu rounded-2xl"
+          style={{
+            background: "rgba(255,255,255,.78)",
+            backdropFilter: "blur(14px)",
+            WebkitBackdropFilter: "blur(14px)",
+            border: "1px solid rgba(0,0,0,.06)",
+            color: "var(--text)",
+          }}
+        >
+          <div className="p-5 text-center">
+            <div className="flex justify-center">
+              <div
+                className="neu-inner rounded-xl p-3"
+                style={{ background: "linear-gradient(145deg,#ffffff,#eaf1ff)" }}
               >
-                <span>🚀 Share on Warpcast</span>
+                <Image
+                  src="/img/vga_basic.png"
+                  alt="Basic Rig"
+                  width={96}
+                  height={96}
+                  className="object-contain"
+                />
+              </div>
+            </div>
+
+            <h2 className="text-xl font-bold mt-4" style={{ color: "var(--text)" }}>
+              BaseTC Console!
+            </h2>
+            <p
+              className="text-sm mt-2 mb-6 font-semibold"
+              style={{ color: "var(--muted)" }}
+            >
+              Claim your free Basic Rig to start mining on the BaseTC Console.
+            </p>
+
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={onClaim}
+                className="w-full rounded-md px-4 py-3 text-sm font-semibold fin-btn neu-btn"
+              >
+                Go to Market to Claim
               </button>
 
               <button
                 onClick={onClose}
-                className="w-full px-4 py-3.5 rounded-xl border border-gray-200 text-gray-600 font-semibold text-sm hover:bg-gray-50 active:scale-[0.98]"
+                className="w-full rounded-md px-4 py-2 text-sm font-semibold"
+                style={{
+                  background: "linear-gradient(145deg, rgba(255,255,255,.9), rgba(234,241,255,.9))",
+                  border: "1px solid rgba(0,0,0,.06)",
+                  boxShadow: "4px 4px 8px rgba(0,0,0,.10), -4px -4px 8px rgba(255,255,255,.9), inset 0 0 0 1px rgba(255,255,255,.5)",
+                  color: "var(--text)",
+                }}
               >
-                Close & Keep Mining
+                Maybe Later
               </button>
             </div>
           </div>
