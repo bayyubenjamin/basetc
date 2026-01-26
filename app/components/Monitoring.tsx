@@ -22,6 +22,8 @@ import {
   chainId as BASE_CHAIN_ID,
 } from "../lib/web3Config";
 import { formatUnits } from "viem";
+import confetti from "canvas-confetti"; // [ADD] Visual Efek
+import ClaimPopup from "./ClaimPopup"; // [ADD] Popup Viral Share
 
 /* ======================
    Utils & Constants
@@ -134,6 +136,10 @@ const Monitoring: FC = () => {
   const [popupOpen, setPopupOpen] = useState(false);
   const [popupMsg, setPopupMsg] = useState("");
 
+  // [ADD] Viral Harvest State
+  const [showClaimPopup, setShowClaimPopup] = useState(false);
+  const [lastClaimAmount, setLastClaimAmount] = useState("0");
+
   // Live mining
   const [liveBaseStart, setLiveBaseStart] = useState<number>(0);
   const [liveStartTs, setLiveStartTs] = useState<number>(0);
@@ -165,6 +171,34 @@ const Monitoring: FC = () => {
     const timestamp = new Date().toLocaleTimeString('en-US', { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
     setTerminalLogs((prev) => [...prev, `[${timestamp}] ${message}`].slice(-300));
   };
+
+  // [ADD] Confetti Function
+  function fireConfetti() {
+    const duration = 3000;
+    const end = Date.now() + duration;
+    const colors = ['#26ccff', '#a25afd', '#ff5e7e', '#88ff5a'];
+
+    (function frame() {
+      confetti({
+        particleCount: 3,
+        angle: 60,
+        spread: 55,
+        origin: { x: 0 },
+        colors: colors
+      });
+      confetti({
+        particleCount: 3,
+        angle: 120,
+        spread: 55,
+        origin: { x: 1 },
+        colors: colors
+      });
+
+      if (Date.now() < end) {
+        requestAnimationFrame(frame);
+      }
+    }());
+  }
 
   /* ======================
      NFT IDs & Balances
@@ -556,8 +590,12 @@ const Monitoring: FC = () => {
       addLog(`⬆ CLAIM +${amt.toFixed(6)} $BaseTC (epoch #${String(mine.args.e)})`);
 
       setStatusText(`Claimed: +${amt.toFixed(6)} $BaseTC`);
-      setPopupMsg(`Claim successful!\nYou received +${amt.toFixed(6)} $BaseTC.`);
-      setPopupOpen(true);
+      
+      // [ADD] Trigger Viral Effect
+      setLastClaimAmount(`${amt.toFixed(6)} $BaseTC`);
+      fireConfetti();
+      setShowClaimPopup(true);
+
       triggerHaptic("success"); // [UPDATE] Haptic Success
 
       await refreshAll("State updated after claim.");
@@ -906,7 +944,16 @@ const Monitoring: FC = () => {
 
       <div className="fin-bottom-space" />
       <LoadingOverlay show={loading || busy} label={statusText || "Processing…"} />
+      
+      {/* Generic Info Popup */}
       <CenterPopup open={popupOpen} message={popupMsg} onOK={() => setPopupOpen(false)} />
+      
+      {/* [ADD] Viral Harvest Popup */}
+      <ClaimPopup 
+        open={showClaimPopup} 
+        amount={lastClaimAmount} 
+        onClose={() => setShowClaimPopup(false)} 
+      />
     </div>
   );
 };
