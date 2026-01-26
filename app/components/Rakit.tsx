@@ -12,7 +12,9 @@ import {
 import { base } from "viem/chains";
 import { formatUnits } from "viem";
 import confetti from "canvas-confetti"; 
-import sdk from "@farcaster/miniapp-sdk"; // Pastikan install ini
+// [FIX] Menggunakan named import { sdk } agar sesuai dengan miniapp-sdk.d.ts
+import { sdk } from "@farcaster/miniapp-sdk"; 
+
 import {
   rigNftAddress,
   rigNftABI,
@@ -336,7 +338,6 @@ export default function Rakit() {
 
   async function runMerge(kind: "BASIC_TO_PRO" | "PRO_TO_LEGEND") {
     setStatus(`Forging new hardware (${kind})…`);
-    // Simulasi delay sedikit biar kerasa "berat" prosesnya (psikologi UX)
     await new Promise(r => setTimeout(r, 800)); 
 
     const res = await fetch("/api/merge", {
