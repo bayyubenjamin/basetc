@@ -73,21 +73,24 @@ export default function Arena() {
 
   // --- LOGIKA BUTTON ---
   const handleApprove = () => {
+    if (!address) return; // Pastikan address ada
     writeApprove({
       address: BASETC_ADDRESS as `0x${string}`,
       abi: erc20Abi,
       functionName: "approve",
+      account: address, // PERBAIKAN: Tambahkan account
       args: [ARENA_ADDRESS as `0x${string}`, parseEther("100000")],
       chain: base,
     });
   };
 
   const handleCreate = () => {
-    if (!betAmount) return;
+    if (!betAmount || !address) return; // Pastikan address ada
     writeCreate({
       address: ARENA_ADDRESS as `0x${string}`,
       abi: ARENA_ABI,
       functionName: "createLobby",
+      account: address, // PERBAIKAN: Tambahkan account
       args: [parseEther(betAmount)],
       chain: base,
     });
@@ -98,10 +101,12 @@ export default function Arena() {
         handleApprove();
         return;
     }
+    if (!address) return; // Pastikan address ada
     writeJoin({
       address: ARENA_ADDRESS as `0x${string}`,
       abi: ARENA_ABI,
       functionName: "joinLobby",
+      account: address, // PERBAIKAN: Tambahkan account
       args: [id],
       chain: base,
     });
