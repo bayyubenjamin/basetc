@@ -7,15 +7,13 @@ import { base } from "viem/chains";
 import { Loader2, Swords, Trophy, Shield } from "lucide-react";
 import confetti from "canvas-confetti";
 
-// KITA PAKE CONFIG TERPUSAT (CFG) AGAR RAPI
 import { CFG } from "../lib/web3Config"; 
 
-// Definisikan variabel dari CFG
+// SETUP CONFIG
 const ARENA_ADDRESS = CFG.addresses.ARENA;
 const ARENA_ABI = CFG.abis.arena;
 const BASETC_ADDRESS = CFG.addresses.BASETC;
 
-// ABI Minimal untuk Cek Saldo & Approve Token BaseTC
 const erc20Abi = [
   { type: "function", name: "allowance", stateMutability: "view", inputs: [{type:"address"},{type:"address"}], outputs: [{ type: "uint256" }] },
   { type: "function", name: "approve",  stateMutability: "nonpayable", inputs: [{type:"address"},{type:"uint256"}], outputs: [{ type: "bool" }] },
@@ -23,7 +21,7 @@ const erc20Abi = [
 ] as const;
 
 export default function Arena() {
-  const { address, chainId } = useAccount();
+  const { address } = useAccount(); // chainId tidak wajib diambil jika sudah di config
   const [betAmount, setBetAmount] = useState<string>("10");
 
   // --- BACA DATA KONTRAK ---
@@ -31,7 +29,9 @@ export default function Arena() {
     address: ARENA_ADDRESS as `0x${string}`,
     abi: ARENA_ABI,
     functionName: "nextLobbyId",
-    watch: true,
+    query: { 
+      refetchInterval: 3000 // Auto refresh 3 detik
+    }
   });
 
   const { data: allowance, refetch: refetchAllowance } = useReadContract({
@@ -53,12 +53,12 @@ export default function Arena() {
   const { writeContract: writeCreate, data: hashCreate, isPending: isPendingCreate } = useWriteContract();
   const { writeContract: writeJoin, data: hashJoin, isPending: isPendingJoin } = useWriteContract();
 
-  // --- TUNGGU TRANSAKSI SELESAI ---
+  // --- TUNGGU TRANSAKSI ---
   const { isSuccess: isSuccessApprove } = useWaitForTransactionReceipt({ hash: hashApprove });
   const { isSuccess: isSuccessCreate } = useWaitForTransactionReceipt({ hash: hashCreate });
   const { isSuccess: isSuccessJoin } = useWaitForTransactionReceipt({ hash: hashJoin });
 
-  // Efek Samping: Refresh data & Efek Visual
+  // Efek Samping
   useEffect(() => {
     if (isSuccessApprove) refetchAllowance();
     if (isSuccessCreate || isSuccessJoin) {
@@ -69,29 +69,34 @@ export default function Arena() {
     }
   }, [isSuccessApprove, isSuccessCreate, isSuccessJoin, refetchAllowance]);
 
-  // --- LOGIKA BUTTON ---
+  // --- LOGIKA BUTTON (FIXED: Tambah 'account: address') ---
+  
   const handleApprove = () => {
+    if (!address) return; // Wajib cek address ada
     writeApprove({
       address: BASETC_ADDRESS as `0x${string}`,
       abi: erc20Abi,
       functionName: "approve",
       args: [ARENA_ADDRESS as `0x${string}`, parseEther("100000")],
       chain: base,
+      account: address, // <--- INI SOLUSI ERRORNYA
     });
   };
 
   const handleCreate = () => {
-    if (!betAmount) return;
+    if (!address || !betAmount) return;
     writeCreate({
       address: ARENA_ADDRESS as `0x${string}`,
       abi: ARENA_ABI,
       functionName: "createLobby",
       args: [parseEther(betAmount)],
       chain: base,
+      account: address, // <--- WAJIB DIISI
     });
   };
 
   const handleJoin = (id: bigint, amount: bigint) => {
+    if (!address) return;
     if (!allowance || allowance < amount) {
         handleApprove();
         return;
@@ -102,6 +107,7 @@ export default function Arena() {
       functionName: "joinLobby",
       args: [id],
       chain: base,
+      account: address, // <--- WAJIB DIISI
     });
   };
 
@@ -124,7 +130,7 @@ export default function Arena() {
         </div>
       </div>
 
-      {/* CARD BUAT TANTANGAN */}
+      {/* CARD CREATE */}
       <section className="fin-card p-5 mb-6 neu bg-gradient-to-br from-gray-900 to-gray-800 text-white border-none shadow-xl">
         <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
             <Shield size={18} className="text-blue-400"/> Create Challenge
@@ -164,7 +170,7 @@ export default function Arena() {
         <p className="text-[10px] text-gray-400 mt-2 text-center opacity-70">5% Fee goes to treasury. Fair RNG on-chain.</p>
       </section>
 
-      {/* LIST ARENA AKTIF */}
+      {/* LIST ARENA */}
       <div className="mb-4 flex items-center justify-between">
          <h3 className="font-bold text-[var(--text)] text-lg">Active Lobbies</h3>
          <span className="text-[10px] bg-red-100 text-red-700 px-2 py-0.5 rounded-full animate-pulse border border-red-200">LIVE</span>
@@ -190,9 +196,7 @@ export default function Arena() {
   );
 }
 
-// Sub-komponen untuk menampilkan list lobby dengan efisien
 function LobbyList({ maxId, onJoin, isPending, myAddress }: { maxId: number, onJoin: any, isPending: boolean, myAddress?: string }) {
-    // Ambil 10 lobby terakhir agar tidak berat
     const startId = Math.max(1, maxId - 10);
     const ids = Array.from({ length: maxId - startId }, (_, i) => maxId - 1 - i);
 
@@ -206,15 +210,15 @@ function LobbyList({ maxId, onJoin, isPending, myAddress }: { maxId: number, onJ
 }
 
 function LobbyItem({ id, onJoin, isPending, myAddress }: { id: bigint, onJoin: any, isPending: boolean, myAddress?: string }) {
-    // Panggil fungsi 'lobbies' dari kontrak
     const { data: lobby } = useReadContract({
         address: ARENA_ADDRESS as `0x${string}`,
         abi: ARENA_ABI,
         functionName: "lobbies",
         args: [id],
+        query: { refetchInterval: 5000 }
     });
 
-    if (!lobby || !lobby[2]) return null; // [2] adalah 'active'. Jika false, sembunyikan.
+    if (!lobby || !lobby[2]) return null; 
 
     const isMe = myAddress && lobby[0].toLowerCase() === myAddress.toLowerCase();
 
