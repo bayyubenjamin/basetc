@@ -7,10 +7,9 @@ import { base } from "viem/chains";
 import { Loader2, Swords, Trophy, Shield } from "lucide-react";
 import confetti from "canvas-confetti";
 
-// KITA PAKE CONFIG TERPUSAT (CFG) AGAR RAPI
+// CONFIG TERPUSAT
 import { CFG } from "../lib/web3Config"; 
 
-// Definisikan variabel dari CFG
 const ARENA_ADDRESS = CFG.addresses.ARENA;
 const ARENA_ABI = CFG.abis.arena;
 const BASETC_ADDRESS = CFG.addresses.BASETC;
@@ -26,12 +25,15 @@ export default function Arena() {
   const { address, chainId } = useAccount();
   const [betAmount, setBetAmount] = useState<string>("10");
 
-  // --- BACA DATA KONTRAK ---
+  // --- BACA DATA KONTRAK (FIXED: Ganti watch:true dengan refetchInterval) ---
   const { data: nextLobbyId } = useReadContract({
     address: ARENA_ADDRESS as `0x${string}`,
     abi: ARENA_ABI,
     functionName: "nextLobbyId",
-    watch: true,
+    // GANTI watch: true JADI INI:
+    query: { 
+      refetchInterval: 3000 // Refresh setiap 3 detik
+    }
   });
 
   const { data: allowance, refetch: refetchAllowance } = useReadContract({
@@ -190,9 +192,8 @@ export default function Arena() {
   );
 }
 
-// Sub-komponen untuk menampilkan list lobby dengan efisien
+// Sub-komponen untuk menampilkan list lobby
 function LobbyList({ maxId, onJoin, isPending, myAddress }: { maxId: number, onJoin: any, isPending: boolean, myAddress?: string }) {
-    // Ambil 10 lobby terakhir agar tidak berat
     const startId = Math.max(1, maxId - 10);
     const ids = Array.from({ length: maxId - startId }, (_, i) => maxId - 1 - i);
 
@@ -212,6 +213,8 @@ function LobbyItem({ id, onJoin, isPending, myAddress }: { id: bigint, onJoin: a
         abi: ARENA_ABI,
         functionName: "lobbies",
         args: [id],
+        // Auto-refresh status lobby juga
+        query: { refetchInterval: 5000 } 
     });
 
     if (!lobby || !lobby[2]) return null; // [2] adalah 'active'. Jika false, sembunyikan.
