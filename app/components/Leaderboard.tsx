@@ -5,7 +5,6 @@ import { useState, useEffect, useCallback } from "react";
 import Image from "next/image";
 import EmptyState from "./EmptyState";
 
-
 type LeaderboardItem = {
   rank: number;
   fid: number;
@@ -95,13 +94,22 @@ const Leaderboard = () => {
     };
   }, [refreshAllData]);
 
-  // [UPDATE] Fungsi Share ke Warpcast
+  // [UPDATE: GG Feature] Fungsi Share ke Warpcast dengan Dynamic Frame v2
   const handleShareRank = () => {
     if (!myRankData) return;
-    const text = `I am ranked #${myRankData.rank} on BaseTC with ${myRankData.total_points} points! ⛏️\n\nCan you beat my rig?`;
-    // Ganti URL di bawah ini dengan URL frame/app Anda yang sebenarnya
-    const url = "https://basetc.vercel.app"; 
-    const warpcastUrl = `https://warpcast.com/~/compose?text=${encodeURIComponent(text)}&embeds[]=${encodeURIComponent(url)}`;
+    
+    const rank = myRankData.rank;
+    const points = myRankData.total_points;
+    const username = myRankData.username || myRankData.display_name || "Miner";
+    
+    // Teks Viral agar memancing orang lain klik
+    const text = `I'm ranked #${rank} on @basetc! ⛏️\n\nFarming real yield on Base. Can you beat my score?\n\n#BuildOnBase #BaseTC`;
+    
+    // URL DYNAMIC: Mengarah ke API Frame Generator, bukan sekadar link homepage
+    const baseUrl = window.location.origin; 
+    const embedUrl = `${baseUrl}/api/frame/rank?rank=${rank}&points=${points}&username=${encodeURIComponent(username)}`;
+    
+    const warpcastUrl = `https://warpcast.com/~/compose?text=${encodeURIComponent(text)}&embeds[]=${encodeURIComponent(embedUrl)}`;
     
     window.open(warpcastUrl, "_blank");
   };
