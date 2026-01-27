@@ -2,7 +2,7 @@
 import { http, createConfig } from "wagmi";
 import { base } from "wagmi/chains"; 
 import farcaster from "@farcaster/miniapp-wagmi-connector";
-import { coinbaseWallet, injected } from "wagmi/connectors"; // [BARU] Import konektor standar
+import { coinbaseWallet, injected } from "wagmi/connectors";
 
 // ABIs
 import baseTcABI from "./abi/baseTc.json";
@@ -15,6 +15,8 @@ import referralABI from "./abi/referralClaimer.json";
 import stakingVaultABI from "./abi/stakingVault.json";
 import spinVaultABI from "./abi/spinVault.json";
 import leaderboardAuthVaultABI from "./abi/leaderboardAuthVault.json";
+// [BARU] Import ABI Arena yang tadi dibuat
+import battleArenaABI from "./abi/battleArena.json"; 
 
 // Alamat kontrak
 export const ADDR = {
@@ -31,6 +33,9 @@ export const ADDR = {
   LEADERBOARD:   "0xb962EB2C83982D78878d02fF4226718338877b91",
   SPIN_VAULT:    "0x0732aBbB38E6f1bB307F9DE42d094f65b1a416d1",
   STAKING_VAULT: "0x62cEe5e2b4621Aa02A66F6343B309d4Fe70d1cB6",
+  
+  // [BARU] Tambahkan Alamat Arena di sini
+  ARENA:         "0x9Ca1aC6453E37065bA1F3B43aC7c732Fc7292562", 
 } as const;
 
 // Konfigurasi Chain untuk Base Mainnet
@@ -51,20 +56,22 @@ export const {
     LEADERBOARD: leaderboardAddress,
     SPIN_VAULT: spinVaultAddress,
     STAKING_VAULT: stakingVaultAddress,
+    ARENA: arenaAddress, // [BARU] Export helper
 } = ADDR;
 
 export {
   baseTcABI, rigNftABI, rigSaleABI, gameCoreABI,
   rewardsVaultABI, treasuryVaultABI, referralABI,
-  stakingVaultABI, spinVaultABI, leaderboardAuthVaultABI
+  stakingVaultABI, spinVaultABI, leaderboardAuthVaultABI,
+  battleArenaABI // [BARU] Export ABI
 };
 
 export const config = createConfig({
   chains: [base],
   connectors: [
-    farcaster(), // Tetap ada untuk user Warpcast
-    coinbaseWallet({ appName: "BaseTC Console" }), // [BARU] Untuk Base App
-    injected(), // [BARU] Fallback untuk browser lain
+    farcaster(), 
+    coinbaseWallet({ appName: "BaseTC Console" }), 
+    injected(), 
   ],
   transports: {
     [base.id]: http(),
@@ -88,5 +95,6 @@ export const CFG = {
         stakingVault: stakingVaultABI,
         spinVault: spinVaultABI,
         leaderboardAuthVault: leaderboardAuthVaultABI,
+        arena: battleArenaABI, // [BARU] Masukkan ke config global
     }
 };

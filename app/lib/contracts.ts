@@ -1,10 +1,10 @@
+// app/lib/contracts.ts
 import { getContract, type PublicClient, type WalletClient } from "viem";
 import { CFG } from "./web3Config";
 
 // Wrapper helper yang aman untuk berbagai versi viem
 function wrapClient(client: PublicClient | WalletClient) {
   const c: any = client as any;
-  // Heuristik: WalletClient biasanya punya sendTransaction / request
   if (c?.sendTransaction || c?.request) {
     return { wallet: c };
   }
@@ -18,7 +18,6 @@ export function makeContracts(client: PublicClient | WalletClient) {
     gameCore: getContract({
       address: CFG.addresses.GAMECORE as `0x${string}`,
       abi: CFG.abis.gameCore as any,
-      // cast ke any supaya union {public|wallet} diterima di semua varian tipe viem
       client: wrapped as any,
     }),
     rigNft: getContract({
@@ -51,6 +50,11 @@ export function makeContracts(client: PublicClient | WalletClient) {
       abi: CFG.abis.referral as any,
       client: wrapped as any,
     }),
+    // [BARU] Panggil Arena langsung dari Config
+    arena: getContract({
+      address: CFG.addresses.ARENA as `0x${string}`,
+      abi: CFG.abis.arena as any,
+      client: wrapped as any,
+    }),
   } as const;
 }
-
