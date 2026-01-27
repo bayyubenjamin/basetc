@@ -18,7 +18,8 @@ import {
   baseTcABI,
 } from "../lib/web3Config";
 import { useFarcaster } from "../context/FarcasterProvider";
-import sdk from "@farcaster/miniapp-sdk"; // Pastikan install: npm install @farcaster/miniapp-sdk
+// PERBAIKAN DI SINI: Gunakan kurung kurawal { sdk }
+import { sdk } from "@farcaster/miniapp-sdk";
 
 /* ====== Spinning number component (tetap) ====== */
 const SpinningNumbers: FC = () => {
@@ -172,7 +173,6 @@ const Spin: FC = () => {
       setFinalResult(wonStr);
       setStatus("Spin Successful! Cast result to claim points.");
       
-      // KUNCI: Ubah state agar UI menampilkan tombol Cast
       setWaitingForCast(true);
 
       await Promise.all([refetchClaimed(), refetchNonces(), refetchVaultBalance()]);
@@ -199,11 +199,17 @@ const Spin: FC = () => {
       const embed = "https://basetc.xyz"; 
       const castUrl = `https://warpcast.com/~/compose?text=${encodeURIComponent(text)}&embeds[]=${encodeURIComponent(embed)}`;
 
-      // 1. Buka Composer Warpcast
-      sdk.actions.openUrl(castUrl);
+      // 1. Buka Composer Warpcast menggunakan sdk.actions
+      if (sdk && sdk.actions) {
+        // Gunakan openUrl karena composeCast mungkin tidak tersedia di semua versi atau context
+        // Atau gunakan sdk.actions.openUrl(castUrl) jika composeCast bermasalah
+        await sdk.actions.openUrl(castUrl);
+      } else {
+         // Fallback jika SDK gagal load
+         window.open(castUrl, '_blank');
+      }
 
       // 2. Claim Points (Optimistic Update)
-      // Asumsinya user benar-benar melakukan post setelah composer terbuka.
       setStatus("Claiming points...");
       
       const res = await fetch("/api/points/spin", {
@@ -215,7 +221,7 @@ const Spin: FC = () => {
       if (!res.ok) throw new Error("Failed to add points");
 
       setPointsClaimed(true);
-      setWaitingForCast(false); // Selesai
+      setWaitingForCast(false); 
       setStatus("Points claimed successfully!");
 
     } catch (e: any) {
