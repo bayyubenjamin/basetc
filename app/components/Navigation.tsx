@@ -2,8 +2,8 @@
 import type { FC } from "react";
 import { Activity, Hammer, ShoppingCart, User, Swords, type LucideIcon } from "lucide-react";
 
-// Menambahkan 'arena' ke tipe TabName
-export type TabName = "monitoring" | "rakit" | "market" | "profil" | "arena";
+// PERBAIKAN: Tambahkan 'event' ke dalam tipe union TabName di bawah ini
+export type TabName = "monitoring" | "rakit" | "market" | "profil" | "arena" | "event";
 
 interface NavItem { 
   id: TabName; 
@@ -14,9 +14,12 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { id: "monitoring", label: "Home",     Icon: Activity },
   { id: "rakit",      label: "Build",    Icon: Hammer },
-  { id: "arena",      label: "Battle",   Icon: Swords }, // <--- Menu Baru
+  { id: "arena",      label: "Battle",   Icon: Swords }, 
   { id: "market",     label: "Market",   Icon: ShoppingCart },
   { id: "profil",     label: "Profile",  Icon: User },
+  // Catatan: Jika Anda ingin tab "Event" muncul sebagai tombol navigasi di bawah,
+  // Anda bisa menambahkannya ke sini (perlu import icon yang sesuai):
+  // { id: "event", label: "Event", Icon: Activity }, 
 ];
 
 const COLORS = {
