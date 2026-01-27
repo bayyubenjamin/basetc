@@ -3,7 +3,6 @@
 
 import { useEffect, useMemo, useState, Suspense } from "react";
 import { useAccount } from "wagmi";
-// HAPUS import Providers dan FarcasterProvider karena sudah ada di layout
 import { useFarcaster } from "../context/FarcasterProvider"; 
 import Navigation, { type TabName } from "../components/Navigation";
 import Monitoring from "../components/Monitoring";
@@ -11,6 +10,7 @@ import Rakit from "../components/Rakit";
 import Market from "../components/Market";
 import Profil from "../components/Profil";
 import Event from "../components/Event";
+import Arena from "../components/Arena"; // <--- IMPORT BARU
 import FidInput from "../components/FidInput";
 import BackfillNotification from "../components/BackfillNotification";
 import ClaimPopup from "../components/ClaimPopup"; 
@@ -58,7 +58,8 @@ function MainApp() {
     try {
       const url = new URL(window.location.href);
       const q = (url.searchParams.get("tab") || "").toLowerCase();
-      const validTabs: TabName[] = ["monitoring", "rakit", "market", "profil", "event"];
+      // UPDATE: Tambahkan "arena" ke daftar validTabs
+      const validTabs: TabName[] = ["monitoring", "rakit", "arena", "market", "profil", "event"];
       const fromQuery = validTabs.includes(q as TabName) ? (q as TabName) : null;
       const fromStorage = localStorage.getItem(TAB_KEY) as TabName;
       const initial = fromQuery || (validTabs.includes(fromStorage) ? fromStorage : DEFAULT_TAB);
@@ -88,6 +89,7 @@ function MainApp() {
   const content = useMemo(() => {
     switch (activeTab) {
       case "rakit": return <Rakit />;
+      case "arena": return <Arena />; // <--- LOGIKA SWITCH BARU
       case "market": return <Market />;
       case "profil": return <Profil />;
       case "event": return <Event />;
