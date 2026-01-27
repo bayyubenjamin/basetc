@@ -1,103 +1,82 @@
 "use client";
-import type { FC } from "react";
-import { Activity, Hammer, ShoppingCart, User, Swords, Calendar, type LucideIcon } from "lucide-react";
 
-// Tipe TabName sudah mencakup 'event'
-export type TabName = "monitoring" | "rakit" | "market" | "profil" | "arena" | "event";
+import { usePathname, useRouter } from "next/navigation";
+import { Home, Pickaxe, Swords, Trophy, User } from "lucide-react";
 
-interface NavItem { 
-  id: TabName; 
-  label: string; 
-  Icon: LucideIcon; 
-}
+export default function Navigation() {
+  const pathname = usePathname();
+  const router = useRouter();
 
-const NAV_ITEMS: NavItem[] = [
-  { id: "monitoring", label: "Home",     Icon: Activity },
-  { id: "rakit",      label: "Build",    Icon: Hammer },
-  { id: "arena",      label: "Battle",   Icon: Swords }, 
-  { id: "market",     label: "Market",   Icon: ShoppingCart },
-  { id: "event",      label: "Event",    Icon: Calendar }, // <--- SUDAH DIKEMBALIKAN
-  { id: "profil",     label: "Profile",  Icon: User },
-];
+  const navItems = [
+    { name: "Home", icon: Home, path: "/" },
+    { name: "Mine", icon: Pickaxe, path: "/rakit" }, // Asumsi path untuk Rakit/Mining
+    { name: "Arena", icon: Swords, path: "/arena" }, // Asumsi path untuk Arena
+    { name: "Rank", icon: Trophy, path: "/leaderboard" },
+    { name: "Profile", icon: User, path: "/profile" },
+  ];
 
-const COLORS = {
-  active: "var(--accent)",
-  inactive: "var(--muted)",
-  labelActive: "var(--text)",
-  labelInactive: "var(--muted)",
-};
-
-const ICON_DIM = 18; 
-const ICON_BOX = 28; 
-
-const Navigation: FC<{ activeTab: TabName; setActiveTab: (t: TabName) => void; }>
-= ({ activeTab, setActiveTab }) => {
   return (
-    <nav
-      className="fin-bottom-nav"
-      role="navigation"
-      aria-label="Main navigation"
-      style={{
-        position: "fixed",
-        left: "50%",
-        transform: "translateX(-50%)",
-        bottom: 20,
-        width: "min(calc(100% - 20px), 980px)",
-        paddingLeft: "max(14px, env(safe-area-inset-left))",
-        paddingRight: "max(14px, env(safe-area-inset-right))",
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        background: "linear-gradient(145deg,#ffffff,#eaf1ff)",
-        border: "1px solid rgba(0,0,0,.06)",
-        borderRadius: 28,
-        boxShadow: "4px 4px 10px rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.05)",
-        backdropFilter: "blur(14px)",
-        WebkitBackdropFilter: "blur(14px)",
-        zIndex: 9999,
-      }}
-    >
-      {NAV_ITEMS.map((item) => {
-        const isActive = item.id === activeTab;
-        const IconComponent = item.Icon;
+    <div className="fixed bottom-0 left-0 right-0 z-50">
+      {/* Gradient Fade di atas Navigasi agar transisi halus */}
+      <div className="absolute bottom-full left-0 right-0 h-12 bg-gradient-to-t from-black to-transparent pointer-events-none" />
 
-        return (
-          <button
-            key={item.id}
-            type="button"
-            onClick={() => setActiveTab(item.id)}
-            className="fin-nav-tab relative overflow-hidden focus:outline-none"
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              gap: 4,
-              padding: "8px 0 10px",
-              flex: 1,
-              color: isActive ? COLORS.labelActive : COLORS.labelInactive,
-            }}
-          >
-            <span
-              className="relative grid place-items-center rounded-full transition-all duration-200"
-              style={{
-                width: ICON_BOX,
-                height: ICON_BOX,
-                background: isActive ? "rgba(43,123,255,.14)" : "rgba(10,30,60,.05)",           
-                border: isActive ? "1px solid rgba(43,123,255,.30)" : "1px solid rgba(0,0,0,.06)",
-                color: isActive ? COLORS.active : COLORS.inactive,
-              }}
-            >
-              <IconComponent size={ICON_DIM} strokeWidth={2} />
-            </span>
+      {/* Main Container - Diperkecil padding-nya (pb-5 pt-2) */}
+      <nav className="bg-[#0a0a0a]/90 backdrop-blur-xl border-t border-white/10 pb-5 pt-2 px-2 shadow-2xl shadow-black">
+        <ul className="flex justify-between items-center max-w-md mx-auto relative">
+          
+          {navItems.map((item) => {
+            const isActive = pathname === item.path;
+            const Icon = item.icon;
 
-            <span style={{ fontSize: 10, fontWeight: 700, opacity: isActive ? 1 : 0.7 }}>
-              {item.label}
-            </span>
-          </button>
-        );
-      })}
-    </nav>
+            return (
+              <li key={item.name} className="flex-1">
+                <button
+                  onClick={() => router.push(item.path)}
+                  className={`w-full flex flex-col items-center justify-center gap-0.5 py-1 transition-all duration-300 relative group ${
+                    isActive ? "text-white" : "text-gray-500 hover:text-gray-300"
+                  }`}
+                >
+                  {/* Active Indicator (Glow Background) */}
+                  {isActive && (
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-10 h-10 bg-red-600/20 rounded-full blur-md -z-10 animate-pulse" />
+                  )}
+
+                  {/* Icon Wrapper */}
+                  <div
+                    className={`relative p-1.5 rounded-xl transition-all duration-300 ${
+                      isActive
+                        ? "bg-gradient-to-br from-red-600 to-red-800 shadow-lg shadow-red-900/40 translate-y-[-2px]"
+                        : "bg-transparent group-hover:bg-white/5"
+                    }`}
+                  >
+                    <Icon
+                      size={20} // Ukuran ikon diperkecil agar tidak terlalu besar
+                      strokeWidth={isActive ? 2.5 : 2}
+                      className={`transition-transform duration-300 ${
+                        isActive ? "scale-105" : "group-hover:scale-110"
+                      }`}
+                    />
+                  </div>
+
+                  {/* Label Text */}
+                  <span
+                    className={`text-[10px] font-medium tracking-wide transition-all duration-300 ${
+                      isActive ? "text-red-100 opacity-100 font-bold" : "opacity-70 group-hover:opacity-100"
+                    }`}
+                  >
+                    {item.name}
+                  </span>
+                  
+                  {/* Active Dot di bawah */}
+                  {isActive && (
+                    <span className="absolute -bottom-1 w-1 h-1 bg-red-500 rounded-full shadow-[0_0_8px_2px_rgba(239,68,68,0.6)]" />
+                  )}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </nav>
+    </div>
   );
-};
-
-export default Navigation;
+}
