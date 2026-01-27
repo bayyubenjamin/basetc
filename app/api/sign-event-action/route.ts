@@ -1,18 +1,14 @@
 // app/api/sign-event-action/route.ts
 import { NextResponse } from "next/server";
 import { privateKeyToAccount } from "viem/accounts";
-import { createClient } from "@supabase/supabase-js";
 import { stakingVaultAddress, spinVaultAddress } from "../../lib/web3Config";
 import { parseEther } from "viem";
 
 export const runtime = "nodejs";
 
 const CHAIN_ID = Number(process.env.NEXT_PUBLIC_CHAIN_ID || 8453);
-const SUPABASE_URL =
-  process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-// --- EIP-712 Domains (must match contracts) ---
+// --- EIP-712 Domains ---
 const STAKING_VAULT_DOMAIN = {
   name: "StakingVault",
   version: "1",
@@ -70,7 +66,7 @@ export async function POST(req: Request) {
     const account = privateKeyToAccount(pk);
 
     const body = await req.json();
-    const { vault, action, user, nonce, deadline, amount, lockType, fid } = body;
+    const { vault, action, user, nonce, deadline, amount, lockType } = body;
 
     if (!vault || !action || !user || !nonce || !deadline) {
       return NextResponse.json(
@@ -120,7 +116,7 @@ export async function POST(req: Request) {
         message,
       });
 
-      // --- SpinVault ---
+    // --- SpinVault ---
     } else if (vault === "spin") {
       if (action !== "claim") throw new Error("Invalid spin action");
 
@@ -135,17 +131,9 @@ export async function POST(req: Request) {
         },
       });
 
-      // --- Leaderboard Supabase integration ---
-      if (SUPABASE_URL && SUPABASE_ANON_KEY && fid) {
-        try {
-          const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-          await supabase.functions
-            .invoke("add-spin-points", { body: { fid } })
-            .catch(console.error);
-        } catch (err) {
-          console.error("Supabase leaderboard update failed:", err);
-        }
-      }
+      // NOTE: Leaderboard update logic has been removed from here.
+      // Points are now awarded via /api/points/spin after casting.
+
     } else {
       throw new Error("Invalid vault type");
     }
@@ -159,4 +147,3 @@ export async function POST(req: Request) {
     );
   }
 }
-
