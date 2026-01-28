@@ -15,27 +15,28 @@ import referralABI from "./abi/referralClaimer.json";
 import stakingVaultABI from "./abi/stakingVault.json";
 import spinVaultABI from "./abi/spinVault.json";
 import leaderboardAuthVaultABI from "./abi/leaderboardAuthVault.json";
-// [BARU] Import ABI Arena yang tadi dibuat
 import battleArenaABI from "./abi/battleArena.json"; 
+import overclockABI from "./abi/overclock.json"; // [BARU] Import ABI Overclock
 
 // Alamat kontrak
 export const ADDR = {
-  BASETC:        "0xb06c23DadcB592efC843ad8eD6B294098A5813EE",
-  RIGNFT:        "0xC3526e50924768aA2B4c1A8F16626E4fceb5EFed",
-  GAMECORE:      "0xA87687f4252e32767528bfd65489852bD061b8F8",
-  REWARDS_VAULT: "0x8f75cB6135F106C45f2B7B8841ecA92dD25e47B5",
-  RIGSALE:       "0x6704C82dbE849707fdE78123A000f019054F387D",
-  TREASURY:      "0x8eC2Ca3fdea29C1658c7ecF8b8dCE7EC09Fa7E55",
-  USDC:          "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-  REFERRAL:      "0x7aEc439c8cFd1eF09F3C57B19CC4ACF5Ad103Df2",
+  BASETC:         "0xb06c23DadcB592efC843ad8eD6B294098A5813EE",
+  RIGNFT:         "0xC3526e50924768aA2B4c1A8F16626E4fceb5EFed",
+  GAMECORE:       "0xA87687f4252e32767528bfd65489852bD061b8F8",
+  REWARDS_VAULT:  "0x8f75cB6135F106C45f2B7B8841ecA92dD25e47B5",
+  RIGSALE:        "0x6704C82dbE849707fdE78123A000f019054F387D",
+  TREASURY:       "0x8eC2Ca3fdea29C1658c7ecF8b8dCE7EC09Fa7E55",
+  USDC:           "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+  REFERRAL:       "0x7aEc439c8cFd1eF09F3C57B19CC4ACF5Ad103Df2",
 
   // for event
-  LEADERBOARD:   "0xb962EB2C83982D78878d02fF4226718338877b91",
-  SPIN_VAULT:    "0x0732aBbB38E6f1bB307F9DE42d094f65b1a416d1",
-  STAKING_VAULT: "0x62cEe5e2b4621Aa02A66F6343B309d4Fe70d1cB6",
-  
-  // [BARU] Tambahkan Alamat Arena di sini
-  ARENA:         "0x9Ca1aC6453E37065bA1F3B43aC7c732Fc7292562", 
+  LEADERBOARD:    "0xb962EB2C83982D78878d02fF4226718338877b91",
+  SPIN_VAULT:     "0x0732aBbB38E6f1bB307F9DE42d094f65b1a416d1",
+  STAKING_VAULT:  "0x62cEe5e2b4621Aa02A66F6343B309d4Fe70d1cB6",
+   
+  // New Features
+  ARENA:          "0x9Ca1aC6453E37065bA1F3B43aC7c732Fc7292562", 
+  OVERCLOCK:      "0xF3b6440466B6fab4692207c83c01BfB527FeD201", // [BARU] Alamat Overclock
 } as const;
 
 // Konfigurasi Chain untuk Base Mainnet
@@ -44,6 +45,7 @@ export const CHAIN = {
   rpcUrl: "https://mainnet.base.org", 
 } as const;
 
+// Export Helpers (Destructuring agar mudah diimport)
 export const {
     BASETC: baseTcAddress,
     RIGNFT: rigNftAddress,
@@ -56,16 +58,19 @@ export const {
     LEADERBOARD: leaderboardAddress,
     SPIN_VAULT: spinVaultAddress,
     STAKING_VAULT: stakingVaultAddress,
-    ARENA: arenaAddress, // [BARU] Export helper
+    ARENA: arenaAddress,
+    OVERCLOCK: overclockAddress, // [BARU]
 } = ADDR;
 
+// Export ABI Group
 export {
   baseTcABI, rigNftABI, rigSaleABI, gameCoreABI,
   rewardsVaultABI, treasuryVaultABI, referralABI,
   stakingVaultABI, spinVaultABI, leaderboardAuthVaultABI,
-  battleArenaABI // [BARU] Export ABI
+  battleArenaABI, overclockABI
 };
 
+// Wagmi Config
 export const config = createConfig({
   chains: [base],
   connectors: [
@@ -81,6 +86,7 @@ export const config = createConfig({
 export const chainId = CHAIN.id;
 export const BASE_CHAIN_ID = CHAIN.id;
 
+// Global Config Object (CFG)
 export const CFG = {
     ...CHAIN,
     addresses: ADDR,
@@ -95,6 +101,7 @@ export const CFG = {
         stakingVault: stakingVaultABI,
         spinVault: spinVaultABI,
         leaderboardAuthVault: leaderboardAuthVaultABI,
-        arena: battleArenaABI, // [BARU] Masukkan ke config global
+        arena: battleArenaABI,
+        overclock: overclockABI, // [BARU] Masuk ke CFG global
     }
 };
