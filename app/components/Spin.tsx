@@ -1,4 +1,3 @@
-// app/components/Spin.tsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -18,23 +17,32 @@ import {
   baseTcABI,
 } from "../lib/web3Config";
 import { useFarcaster } from "../context/FarcasterProvider";
-// PERBAIKAN DI SINI: Gunakan kurung kurawal { sdk }
 import { sdk } from "@farcaster/miniapp-sdk";
+// Imports UI Icons
+import { 
+  Trophy, Sparkles, Loader2, RefreshCw, 
+  Share2, AlertCircle, CheckCircle2, Ticket 
+} from "lucide-react";
 
-/* ====== Spinning number component (tetap) ====== */
+/* ====== Spinning Number Component (Enhanced) ====== */
 const SpinningNumbers: FC = () => {
   const [displayValue, setDisplayValue] = useState("0.000000");
 
   useEffect(() => {
     const updateNumber = () => {
-      const randomValue = Math.random() * 5;
+      // Efek visual angka acak yang lebih dinamis
+      const randomValue = Math.random() * 10; 
       setDisplayValue(randomValue.toFixed(6));
     };
-    const intervalId = setInterval(updateNumber, 50);
+    const intervalId = setInterval(updateNumber, 40); // Lebih cepat sedikit agar terlihat smooth
     return () => clearInterval(intervalId);
   }, []);
 
-  return <>{displayValue}</>;
+  return (
+    <span className="tabular-nums tracking-tighter bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600 animate-pulse">
+      {displayValue}
+    </span>
+  );
 };
 
 const Spin: FC = () => {
@@ -112,7 +120,7 @@ const Spin: FC = () => {
     setIsSpinning(true);
     setFinalResult(null);
     setPointsClaimed(false);
-    setStatus("Preparing your spin...");
+    setStatus("Preparing system...");
 
     try {
       const nonceHook = (nonceValue as bigint | undefined) ?? 0n;
@@ -120,7 +128,7 @@ const Spin: FC = () => {
       const currentNonce = (ref?.data as bigint | undefined) ?? nonceHook;
       if (currentNonce === undefined) throw new Error("Could not fetch a valid nonce.");
 
-      setStatus("Requesting signature…");
+      setStatus("Requesting security signature...");
       const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600);
       
       const sigRes = await fetch("/api/sign-event-action", {
@@ -139,7 +147,7 @@ const Spin: FC = () => {
       if (!sigRes.ok || !sigData?.signature)
         throw new Error(sigData?.error || "Failed to get signature.");
 
-      setStatus("Waiting for your confirmation...");
+      setStatus("Waiting for wallet confirmation...");
       const txHash = await writeContractAsync({
         address: spinVaultAddress,
         abi: spinVaultABI as any,
@@ -149,7 +157,7 @@ const Spin: FC = () => {
         chain: base,
       });
 
-      setStatus("Processing transaction on-chain…");
+      setStatus("Verifying on blockchain...");
       const receipt = await publicClient!.waitForTransactionReceipt({ hash: txHash });
 
       let wonStr: string | null = null;
@@ -171,7 +179,7 @@ const Spin: FC = () => {
 
       setIsSpinning(false);
       setFinalResult(wonStr);
-      setStatus("Spin Successful! Cast result to claim points.");
+      setStatus("Spin Successful!");
       
       setWaitingForCast(true);
 
@@ -190,27 +198,21 @@ const Spin: FC = () => {
     if (!fcUser?.fid || !finalResult) return;
 
     setLoading(true);
-    setStatus("Opening Farcaster...");
+    setStatus("Opening Farcaster composer...");
 
     try {
-      const text = `I just won ${finalResult} $BaseTC on @basetc! 🎰\n\nSpin daily to win rewards and climb the leaderboard.`;
+      const text = `I just won ${finalResult} BaseTC on @basetc! 🎰\n\nSpin daily to win rewards and climb the leaderboard.`;
       
-      // === UPDATE EMBED URL ===
       const embed = "https://basetc.xyz"; 
       const castUrl = `https://warpcast.com/~/compose?text=${encodeURIComponent(text)}&embeds[]=${encodeURIComponent(embed)}`;
 
-      // 1. Buka Composer Warpcast menggunakan sdk.actions
       if (sdk && sdk.actions) {
-        // Gunakan openUrl karena composeCast mungkin tidak tersedia di semua versi atau context
-        // Atau gunakan sdk.actions.openUrl(castUrl) jika composeCast bermasalah
         await sdk.actions.openUrl(castUrl);
       } else {
-         // Fallback jika SDK gagal load
          window.open(castUrl, '_blank');
       }
 
-      // 2. Claim Points (Optimistic Update)
-      setStatus("Claiming points...");
+      setStatus("Finalizing points claim...");
       
       const res = await fetch("/api/points/spin", {
         method: "POST",
@@ -222,7 +224,7 @@ const Spin: FC = () => {
 
       setPointsClaimed(true);
       setWaitingForCast(false); 
-      setStatus("Points claimed successfully!");
+      setStatus("All done! Points secured.");
 
     } catch (e: any) {
       setStatus("Error claiming points: " + e.message);
@@ -231,73 +233,144 @@ const Spin: FC = () => {
     }
   };
 
-  /* ====== UI ====== */
+  /* ====== UI RENDER ====== */
   return (
-    <div className="fin-card fin-card-trans fin-card-pad neu text-center">
-      <h2 className="text-lg font-semibold">Free Spin (every 8 hours)</h2>
-      <p className="text-sm text-neutral-400">
-        Try your luck to win $BaseTC. Spin & Cast to earn leaderboard points.
-      </p>
-
-      {/* Pool panel */}
-      <div className="mx-auto max-w-md mt-4 neu-inner rounded-xl px-4 py-3 text-left">
-        <div className="text-xs uppercase tracking-wide text-neutral-400">Spin Pool (real-time)</div>
-        <div className="mt-1 text-2xl font-semibold">
-          {poolBalanceStr} <span className="text-base text-neutral-400">$BaseTC</span>
+    <div className="relative w-full max-w-md mx-auto bg-white rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 overflow-hidden transition-all duration-300">
+      
+      {/* HEADER SECTION */}
+      <div className="bg-slate-50/80 backdrop-blur-sm p-6 border-b border-slate-100 flex justify-between items-start">
+        <div>
+           <div className="flex items-center gap-2 mb-1">
+              <div className="p-1.5 bg-yellow-100 text-yellow-600 rounded-lg">
+                <Ticket size={16} strokeWidth={2.5}/>
+              </div>
+              <h2 className="text-lg font-black text-slate-800 tracking-tight">DAILY SPIN</h2>
+           </div>
+           <p className="text-xs text-slate-500 font-medium">Reset every 8 hours. Try your luck!</p>
+        </div>
+        
+        {/* POOL BADGE */}
+        <div className="text-right">
+            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Prize Pool</div>
+            <div className="font-mono font-bold text-slate-800 text-lg leading-none">
+                 {poolBalanceStr}
+            </div>
+            <span className="text-[10px] text-blue-500 font-bold">$TC</span>
         </div>
       </div>
 
-      {/* Spinner / Result / CTA */}
-      <div className="py-4 min-h-[120px] flex flex-col justify-center items-center gap-3">
-        {isSpinning ? (
-          <div className="text-4xl font-bold text-yellow-400">
-            <SpinningNumbers />
+      {/* GAME AREA */}
+      <div className="p-8 flex flex-col items-center justify-center min-h-[280px] relative">
+          
+          {/* Background Decor */}
+          <div className="absolute inset-0 bg-[radial-gradient(#e2e8f0_1px,transparent_1px)] [background-size:16px_16px] opacity-25 pointer-events-none" />
+
+          {/* MAIN DISPLAY */}
+          <div className="z-10 w-full text-center">
+             
+             {/* 1. STATE: SPINNING */}
+             {isSpinning && (
+                <div className="animate-in fade-in zoom-in duration-500">
+                    <div className="w-24 h-24 mx-auto mb-6 relative">
+                         <div className="absolute inset-0 rounded-full border-4 border-slate-100"></div>
+                         <div className="absolute inset-0 rounded-full border-4 border-t-blue-500 animate-spin"></div>
+                         <div className="absolute inset-0 flex items-center justify-center text-blue-500">
+                            <RefreshCw size={32} className="animate-spin-reverse" />
+                         </div>
+                    </div>
+                    <div className="text-4xl font-black mb-2 font-mono">
+                        <SpinningNumbers />
+                    </div>
+                    <p className="text-sm text-slate-400 font-medium animate-pulse">Calculating entropy...</p>
+                </div>
+             )}
+
+             {/* 2. STATE: WAITING FOR CAST (WIN) */}
+             {!isSpinning && waitingForCast && finalResult && (
+                 <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                    <div className="w-20 h-20 bg-yellow-50 rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-white shadow-xl ring-4 ring-yellow-100/50">
+                        <Trophy size={40} className="text-yellow-500 animate-bounce" />
+                    </div>
+                    <h3 className="text-2xl font-black text-slate-800 mb-1">YOU WON!</h3>
+                    <div className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-br from-yellow-500 to-orange-500 mb-6">
+                        {parseFloat(finalResult).toFixed(4)} <span className="text-lg text-slate-400 font-bold">$TC</span>
+                    </div>
+
+                    <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 mb-4">
+                        <p className="text-xs text-slate-500 mb-3">Share your win to claim leaderboard points.</p>
+                        <button
+                            onClick={handleCastAndClaim}
+                            disabled={loading}
+                            className="w-full py-3.5 rounded-xl bg-slate-900 text-white font-bold text-sm shadow-lg shadow-slate-200 active:scale-[0.98] transition-all flex items-center justify-center gap-2 hover:bg-slate-800"
+                        >
+                            {loading ? <Loader2 className="animate-spin" size={18}/> : <Share2 size={18}/>}
+                            CAST & CLAIM POINTS
+                        </button>
+                    </div>
+                 </div>
+             )}
+
+             {/* 3. STATE: COMPLETED */}
+             {!isSpinning && pointsClaimed && (
+                 <div className="animate-in zoom-in duration-500 py-4">
+                    <div className="w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <CheckCircle2 size={32} className="text-emerald-500" />
+                    </div>
+                    <h3 className="text-xl font-bold text-emerald-600 mb-2">Claim Successful!</h3>
+                    <p className="text-sm text-slate-400">Points have been added to your profile.<br/>Come back next epoch.</p>
+                 </div>
+             )}
+
+             {/* 4. STATE: IDLE / START */}
+             {!isSpinning && !waitingForCast && !pointsClaimed && (
+                <div className="animate-in fade-in duration-500">
+                    <div className="mb-8">
+                        {canClaim ? (
+                            <div className="w-24 h-24 bg-blue-50 rounded-full flex items-center justify-center mx-auto border-[6px] border-white shadow-xl ring-1 ring-slate-100">
+                                <Sparkles size={40} className="text-blue-500" />
+                            </div>
+                        ) : (
+                             <div className="w-24 h-24 bg-slate-50 rounded-full flex items-center justify-center mx-auto grayscale opacity-50 border-[6px] border-white shadow-inner">
+                                <AlertCircle size={40} className="text-slate-400" />
+                            </div>
+                        )}
+                    </div>
+                    
+                    <button
+                        onClick={handleSpin}
+                        disabled={!canClaim || loading}
+                        className={`w-full py-4 rounded-xl font-bold text-sm tracking-wide shadow-xl transition-all flex items-center justify-center gap-2
+                            ${canClaim 
+                                ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:shadow-blue-200 active:scale-[0.98]" 
+                                : "bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200"
+                            }`}
+                    >
+                         {loading ? (
+                             <><Loader2 className="animate-spin" size={18}/> PROCESSING...</>
+                         ) : canClaim ? (
+                             <>START FREE SPIN <Ticket size={18} /></>
+                         ) : (
+                             "NO SPIN AVAILABLE"
+                         )}
+                    </button>
+                </div>
+             )}
           </div>
-        ) : waitingForCast && finalResult ? (
-          // STATE: Menunggu User Cast
-          <div className="animate-in fade-in zoom-in duration-300 w-full">
-             <div className="text-2xl font-bold text-yellow-400 mb-2">You won {finalResult} $BaseTC!</div>
-             <p className="text-xs text-neutral-300 mb-4">Cast your win to claim leaderboard points.</p>
-             <button
-              onClick={handleCastAndClaim}
-              disabled={loading}
-              className="w-full sm:w-auto px-6 py-3 rounded-full bg-purple-600 text-white font-bold shadow-lg hover:bg-purple-700 active:scale-95 transition-all flex items-center justify-center gap-2 mx-auto"
-            >
-              {loading ? (
-                <span>Verifying...</span>
-              ) : (
-                <>
-                  <span>✨ Cast & Claim Points</span>
-                </>
-              )}
-            </button>
-          </div>
-        ) : pointsClaimed ? (
-          // STATE: Selesai
-          <div className="text-xl font-bold text-green-400 animate-in fade-in slide-in-from-bottom-2">
-            🎉 Points Added! <br/>
-            <span className="text-sm text-neutral-400 font-normal">See you next epoch.</span>
-          </div>
-        ) : (
-          // STATE: Default (Belum Spin)
-          <button
-            onClick={handleSpin}
-            disabled={!canClaim}
-            className={`px-8 py-4 rounded-full fin-btn neu-btn text-lg font-bold disabled:opacity-50 disabled:cursor-not-allowed transition-transform active:scale-[0.98] ${
-              !canClaim ? "" : "hover:translate-y-[-1px]"
-            }`}
-          >
-            {loading ? "Processing…" : canClaim ? "Spin Now!" : "No spins available"}
-          </button>
-        )}
       </div>
 
-      {status && <p className="text-xs text-neutral-400 pt-2 animate-pulse">{status}</p>}
-
-      <div className="mt-6 text-xs text-neutral-400 space-y-1">
-        <p>• Spins increase your leaderboard points (requires Cast).</p>
-        <p>• Spin pool is funded from 10% of leftover rewards each epoch.</p>
+      {/* FOOTER / STATUS BAR */}
+      <div className="bg-slate-50 px-6 py-3 border-t border-slate-100 text-center">
+          {status ? (
+              <div className="text-[10px] font-mono font-medium text-blue-600 flex items-center justify-center gap-2 animate-pulse">
+                  <Loader2 size={10} className="animate-spin" /> {status}
+              </div>
+          ) : (
+              <p className="text-[10px] text-slate-400 font-medium">
+                  {claimed ? "Next spin available next epoch" : "Spin requires gas fee (Base Network)"}
+              </p>
+          )}
       </div>
+
     </div>
   );
 };
