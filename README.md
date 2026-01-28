@@ -1,17 +1,18 @@
 # BaseTC Console
 
-**BaseTC Console** is a Web3 **mining simulation** game designed specifically as a **Farcaster Mini App** and **Frame**. This project enables users to participate in an on-chain gamified ecosystem on the Base network, featuring activities such as Rig NFT purchasing, staking, mining, PvP Battles, and social interactions via the Farcaster protocol.
+**BaseTC Console** is a Web3 **mining simulation** game designed specifically as a **Farcaster Mini App** and **Frame**. This project enables users to participate in an on-chain gamified ecosystem on the Base network, featuring activities such as Rig NFT purchasing, staking, mining, PvP battles, and social interactions via the Farcaster protocol.
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Next.js](https://img.shields.io/badge/Next.js-14.2-black)
 ![Farcaster](https://img.shields.io/badge/Farcaster-MiniApp-purple)
-![Solidity](https://img.shields.io/badge/Solidity-^0.8.0-363636)
+![Solidity](https://img.shields.io/badge/Solidity-^0.8.24-363636)
 
 ## 📋 Table of Contents
 
 - [About the Project](#about-the-project)
 - [Architecture & Tech Stack](#architecture--tech-stack)
 - [Key Features](#key-features)
+- [Game Mechanics](#game-mechanics)
 - [Smart Contracts](#smart-contracts)
 - [Project Structure](#project-structure)
 - [Installation & Development](#installation--development)
@@ -33,36 +34,58 @@ The project is built using a modern architecture that separates **Client-Side**,
 ### Web3 & Blockchain Integration
 - **Interaction Libraries**: [Wagmi](https://wagmi.sh/) & [Viem](https://viem.sh/) for EVM interactions.
 - **Wallet Connection**: ConnectKit.
-- **Smart Contract Integration**: Ethers.js.
+- **Smart Contract Integration**: Custom Hooks & EIP-712 Typed Data Signing for secure off-chain verification (`SpinVault`).
 
 ### Farcaster Integration
 - **SDK**: `@farcaster/miniapp-sdk` for Mini App integration.
-- **Frames**: Backend support for Farcaster Frames (see `app/api/frame`).
-
-### Backend & Database
-- **BaaS**: [Supabase](https://supabase.com/) (PostgreSQL) for off-chain data storage and user management.
-- **Edge Functions**: Supabase Edge Functions for serverless logic (e.g., `add-referral-points`, `calculate-nft-usage-points`).
+- **Viral Loop**: Integrated `sdk.actions.openUrl` to trigger "Cast to Claim" flows.
 
 ## 🚀 Key Features
 
 Based on the codebase structure, here are the system's core capabilities:
 
 1.  **Mining Simulation**: The core mechanism where users manage "Rigs" to earn tokens.
-2.  **Rig Battle Arena (PvP) [NEW]**: High-frequency transaction gameplay where users wager BaseTC tokens in 1v1 battles. Winners are determined by Rig Power (NFT Tier) and on-chain RNG.
-3.  **NFT Integration**: Utilization of `RigNFT` as the primary asset within the game.
-4.  **Gamification**:
-    - **Merging**: Combining assets (`app/api/merge`).
-    - **Spinning**: Luck-based features/draws (`SpinVault`, `app/components/Spin.tsx`).
-    - **Leaderboard**: Player rankings (`app/components/Leaderboard.tsx`).
-5.  **Staking**: Asset locking mechanisms for additional yields (`StakingVault`).
-6.  **Social Referral**: A referral system integrated with Farcaster IDs (`ReferralClaimer`).
-7.  **Environment Gating**: Automatic client detection (Warpcast, Base, Ethereum) to restrict access from bots or standard browsers.
+2.  **⚔️ Battle Arena (PvP)**: A wagering system where users battle for $BaseTC using their Rig NFTs.
+3.  **⚡ Overclock Hazard**: A "push-your-luck" minigame where users overclock their rigs for massive multipliers.
+4.  **🎰 Social Spin & Cast**: Daily reward system powered by EIP-712 signatures and Farcaster social actions.
+5.  **NFT Integration**: Utilization of `RigNFT` (ERC-1155) with tiered attributes (Basic, Pro, Legend).
+6.  **Staking**: Time-locked asset staking with NFT-based yield boosts (`StakingVault`).
+7.  **Environment Gating**: Automatic client detection (Warpcast, Base, Ethereum) to restrict access from bots.
 
-### 🚀 Latest Updates (v1.2.0)
+### 🆕 New Features (v1.3.0)
 
-- **Battle Arena Integration:** Added `BattleArena.sol` and Frontend UI (`app/components/Arena.tsx`) enabling users to Create and Join Lobbies for Token wagering.
-- **Social Viral Loop:** Integrated Farcaster Frames SDK to allow users to share their achievements directly to Warpcast.
-- **Onchain Identity:** Replaced standard wallet addresses with **Basename** resolution (e.g., `user.base.eth`), aligning with the Base Ecosystem identity standard.
+- **Overclock Hazard:** A single-player risk management game. Users can increase their reward multiplier but face a growing risk of rig failure.
+- **Integrated Game Hub:** A new tabbed navigation system within the Arena component allowing seamless switching between PvP Battles and Overclocking.
+- **Battle Arena PvP:** Real-time betting lobbies where the winner takes 95% of the pot. Win probability is calculated based on **RNG + Rig Power**.
+- **Cast-to-Claim:** Users must "Cast" their spin results to Warpcast to unlock Leaderboard points, creating a strong viral loop.
+
+## 🎮 Game Mechanics
+
+### 1. Battle Arena (PvP)
+Users can create or join lobbies with fixed bet amounts (e.g., 10, 50, 100 $BaseTC).
+- **Winner Take All:** The winner receives 190% of the bet amount (Total Pot - 5% Treasury Fee).
+- **Power Calculation:** Your chance of winning increases based on the NFTs you hold:
+  - Base Power: 10
+  - Basic Rig: +1 point
+  - Pro Rig: +5 points
+  - Legend Rig: +20 points
+- **Fairness:** The battle logic uses on-chain randomness (`block.prevrandao`) combined with user power scores.
+
+### 2. Overclock Hazard
+A high-stakes minigame integrated into the Arena hub.
+- **Multiplier Levels:** Users progress through tiers (1.2x, 1.8x, 3.5x, 8.0x) by "Overclocking" their system.
+- **Risk Management:** Each level increases the chance of failure. If the system fails, the initial bet is lost.
+- **NFT Safety Boost:** Holding RigNFTs provides a safety buffer, reducing the failure risk percentage based on the rig tier.
+- **Cashout:** Users can secure their current profit at any level before the next attempt.
+
+### 3. Social Spin
+A "Spin & Cast" mechanic designed for retention and virality.
+- **Ticket System:** Users get free spins based on Epochs or Referrals.
+- **Flow:**
+  1.  **Spin:** User signs a message; the backend verifies eligibility and generates an EIP-712 signature.
+  2.  **On-Chain Claim:** User submits the signature to `SpinVault` to receive tokens.
+  3.  **Cast:** User is prompted to share the win on Farcaster.
+  4.  **Points:** Once casted, leaderboard points are credited via the MiniApp SDK.
 
 ## ⛓ Smart Contracts
 
@@ -71,14 +94,14 @@ The repository includes Solidity source code (`app/api/solidity/`) which forms t
 | Contract | Function Description |
 | :--- | :--- |
 | **BaseTC.sol** | The main ERC-20 token of the ecosystem. |
+| **BattleArena.sol** | PvP Logic, Lobby management, and Power calculation. |
+| **OverclockHazard.sol** | **(New)** Multi-level risk game logic with NFT-based safety modifiers. |
+| **SpinVault.sol** | EIP-712 Secured reward distribution for the Spin feature. |
+| **RigNFT.sol** | ERC-1155 contract with `BASIC`, `PRO`, and `LEGEND` tiers. |
+| **StakingVault.sol** | Logic for staking tokens with time-locks and NFT boosts. |
 | **GameCore.sol** | Primary game logic and interaction orchestration. |
-| **BattleArena.sol** | **[NEW]** Manages PvP lobbies, betting logic, and winner determination logic. |
-| **RigNFT.sol** | ERC-721 contract for mining rig assets. |
-| **RigSale.sol** | Mechanism for initial Rig sales/minting. |
-| **StakingVault.sol** | Logic for staking tokens or NFTs. |
-| **SpinVault.sol** | Probabilistic logic for the "Spin" feature. |
 | **ReferralClaimer.sol** | On-chain referral reward distribution. |
-| **TreasuryVault.sol** | Management of protocol treasury and revenue (Anti-Drain Protected). |
+| **TreasuryVault.sol** | Management of protocol treasury and revenue. |
 
 ## 📂 Project Structure
 
@@ -88,15 +111,29 @@ basetc-console/
 │   ├── api/             # API Routes (Next.js) & Solidity Contracts
 │   │   ├── frame/       # Endpoints for Farcaster Frames
 │   │   ├── solidity/    # Smart Contract source code
-│   │   └── ...          # Other API endpoints (user, spin, merge)
-│   ├── components/      # React UI Components (Arena, Leaderboard, Market, Rakit, etc.)
+│   │   ├── sign-event-action/ # Backend signer for EIP-712
+│   │   └── ...          
+│   ├── components/      # React UI Components
+│   │   ├── Arena.tsx    # Integrated Game Hub (PvP & Overclock)
+│   │   ├── OverclockGame.tsx # Overclock Hazard Minigame
+│   │   ├── Spin.tsx     # Spin & Cast Interface
+│   │   └── ...
 │   ├── context/         # React Context (Web3Provider, FarcasterProvider)
-│   ├── launch/          # Main application page after loading
-│   ├── lib/             # Utilities, ABIs (BattleArena, etc.), and client configuration
+│   ├── lib/             # Utilities, ABIs (JSON), and client configuration
 │   └── page.tsx         # Entry point with client detection logic
-├── public/              # Static assets (Images, SVGs)
-├── supabase/            # Supabase Configuration & Edge Functions
-│   ├── functions/       # Serverless functions (Deno/TS)
-│   └── config.toml
-├── assets/              # Additional project assets
-└── package.json         # Project dependencies
+├── public/              # Static assets
+└── supabase/            # Supabase Configuration & Edge Functions
+
+🔵 Base Ecosystem Integration
+This project is proudly built on Base L2 and designed for the Farcaster ecosystem.
+
+Tech Stack Highlights
+Network: Base Mainnet
+
+Framework: Next.js 14 + Farcaster Frames
+
+Integration: Coinbase Smart Wallet & Wagmi
+
+Track: Base Builders January Sprint
+
+Deployed and verified for the Base Builders community.
