@@ -1,6 +1,6 @@
 # BaseTC Console
 
-**BaseTC Console** is a Web3 **mining simulation** game designed specifically as a **Farcaster Mini App** and **Frame**. This project enables users to participate in an on-chain gamified ecosystem on the Base network, featuring activities such as Rig NFT purchasing, staking, mining, and social interactions via the Farcaster protocol.
+**BaseTC Console** is a Web3 **mining simulation** game designed specifically as a **Farcaster Mini App** and **Frame**. This project enables users to participate in an on-chain gamified ecosystem on the Base network, featuring activities such as Rig NFT purchasing, staking, mining, PvP Battles, and social interactions via the Farcaster protocol.
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Next.js](https://img.shields.io/badge/Next.js-14.2-black)
@@ -48,17 +48,20 @@ The project is built using a modern architecture that separates **Client-Side**,
 Based on the codebase structure, here are the system's core capabilities:
 
 1.  **Mining Simulation**: The core mechanism where users manage "Rigs" to earn tokens.
-2.  **NFT Integration**: Utilization of `RigNFT` as the primary asset within the game.
-3.  **Gamification**:
+2.  **Rig Battle Arena (PvP) [NEW]**: High-frequency transaction gameplay where users wager BaseTC tokens in 1v1 battles. Winners are determined by Rig Power (NFT Tier) and on-chain RNG.
+3.  **NFT Integration**: Utilization of `RigNFT` as the primary asset within the game.
+4.  **Gamification**:
     - **Merging**: Combining assets (`app/api/merge`).
     - **Spinning**: Luck-based features/draws (`SpinVault`, `app/components/Spin.tsx`).
     - **Leaderboard**: Player rankings (`app/components/Leaderboard.tsx`).
-4.  **Staking**: Asset locking mechanisms for additional yields (`StakingVault`).
-5.  **Social Referral**: A referral system integrated with Farcaster IDs (`ReferralClaimer`).
-6.  **Environment Gating**: Automatic client detection (Warpcast, Base, Ethereum) to restrict access from bots or standard browsers.
-### 🚀 New Features (v1.1.0)
+5.  **Staking**: Asset locking mechanisms for additional yields (`StakingVault`).
+6.  **Social Referral**: A referral system integrated with Farcaster IDs (`ReferralClaimer`).
+7.  **Environment Gating**: Automatic client detection (Warpcast, Base, Ethereum) to restrict access from bots or standard browsers.
 
-- **Social Viral Loop:** Integrated Farcaster Frames SDK to allow users to share their "Rig Upgrade" achievements directly to Warpcast, creating an organic viral loop.
+### 🚀 Latest Updates (v1.2.0)
+
+- **Battle Arena Integration:** Added `BattleArena.sol` and Frontend UI (`app/components/Arena.tsx`) enabling users to Create and Join Lobbies for Token wagering.
+- **Social Viral Loop:** Integrated Farcaster Frames SDK to allow users to share their achievements directly to Warpcast.
 - **Onchain Identity:** Replaced standard wallet addresses with **Basename** resolution (e.g., `user.base.eth`), aligning with the Base Ecosystem identity standard.
 
 ## ⛓ Smart Contracts
@@ -69,6 +72,7 @@ The repository includes Solidity source code (`app/api/solidity/`) which forms t
 | :--- | :--- |
 | **BaseTC.sol** | The main ERC-20 token of the ecosystem. |
 | **GameCore.sol** | Primary game logic and interaction orchestration. |
+| **BattleArena.sol** | **[NEW]** Manages PvP lobbies, betting logic, and winner determination logic. |
 | **RigNFT.sol** | ERC-721 contract for mining rig assets. |
 | **RigSale.sol** | Mechanism for initial Rig sales/minting. |
 | **StakingVault.sol** | Logic for staking tokens or NFTs. |
@@ -85,10 +89,10 @@ basetc-console/
 │   │   ├── frame/       # Endpoints for Farcaster Frames
 │   │   ├── solidity/    # Smart Contract source code
 │   │   └── ...          # Other API endpoints (user, spin, merge)
-│   ├── components/      # React UI Components (Leaderboard, Market, Rakit, etc.)
+│   ├── components/      # React UI Components (Arena, Leaderboard, Market, Rakit, etc.)
 │   ├── context/         # React Context (Web3Provider, FarcasterProvider)
 │   ├── launch/          # Main application page after loading
-│   ├── lib/             # Utilities, ABIs, and client configuration
+│   ├── lib/             # Utilities, ABIs (BattleArena, etc.), and client configuration
 │   └── page.tsx         # Entry point with client detection logic
 ├── public/              # Static assets (Images, SVGs)
 ├── supabase/            # Supabase Configuration & Edge Functions
@@ -96,17 +100,3 @@ basetc-console/
 │   └── config.toml
 ├── assets/              # Additional project assets
 └── package.json         # Project dependencies
-
----
-
-## 🔵 Base Ecosystem Integration
-
-This project is proudly built on **Base L2** and designed for the **Farcaster** ecosystem.
-
-### Tech Stack Highlights
-- **Network:** Base Mainnet
-- **Framework:** Next.js 14 + Farcaster Frames
-- **Integration:** Coinbase Smart Wallet & Wagmi
-- **Track:** Base Builders January Sprint
-
-> *Deployed and verified for the Base Builders community.*

@@ -1,15 +1,18 @@
+// app/components/Arena.tsx
 "use client";
 
 import { useState, useEffect } from "react";
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { formatUnits, parseEther } from "viem";
 import { base } from "viem/chains";
-import { Loader2, Swords, Shield, Info, TrendingUp, Zap, Clock } from "lucide-react";
+import { Loader2, Swords, Shield, Info, TrendingUp, Zap, Clock, Cpu, Trophy } from "lucide-react";
 import confetti from "canvas-confetti";
-
 import { CFG } from "../lib/web3Config"; 
 
-// SETUP CONFIG
+// IMPORT COMPONENT GAME BARU
+import OverclockGame from "./OverclockGame";
+
+// --- KONFIGURASI PVP ARENA (LAMA) ---
 const ARENA_ADDRESS = CFG.addresses.ARENA;
 const ARENA_ABI = CFG.abis.arena;
 const BASETC_ADDRESS = CFG.addresses.BASETC;
@@ -20,7 +23,69 @@ const erc20Abi = [
   { type: "function", name: "balanceOf", stateMutability: "view", inputs: [{type:"address"}], outputs: [{ type: "uint256" }] },
 ] as const;
 
+// ==========================================
+// MAIN COMPONENT (WRAPPER)
+// ==========================================
 export default function Arena() {
+  const [activeTab, setActiveTab] = useState<"PVP" | "OVERCLOCK">("PVP");
+
+  return (
+    <div className="min-h-screen pb-20">
+      {/* --- TAB NAVIGATION --- */}
+      <div className="px-4 pt-4 mb-6">
+        <div className="p-1 bg-gray-900/50 backdrop-blur-md border border-gray-800 rounded-2xl flex relative overflow-hidden">
+            {/* Active Indicator Background */}
+            <div 
+                className={`absolute inset-y-1 w-[calc(50%-4px)] bg-gray-800 rounded-xl shadow-lg transition-all duration-300 ease-out border border-gray-700
+                ${activeTab === "PVP" ? "left-1" : "left-[calc(50%+4px)]"}`}
+            ></div>
+
+            {/* PVP Tab Button */}
+            <button 
+                onClick={() => setActiveTab("PVP")}
+                className={`relative z-10 flex-1 py-3 text-xs font-bold rounded-xl flex items-center justify-center gap-2 transition-colors duration-200
+                ${activeTab === "PVP" ? "text-white" : "text-gray-500 hover:text-gray-300"}`}
+            >
+                <Swords size={16} className={activeTab === "PVP" ? "text-red-500" : ""} />
+                BATTLE ARENA
+            </button>
+
+            {/* Overclock Tab Button */}
+            <button 
+                onClick={() => setActiveTab("OVERCLOCK")}
+                className={`relative z-10 flex-1 py-3 text-xs font-bold rounded-xl flex items-center justify-center gap-2 transition-colors duration-200
+                ${activeTab === "OVERCLOCK" ? "text-white" : "text-gray-500 hover:text-gray-300"}`}
+            >
+                <Cpu size={16} className={activeTab === "OVERCLOCK" ? "text-blue-500" : ""} />
+                OVERCLOCK
+            </button>
+        </div>
+      </div>
+
+      {/* --- CONTENT SWITCHER --- */}
+      <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+          {activeTab === "PVP" ? <PvPView /> : <OverclockViewWrapper />}
+      </div>
+    </div>
+  );
+}
+
+// Wrapper untuk Overclock agar rapi
+function OverclockViewWrapper() {
+    return (
+        <div className="px-4">
+            <OverclockGame />
+            <div className="text-center mt-6 text-[10px] text-gray-500">
+                <p>Switch to "Battle Arena" to fight other players.</p>
+            </div>
+        </div>
+    );
+}
+
+// ==========================================
+// PVP VIEW (ORIGINAL ARENA CODE)
+// ==========================================
+function PvPView() {
   const { address } = useAccount(); 
   const [betAmount, setBetAmount] = useState<string>("10");
   const [showRules, setShowRules] = useState(false);
@@ -83,7 +148,7 @@ export default function Arena() {
       functionName: "approve",
       args: [ARENA_ADDRESS as `0x${string}`, parseEther("1000000")],
       chain: base,
-      account: address, // SUDAH ADA (PERBAIKAN BUILD)
+      account: address,
     });
   };
 
@@ -95,7 +160,7 @@ export default function Arena() {
       functionName: "createLobby",
       args: [parseEther(betAmount)],
       chain: base,
-      account: address, // SUDAH ADA (PERBAIKAN BUILD)
+      account: address,
     });
   };
 
@@ -111,7 +176,7 @@ export default function Arena() {
       functionName: "joinLobby",
       args: [id],
       chain: base,
-      account: address, // SUDAH ADA (PERBAIKAN BUILD)
+      account: address,
     });
   };
 
@@ -253,9 +318,6 @@ export default function Arena() {
                     </div>
                     <p className="font-bold text-lg text-[var(--text)]">No active battles</p>
                     <p className="text-xs mt-1 opacity-70">Be the first gladiator to enter the arena!</p>
-                    <button onClick={() => window.scrollTo({top:0, behavior:'smooth'})} className="mt-4 text-[var(--accent)] text-xs font-bold hover:underline">
-                        Create one now &uarr;
-                    </button>
                 </div>
             )}
         </div>
@@ -264,7 +326,9 @@ export default function Arena() {
   );
 }
 
-// --- SUB COMPONENTS ---
+// ==========================================
+// SUB COMPONENTS (DARI KODE ASLI)
+// ==========================================
 
 // 1. Skeleton Loading Row
 function SkeletonRow({ delay }: { delay: string }) {
