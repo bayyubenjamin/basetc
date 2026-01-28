@@ -267,9 +267,9 @@ const Spin: FC = () => {
 
           {/* MAIN DISPLAY */}
           <div className="z-10 w-full text-center">
-             
-             {/* 1. STATE: SPINNING */}
-             {isSpinning && (
+              
+              {/* 1. STATE: SPINNING */}
+              {isSpinning && (
                 <div className="animate-in fade-in zoom-in duration-500">
                     <div className="w-24 h-24 mx-auto mb-6 relative">
                          <div className="absolute inset-0 rounded-full border-4 border-slate-100"></div>
@@ -283,20 +283,20 @@ const Spin: FC = () => {
                     </div>
                     <p className="text-sm text-slate-400 font-medium animate-pulse">Calculating entropy...</p>
                 </div>
-             )}
+              )}
 
-             {/* 2. STATE: WAITING FOR CAST (WIN) */}
-             {!isSpinning && waitingForCast && finalResult && (
-                 <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-                    <div className="w-20 h-20 bg-yellow-50 rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-white shadow-xl ring-4 ring-yellow-100/50">
+              {/* 2. STATE: WAITING FOR CAST (WIN) */}
+              {!isSpinning && waitingForCast && finalResult && (
+                  <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                     <div className="w-20 h-20 bg-yellow-50 rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-white shadow-xl ring-4 ring-yellow-100/50">
                         <Trophy size={40} className="text-yellow-500 animate-bounce" />
-                    </div>
-                    <h3 className="text-2xl font-black text-slate-800 mb-1">YOU WON!</h3>
-                    <div className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-br from-yellow-500 to-orange-500 mb-6">
+                     </div>
+                     <h3 className="text-2xl font-black text-slate-800 mb-1">YOU WON!</h3>
+                     <div className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-br from-yellow-500 to-orange-500 mb-6">
                         {parseFloat(finalResult).toFixed(4)} <span className="text-lg text-slate-400 font-bold">$TC</span>
-                    </div>
+                     </div>
 
-                    <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 mb-4">
+                     <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 mb-4">
                         <p className="text-xs text-slate-500 mb-3">Share your win to claim leaderboard points.</p>
                         <button
                             onClick={handleCastAndClaim}
@@ -306,32 +306,56 @@ const Spin: FC = () => {
                             {loading ? <Loader2 className="animate-spin" size={18}/> : <Share2 size={18}/>}
                             CAST & CLAIM POINTS
                         </button>
-                    </div>
-                 </div>
-             )}
+                     </div>
+                  </div>
+              )}
 
-             {/* 3. STATE: COMPLETED */}
-             {!isSpinning && pointsClaimed && (
-                 <div className="animate-in zoom-in duration-500 py-4">
-                    <div className="w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-4">
+              {/* 3. STATE: COMPLETED */}
+              {!isSpinning && pointsClaimed && (
+                  <div className="animate-in zoom-in duration-500 py-4">
+                     <div className="w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-4">
                         <CheckCircle2 size={32} className="text-emerald-500" />
-                    </div>
-                    <h3 className="text-xl font-bold text-emerald-600 mb-2">Claim Successful!</h3>
-                    <p className="text-sm text-slate-400">Points have been added to your profile.<br/>Come back next epoch.</p>
-                 </div>
-             )}
+                     </div>
+                     <h3 className="text-xl font-bold text-emerald-600 mb-2">Claim Successful!</h3>
+                     <p className="text-sm text-slate-400">Points have been added to your profile.<br/>Come back next epoch.</p>
+                  </div>
+              )}
 
-             {/* 4. STATE: IDLE / START */}
-             {!isSpinning && !waitingForCast && !pointsClaimed && (
-                <div className="animate-in fade-in duration-500">
-                    <div className="mb-8">
+              {/* 4. STATE: IDLE / START */}
+              {!isSpinning && !waitingForCast && !pointsClaimed && (
+                 <div className="animate-in fade-in duration-500">
+                    <div className="mb-6">
                         {canClaim ? (
-                            <div className="w-24 h-24 bg-blue-50 rounded-full flex items-center justify-center mx-auto border-[6px] border-white shadow-xl ring-1 ring-slate-100">
+                            <div className="w-24 h-24 bg-blue-50 rounded-full flex items-center justify-center mx-auto border-[6px] border-white shadow-xl ring-1 ring-slate-100 mb-4">
                                 <Sparkles size={40} className="text-blue-500" />
                             </div>
                         ) : (
-                             <div className="w-24 h-24 bg-slate-50 rounded-full flex items-center justify-center mx-auto grayscale opacity-50 border-[6px] border-white shadow-inner">
-                                <AlertCircle size={40} className="text-slate-400" />
+                            <div className="flex flex-col items-center gap-4 mb-4">
+                                <div className="w-24 h-24 bg-slate-50 rounded-full flex items-center justify-center border-[6px] border-white shadow-inner relative">
+                                    {claimed ? (
+                                        <div className="relative">
+                                            <Trophy size={32} className="text-slate-300" />
+                                            <div className="absolute -bottom-1 -right-1 bg-slate-200 rounded-full p-1 border-2 border-white">
+                                                <CheckCircle2 size={12} className="text-slate-500" />
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <AlertCircle size={32} className="text-slate-300" />
+                                    )}
+                                </div>
+                                
+                                <div className="text-center px-2">
+                                    <h3 className="text-sm font-black text-slate-700 uppercase tracking-wider mb-2">
+                                        {claimed ? "Limit Reached" : "System Standby"}
+                                    </h3>
+                                    <div className="bg-slate-50/80 p-3 rounded-xl border border-slate-100 max-w-[260px] mx-auto">
+                                        <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                                            {claimed 
+                                                ? "Allocated spins based on your Active Rigs. Higher tier Rigs unlock better odds. Refreshing next epoch." 
+                                                : "Please connect your wallet to verify your Rigs. Daily spins are exclusive to active Rigs owners."}
+                                        </p>
+                                    </div>
+                                </div>
                             </div>
                         )}
                     </div>
@@ -342,7 +366,7 @@ const Spin: FC = () => {
                         className={`w-full py-4 rounded-xl font-bold text-sm tracking-wide shadow-xl transition-all flex items-center justify-center gap-2
                             ${canClaim 
                                 ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:shadow-blue-200 active:scale-[0.98]" 
-                                : "bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200"
+                                : "bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200 shadow-none"
                             }`}
                     >
                          {loading ? (
@@ -350,11 +374,11 @@ const Spin: FC = () => {
                          ) : canClaim ? (
                              <>START FREE SPIN <Ticket size={18} /></>
                          ) : (
-                             "NO SPIN AVAILABLE"
+                             claimed ? "COOLDOWN ACTIVE" : "WALLET DISCONNECTED"
                          )}
                     </button>
-                </div>
-             )}
+                 </div>
+              )}
           </div>
       </div>
 
