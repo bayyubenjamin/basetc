@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useAccount, useReadContract, useWriteContract } from "wagmi";
 import { formatEther, parseEther } from "viem";
 import { base } from "viem/chains";
-import { Zap, AlertTriangle, Cpu, Loader2, Play, Trophy, ShieldCheck } from "lucide-react";
+import { Zap, AlertTriangle, Cpu, Loader2, Play, ShieldCheck } from "lucide-react";
 import confetti from "canvas-confetti";
 import { CFG } from "../lib/web3Config";
 
@@ -49,13 +49,10 @@ export default function OverclockGame() {
   // Sync State Realtime
   useEffect(() => {
     if (sessionData) {
-      const [amount, level, active] = sessionData as [bigint, number, boolean];
+      const [, level, active] = sessionData as [bigint, number, boolean];
       if (active) {
         setGameState("PLAYING");
       } else if (gameState === "PLAYING" && !active) {
-        // Jika status berubah jadi tidak aktif saat sedang main, cek history atau reset
-        // Untuk simplifikasi UI, kita reset ke IDLE jika tidak ada event log spesifik
-        // (Idealnya listen event, tapi ini cukup aman)
         setGameState("IDLE"); 
       }
     }
@@ -68,8 +65,8 @@ export default function OverclockGame() {
     try {
       const amount = parseEther(betInput);
       
-      // 1. Cek & Approve Allowance
-      if (!allowance || allowance < amount) {
+      // PERBAIKAN TYPE ERROR: Casting 'allowance' ke bigint agar bisa dibandingkan
+      if (!allowance || (allowance as bigint) < amount) {
         await writeTx({
           address: BASETC_ADDRESS,
           abi: ERC20_ABI,
@@ -81,7 +78,7 @@ export default function OverclockGame() {
         await refetchAllowance();
       }
 
-      // 2. Start Game Transaction
+      // Start Game Transaction
       await writeTx({
         address: OVERCLOCK_ADDRESS,
         abi: OVERCLOCK_ABI,
@@ -111,9 +108,8 @@ export default function OverclockGame() {
       await refetchSession();
     } catch (e) {
       console.error("Overclock Error:", e);
-      // Asumsi error disini kemungkinan besar karena RNG fail (Crash)
       setGameState("CRASHED");
-      setTimeout(() => setGameState("IDLE"), 3000); // Auto reset setelah 3 detik
+      setTimeout(() => setGameState("IDLE"), 3000);
     }
     setLoading(false);
   };
@@ -138,21 +134,19 @@ export default function OverclockGame() {
   };
 
   // --- UI VARIABLES ---
-  const currentLevel = sessionData ? Number(sessionData[1]) : 0;
-  // Default values jika sessionData belum load
-  const betAmountRaw = sessionData ? sessionData[0] : parseEther(betInput);
+  const currentLevel = sessionData ? Number((sessionData as any)[1]) : 0;
+  const betAmountRaw = sessionData ? (sessionData as any)[0] : parseEther(betInput);
   const betAmountEth = formatEther(betAmountRaw as bigint);
   const myBoost = Number(boostChance || 0);
 
   const LEVEL_DATA = [
     { name: "SAFE MODE", mult: "1.0x", risk: "0%", color: "text-gray-400" },
-    { name: "MILD OC", mult: "1.2x", risk: "10%", color: "text-green-400" }, // Lvl 1
-    { name: "HIGH VOLT", mult: "1.8x", risk: "30%", color: "text-yellow-400" }, // Lvl 2
-    { name: "EXTREME", mult: "3.5x", risk: "50%", color: "text-orange-500" }, // Lvl 3
-    { name: "HAZARD", mult: "8.0x", risk: "70%", color: "text-red-600 animate-pulse" }, // Lvl 4
+    { name: "MILD OC", mult: "1.2x", risk: "10%", color: "text-green-400" }, 
+    { name: "HIGH VOLT", mult: "1.8x", risk: "30%", color: "text-yellow-400" }, 
+    { name: "EXTREME", mult: "3.5x", risk: "50%", color: "text-orange-500" }, 
+    { name: "HAZARD", mult: "8.0x", risk: "70%", color: "text-red-600 animate-pulse" }, 
   ];
 
-  // Safety check array bounds
   const safeLevel = Math.min(currentLevel, LEVEL_DATA.length - 1);
   const currentMultiplier = parseFloat(LEVEL_DATA[safeLevel].mult);
   const potentialWin = (parseFloat(betAmountEth) * currentMultiplier).toFixed(2);
@@ -161,8 +155,6 @@ export default function OverclockGame() {
 
   return (
     <div className="fin-card bg-gray-950/80 border border-blue-900/50 p-0 overflow-hidden relative shadow-2xl rounded-3xl max-w-md mx-auto">
-        
-        {/* ANIMATED BACKGROUND */}
         <div className={`absolute inset-0 opacity-20 transition-all duration-700 pointer-events-none 
             ${currentLevel === 0 ? 'bg-gradient-to-b from-blue-900 to-black' : 
               currentLevel === 1 ? 'bg-gradient-to-b from-green-900 to-black' :
@@ -171,7 +163,6 @@ export default function OverclockGame() {
             }`} 
         />
 
-        {/* HEADER */}
         <div className="relative z-10 p-6 border-b border-white/5 bg-white/5 backdrop-blur-sm flex justify-between items-center">
             <div className="flex items-center gap-2">
                 <Cpu className={`w-6 h-6 ${currentLevel > 2 ? "text-red-500 animate-pulse" : "text-blue-400"}`} />
@@ -187,9 +178,7 @@ export default function OverclockGame() {
             )}
         </div>
 
-        {/* MAIN GAME AREA */}
         <div className="relative z-10 p-6 min-h-[300px] flex flex-col items-center justify-center">
-            
             {gameState === "IDLE" && (
                 <div className="w-full space-y-6 animate-in fade-in zoom-in duration-300">
                     <div className="text-center space-y-2">
@@ -197,7 +186,6 @@ export default function OverclockGame() {
                             <Play size={32} className="text-blue-400 ml-1" />
                         </div>
                         <h3 className="text-white font-bold text-lg">Ready to Overclock?</h3>
-                        <p className="text-gray-400 text-xs">Push your rig limits for up to <span className="text-yellow-400 font-bold">8.0x</span> rewards.</p>
                     </div>
 
                     <div className="space-y-3">
@@ -214,45 +202,40 @@ export default function OverclockGame() {
                             type="number" 
                             value={betInput} 
                             onChange={(e) => setBetInput(e.target.value)}
-                            className="w-full bg-black/40 border border-gray-700 rounded-xl p-3 text-white font-mono text-center focus:outline-none focus:border-blue-500 transition-colors"
+                            className="w-full bg-black/40 border border-gray-700 rounded-xl p-3 text-white font-mono text-center focus:outline-none focus:border-blue-500"
                         />
                     </div>
                     
                     <button 
                         onClick={handleStart} 
                         disabled={loading}
-                        className="w-full py-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 rounded-xl font-black text-white text-sm tracking-wide shadow-xl shadow-blue-900/20 active:scale-95 transition-all flex justify-center items-center gap-2 group"
+                        className="w-full py-4 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl font-black text-white text-sm tracking-wide shadow-xl shadow-blue-900/20 active:scale-95 transition-all flex justify-center items-center gap-2 group"
                     >
-                        {loading ? <Loader2 className="animate-spin" /> : <>INITIALIZE SYSTEM <Zap size={16} className="group-hover:text-yellow-300 transition-colors"/></>}
+                        {loading ? <Loader2 className="animate-spin" /> : <>INITIALIZE SYSTEM <Zap size={16}/></>}
                     </button>
                 </div>
             )}
 
             {gameState === "PLAYING" && (
                 <div className="w-full text-center space-y-6">
-                    {/* Level Progress Bar */}
                     <div className="relative px-2 pt-4 pb-2">
                          <div className="absolute top-1/2 left-0 w-full h-1.5 bg-gray-800 rounded-full -z-10 mt-1"></div>
-                         {/* Active Bar */}
                          <div className="absolute top-1/2 left-0 h-1.5 bg-gradient-to-r from-blue-500 via-yellow-500 to-red-500 rounded-full -z-10 mt-1 transition-all duration-500 ease-out" 
                               style={{width: `${(currentLevel / 4) * 100}%`}}></div>
                         
                         <div className="flex justify-between relative">
                             {[0, 1, 2, 3, 4].map(lvl => (
-                                <div key={lvl} className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-[10px] border-2 transition-all duration-300 z-10
-                                    ${currentLevel >= lvl ? 
-                                        "bg-white text-black border-blue-500 scale-110 shadow-[0_0_15px_rgba(59,130,246,0.5)]" : 
-                                        "bg-gray-900 text-gray-600 border-gray-800"}`}>
+                                <div key={lvl} className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-[10px] border-2 z-10
+                                    ${currentLevel >= lvl ? "bg-white text-black border-blue-500 scale-110 shadow-[0_0_15px_rgba(59,130,246,0.5)]" : "bg-gray-900 text-gray-600 border-gray-800"}`}>
                                     {lvl === 0 ? "S" : lvl}
                                 </div>
                             ))}
                         </div>
                     </div>
 
-                    {/* Stats Display */}
                     <div className="py-2">
                         <div className="text-gray-500 text-[10px] tracking-[0.2em] uppercase mb-1">Current Multiplier</div>
-                        <div className={`text-6xl font-black ${LEVEL_DATA[safeLevel].color} drop-shadow-2xl transition-all scale-100 animate-in zoom-in duration-300`}>
+                        <div className={`text-6xl font-black ${LEVEL_DATA[safeLevel].color} drop-shadow-2xl transition-all`}>
                             {LEVEL_DATA[safeLevel].mult}
                         </div>
                         <div className="mt-2 inline-flex items-center gap-2 bg-white/5 px-4 py-1.5 rounded-lg border border-white/10">
@@ -261,7 +244,6 @@ export default function OverclockGame() {
                         </div>
                     </div>
 
-                    {/* Risk Indicator */}
                     {currentLevel < 4 && (
                         <div className="bg-red-950/30 border border-red-500/20 p-2.5 rounded-lg text-xs text-red-300 flex items-center justify-center gap-2 animate-pulse">
                             <AlertTriangle size={14} className="text-red-500"/> 
@@ -269,12 +251,11 @@ export default function OverclockGame() {
                         </div>
                     )}
 
-                    {/* Action Buttons */}
                     <div className="grid grid-cols-2 gap-3 pt-2">
                         <button 
                             onClick={handleCashout}
                             disabled={loading}
-                            className="py-3.5 bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white rounded-xl font-bold text-xs border border-gray-600 transition-all active:scale-95"
+                            className="py-3.5 bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white rounded-xl font-bold text-xs border border-gray-600 active:scale-95 transition-all"
                         >
                             SECURE PROFIT
                         </button>
@@ -282,33 +263,24 @@ export default function OverclockGame() {
                         <button 
                             onClick={handleOverclock}
                             disabled={loading || currentLevel >= 4}
-                            className="relative py-3.5 bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-500 hover:to-orange-500 text-white rounded-xl font-black text-xs border-b-4 border-red-800 active:border-b-0 active:translate-y-1 transition-all flex items-center justify-center gap-2 group disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="relative py-3.5 bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-500 hover:to-orange-500 text-white rounded-xl font-black text-xs border-b-4 border-red-800 active:border-b-0 active:translate-y-1 transition-all flex items-center justify-center gap-2 group"
                         >
-                            {loading ? <Loader2 className="animate-spin" size={16}/> : (
-                                <>
-                                    BOOST VOLTAGE <Zap size={16} className="fill-white group-hover:scale-110 transition-transform"/>
-                                </>
-                            )}
+                            {loading ? <Loader2 className="animate-spin" size={16}/> : <>BOOST VOLTAGE <Zap size={16}/></>}
                         </button>
                     </div>
                 </div>
             )}
 
-            {gameState === "CRASHED" && (
+            {(gameState === "CRASHED" || gameState === "WON") && (
                 <div className="text-center animate-in zoom-in duration-300">
-                     <div className="text-6xl mb-4 animate-bounce">💥</div>
-                     <h3 className="text-2xl font-black text-red-500 mb-1">SYSTEM FAILURE</h3>
-                     <p className="text-gray-400 text-sm mb-6">Rig overheated. Cooling down...</p>
+                     <div className="text-6xl mb-4 animate-bounce">{gameState === "WON" ? "🏆" : "💥"}</div>
+                     <h3 className={`text-2xl font-black mb-1 ${gameState === "WON" ? "text-green-400" : "text-red-500"}`}>
+                        {gameState === "WON" ? "SUCCESS!" : "SYSTEM FAILURE"}
+                     </h3>
+                     <p className="text-gray-400 text-sm mb-6">
+                        {gameState === "WON" ? "Profit secured to wallet." : "Rig overheated. Cooling down..."}
+                     </p>
                      <Loader2 className="animate-spin mx-auto text-gray-600" size={24}/>
-                </div>
-            )}
-
-            {gameState === "WON" && (
-                <div className="text-center animate-in zoom-in duration-300">
-                     <div className="text-6xl mb-4 animate-bounce">🏆</div>
-                     <h3 className="text-2xl font-black text-green-400 mb-1">SUCCESS!</h3>
-                     <p className="text-gray-400 text-sm mb-6">Profit secured to wallet.</p>
-                     <div className="text-xs text-blue-400">Redirecting...</div>
                 </div>
             )}
         </div>
