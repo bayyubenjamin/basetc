@@ -114,25 +114,36 @@ const Leaderboard = () => {
     window.open(warpcastUrl, "_blank");
   };
 
-  // Helper Render Reward
+  // Helper Render Reward (UPDATED)
   const renderReward = (rank: number) => {
-    if (rank <= 3) {
+    if (rank >= 1 && rank <= 5) {
+      // Rank 1-5: Legend Rig
       return (
         <div className="flex items-center justify-end gap-1">
-          <div className="relative w-4 h-4">
-            <Image src="https://cryptologos.cc/logos/usd-coin-usdc-logo.png" alt="USDC" fill className="object-contain" />
+          <div className="relative w-8 h-8">
+            <Image src="/img/vga_legend.png" alt="Legend Rig" fill className="object-contain" />
           </div>
-          {/* Penambahan tanda + */}
-          <span className="text-[10px] font-bold text-gray-400">+</span>
+          <span className="text-[10px] font-bold text-yellow-600 uppercase tracking-tight">
+            Legend Rig
+          </span>
+        </div>
+      );
+    } else if (rank >= 6 && rank <= 10) {
+      // Rank 6-10: Pro Rig
+      return (
+        <div className="flex items-center justify-end gap-1">
+          <div className="relative w-8 h-8">
+             <Image src="/img/vga_pro.png" alt="Pro Rig" fill className="object-contain" />
+          </div>
           <span className="text-[10px] font-bold text-blue-600 uppercase tracking-tight">
-            basetc
+            Pro Rig
           </span>
         </div>
       );
     } else {
-      // Rank 4 - 100 (dan seterusnya)
+      // Rank 11+ (dan seterusnya)
       return (
-        <span className="text-[10px] font-bold text-blue-600 uppercase tracking-tight">
+        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-tight">
           basetc
         </span>
       );
@@ -144,20 +155,20 @@ const Leaderboard = () => {
       
       <div className="max-w-md mx-auto p-4 space-y-4">
         
-        {/* --- WARNING / INFO BANNER --- */}
-        <div className="rounded-xl bg-amber-50 p-4 border border-amber-200 shadow-sm text-center relative overflow-hidden">
+        {/* --- INFO BANNER (UPDATED: LIVE STATUS) --- */}
+        <div className="rounded-xl bg-green-50 p-4 border border-green-200 shadow-sm text-center relative overflow-hidden">
              {/* Decorative background element */}
-            <div className="absolute top-0 right-0 -mt-2 -mr-2 w-8 h-8 bg-amber-100 rounded-full blur-xl opacity-50"></div>
+            <div className="absolute top-0 right-0 -mt-2 -mr-2 w-8 h-8 bg-green-100 rounded-full blur-xl opacity-50"></div>
             
-            <h3 className="text-xs font-extrabold text-amber-700 uppercase tracking-wider mb-2 flex items-center justify-center gap-2">
-                ⚠️ Trial Mode / Beta Testing
+            <h3 className="text-xs font-extrabold text-green-700 uppercase tracking-wider mb-2 flex items-center justify-center gap-2">
+                🟢 LIVE SEASON
             </h3>
-            <p className="text-[11px] text-amber-800/80 leading-relaxed font-medium">
-                Rewards distribution has not started yet. The official start date will be announced soon.
+            <p className="text-[11px] text-green-800/80 leading-relaxed font-medium">
+                Points are now LIVE based on Daily Spin! Compete for the top spot.
             </p>
-            <div className="mt-2 inline-block bg-amber-100 px-3 py-1 rounded-md">
-                 <p className="text-[10px] font-bold text-amber-700">
-                    NOTE: ALL POINTS WILL BE RESET
+            <div className="mt-2 inline-block bg-green-100 px-3 py-1 rounded-md">
+                 <p className="text-[10px] font-bold text-green-700">
+                    STATUS: ACTIVE
                 </p>
             </div>
         </div>
