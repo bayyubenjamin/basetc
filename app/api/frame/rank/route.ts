@@ -8,7 +8,7 @@ export async function GET(req: NextRequest) {
   const username = searchParams.get("username") || "Miner";
   
   // URL host saat ini
-  const HOST = process.env.NEXT_PUBLIC_BASE_URL || "https://basetc.xyz";
+  const HOST = process.env.NEXT_PUBLIC_BASE_URL || "basetc.vercel.app";
   
   // Link ke Image Generator yang baru kita buat
   const imageUrl = `${HOST}/api/og/rank?rank=${rank}&points=${points}&username=${encodeURIComponent(username)}`;

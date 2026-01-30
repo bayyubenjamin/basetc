@@ -27,7 +27,8 @@ const erc20Abi = [
 // MAIN COMPONENT (WRAPPER)
 // ==========================================
 export default function Arena() {
-  const [activeTab, setActiveTab] = useState<"PVP" | "OVERCLOCK">("PVP");
+  // PERUBAHAN DISINI: Default state diganti ke "OVERCLOCK"
+  const [activeTab, setActiveTab] = useState<"PVP" | "OVERCLOCK">("OVERCLOCK");
 
   return (
     <div className="min-h-screen pb-20 bg-gray-50">

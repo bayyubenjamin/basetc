@@ -203,7 +203,7 @@ const Spin: FC = () => {
     try {
       const text = `I just won ${finalResult} BaseTC on @basetc! 🎰\n\nSpin daily to win rewards and climb the leaderboard.`;
       
-      const embed = "https://basetc.xyz"; 
+      const embed = "https://basetc.vercel.app"; 
       const castUrl = `https://warpcast.com/~/compose?text=${encodeURIComponent(text)}&embeds[]=${encodeURIComponent(embed)}`;
 
       if (sdk && sdk.actions) {
