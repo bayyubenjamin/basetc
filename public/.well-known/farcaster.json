@@ -1,8 +1,8 @@
 {
   "accountAssociation": {
-    "header": "eyJmaWQiOjEzNzAwNTksInR5cGUiOiJjdXN0b2R5Iiwia2V5IjoiMHhFNjg5ZjQxMkRBYjIzY0E1NDQzYWIxMTZGOTBhMjAwOUE4MEZjY2UxIn0",
-    "payload": "eyJkb21haW4iOiJiYXNldGMueHl6In0",
-    "signature": "EaJAg8ZIhiA+HbTUYcSM6AMoRgKukXLhOt8nfF34EdpawFcVwVtHK423fMGCH5qxUsIU9SfNnjlFsQQSY+A1LRs="
+    "header": "eyJmaWQiOjEzNzAwNTksInR5cGUiOiJhdXRoIiwia2V5IjoiMHgxQTc3RjY1ODM4OGNBMjE0MzgxRTIzRWFlNzM1NjI3NjEwM2RGZDQ1In0",
+    "payload": "eyJkb21haW4iOiJiYXNldGMudmVyY2VsLmFwcCJ9",
+    "signature": "ZlKqh+ls4e50RHazVYbD0eeUqvalI8sJxEQfqMowM5Qgwzusw6hOlVMipUuQCBJ16KVd+81uO5juGoYhMY+0Whw="
   },
   "frame": {
     "version": "1",
@@ -14,23 +14,21 @@
     "splashBackgroundColor": "#FFFFFF",
     "buttonTitle": "Open BaseTC",
     "webhookUrl": "https://basetc.vercel.app/api/frame",
-    "canonicalDomain": "basetc.vercel.app",
     "subtitle": "Mining NFT Game on Base",
     "description": "BaseTC Console is a Farcaster Mini App for mining NFT rigs on the Base network. Claim a free rig, merge into Pro and Legend tiers, and earn BaseTC tokens onchain.",
-    "tagline": "Mine BaseTC onchain with NFTs",
+    "screenshotUrls": [
+      "https://basetc.vercel.app/img/screenshot1.png"
+    ],
     "primaryCategory": "games",
     "tags": [
       "base",
       "nft",
-      "mining",
       "game",
+      "mining",
       "crypto"
     ],
     "heroImageUrl": "https://basetc.vercel.app/img/feed.png",
-    "screenshotUrls": [
-      "https://basetc.vercel.app/img/screenshot1.png",
-      "https://basetc.vercel.app/img/screenshot2.png"
-    ],
+    "tagline": "Mine BaseTC onchain with NFTs",
     "ogTitle": "BaseTC Console Mini App",
     "ogDescription": "Build rigs, upgrade to Legend, and earn BaseTC. Claim your first Basic rig for free!",
     "ogImageUrl": "https://basetc.vercel.app/img/feed.png",
@@ -46,23 +44,21 @@
     "splashBackgroundColor": "#FFFFFF",
     "buttonTitle": "Open BaseTC",
     "webhookUrl": "https://basetc.vercel.app/api/frame",
-    "canonicalDomain": "basetc.vercel.app",
     "subtitle": "Mining NFT Game on Base",
     "description": "BaseTC Console is a Farcaster Mini App for mining NFT rigs on the Base network. Claim a free rig, merge into Pro and Legend tiers, and earn BaseTC tokens onchain.",
-    "tagline": "Mine BaseTC onchain with NFTs",
+    "screenshotUrls": [
+      "https://basetc.vercel.app/img/screenshot1.png"
+    ],
     "primaryCategory": "games",
     "tags": [
       "base",
       "nft",
-      "mining",
       "game",
+      "mining",
       "crypto"
     ],
     "heroImageUrl": "https://basetc.vercel.app/img/feed.png",
-    "screenshotUrls": [
-      "https://basetc.vercel.app/img/screenshot1.png",
-      "https://basetc.vercel.app/img/screenshot2.png"
-    ],
+    "tagline": "Mine BaseTC onchain with NFTs",
     "ogTitle": "BaseTC Console Mini App",
     "ogDescription": "Build rigs, upgrade to Legend, and earn BaseTC. Claim your first Basic rig for free!",
     "ogImageUrl": "https://basetc.vercel.app/img/feed.png",
