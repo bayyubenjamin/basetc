@@ -16,7 +16,7 @@ const HarvestPopup: FC<HarvestPopupProps> = ({ open, amount, onClose }) => {
 
   const handleShare = () => {
     const text = `I just harvested ${amount} from my mining rig! ⛏️💰\n\nReal yield on Base. Start your factory now! 👇\n\n#BaseTC #BuildOnBase #HarvestDay`;
-    const embed = "https://basetc.xyz"; 
+    const embed = "https://basetc.vercel.app"; 
     const url = `https://warpcast.com/~/compose?text=${encodeURIComponent(text)}&embeds[]=${encodeURIComponent(embed)}`;
     try {
       sdk.actions.openUrl(url);

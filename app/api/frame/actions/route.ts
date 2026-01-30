@@ -5,7 +5,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const buttonIndex = body?.untrustedData?.buttonIndex || 1;
 
-    const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || "https://basetc.xyz";
+    const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || "basetc.vercel.app";
     let image = "img/logo.png";
     let buttonText = "Go to App";
     let targetUrl = `${BASE_URL}/launch`; // Arahkan ke UI React

@@ -13,21 +13,21 @@ const fcPayload = {
     action: {
       type: "launch_miniapp",
       name: "BaseTC Console",
-      url: "https://basetc.xyz/launch",
-      splashImageUrl: "https://basetc.xyz/s.png",
+      url: "https://basetc.vercel.app/launch",
+      splashImageUrl: "https://basetc.vercel.app/s.png",
       splashBackgroundColor: "#FFFFFF",
     },
   },
 };
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://basetc.xyz"),
-  alternates: { canonical: "https://basetc.xyz/" },
+  metadataBase: new URL("https://basetc.vercel.app"),
+  alternates: { canonical: "https://basetc.vercel.app/" },
   title: "BaseTC Console",
   description: "Farcaster mining console built with Next.js and Tailwind.",
   openGraph: {
     type: "website",
-    url: "https://basetc.xyz/",
+    url: "https://basetc.vercel.app/",
     title: "BaseTC Console",
     description: "Start mining with a free Basic rig onchain.",
     images: [{ url: "/img/feed.png", width: 1200, height: 630, alt: "BaseTC Console" }],

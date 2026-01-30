@@ -5,7 +5,7 @@ import { createClient } from "@supabase/supabase-js";
 export const runtime = "nodejs"; // perlu untuk Buffer (decode base64url)
 
 const CORS = {
-  "Access-Control-Allow-Origin": "https://basetc.xyz",
+  "Access-Control-Allow-Origin": "basetc.vercel.app",
   "Access-Control-Allow-Methods": "GET,POST,HEAD,OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type",
 };
