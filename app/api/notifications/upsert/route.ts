@@ -6,7 +6,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const CORS = {
-  "Access-Control-Allow-Origin": "https://basetc.xyz",
+  // PERBAIKAN: Ubah ke domain baru agar client bisa POST token notifikasi
+  "Access-Control-Allow-Origin": "https://basetc.vercel.app",
   "Access-Control-Allow-Methods": "GET,POST,HEAD,OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type",
 };
@@ -43,4 +44,3 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "upsert-failed" }, { status: 500, headers: CORS });
   }
 }
-

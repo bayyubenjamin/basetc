@@ -74,7 +74,9 @@ export async function GET(req: Request) {
     // Defaults (English) + optional overrides
     const defaultTitle = `Epoch ${currentEpoch} started`;
     const defaultBody = `Claim your daily reward for epoch ${currentEpoch}.`;
-    const defaultTarget = "https://basetc.xyz/launch";
+    
+    // PERBAIKAN: Target URL diganti ke domain baru
+    const defaultTarget = "https://basetc.vercel.app/launch";
 
     const title = u.searchParams.get("title") || defaultTitle;
     const body = u.searchParams.get("body") || defaultBody;
