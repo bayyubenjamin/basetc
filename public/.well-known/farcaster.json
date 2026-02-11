@@ -13,7 +13,7 @@
     "buttonTitle": "Open BaseTC",
     "splashImageUrl": "https://basetc.vercel.app/img/splash.gif",
     "splashBackgroundColor": "#FFFFFF",
-    "webhookUrl": "https://basetc.vercel.app/api/frame"
+    "webhookUrl": "https://basetc.vercel.app/api/webhook"
   },
   "miniapp": {
     "version": "1",
@@ -24,6 +24,6 @@
     "buttonTitle": "Open BaseTC",
     "splashImageUrl": "https://basetc.vercel.app/img/splash.gif",
     "splashBackgroundColor": "#FFFFFF",
-    "webhookUrl": "https://basetc.vercel.app/api/frame"
+    "webhookUrl": "https://basetc.vercel.app/api/webhook"
   }
 }
