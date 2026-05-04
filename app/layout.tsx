@@ -4,7 +4,6 @@ import type { Metadata } from "next";
 import Ticker from "./components/Ticker";
 import SilentAddMiniApp from "./components/SilentAddMiniApp";
 import { Providers } from "./Providers";
-import Head from "next/head"; // ⬅️ tambahan
 
 const APP_URL = "https://basetc.vercel.app";
 
@@ -51,7 +50,10 @@ export const metadata: Metadata = {
   other: {
     "fc:miniapp": JSON.stringify(fcPayload),
     "fc:frame": JSON.stringify(fcPayload),
-    "base:app_id": "6940c23cd77c069a945bdf3f",
+
+    // ✅ INI YANG PENTING (harus sama dengan dashboard Base)
+    "base:app_id": "69f8b77f47cf8ec7e6be16df",
+
     "talentapp:project_verification":
       "8c58a63e6affa7bdb085377bf3ae1017c5084bc1b8eb13c7c8411b5c0aed15ca0d331af2134ad0446ea7f2301d301dff0473c93d0aca57fb8699d76f7bfc323f",
   },
@@ -60,10 +62,6 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <Head>
-        <meta name="base:app_id" content="69f8b77f47cf8ec7e6be16df" />
-      </Head>
-
       <body className="min-h-dvh antialiased pt-[calc(env(safe-area-inset-top)+36px)]">
         <Providers>
           <Ticker />
