@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import Ticker from "./components/Ticker";
 import SilentAddMiniApp from "./components/SilentAddMiniApp";
 import { Providers } from "./Providers";
+import Head from "next/head"; // ⬅️ tambahan
 
 const APP_URL = "https://basetc.vercel.app";
 
@@ -59,6 +60,10 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
+      <Head>
+        <meta name="base:app_id" content="69f8b77f47cf8ec7e6be16df" />
+      </Head>
+
       <body className="min-h-dvh antialiased pt-[calc(env(safe-area-inset-top)+36px)]">
         <Providers>
           <Ticker />
